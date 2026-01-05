@@ -7,9 +7,6 @@ import openfl.Lib;
 import openfl.display.Sprite;
 import openfl.events.Event;
 import openfl.display.StageScaleMode;
-#if FLX_SOUND_TRAY
-import flixel.system.ui.FlxSoundTray;
-#end
 import lime.app.Application;
 import states.TitleState;
 #if HSCRIPT_ALLOWED
@@ -48,10 +45,6 @@ class Main extends Sprite
 	};
 
 	public static var fpsVar:FPSCounter;
-
-	#if FLX_SOUND_TRAY
-	public static var openflSoundTray:FlxSoundTray;
-	#end
 
 	public static final platform:String = #if mobile "Phones" #else "PCs" #end;
 
@@ -182,16 +175,16 @@ class Main extends Sprite
 
 		var game:FlxGame = new FlxGame(game.width, game.height, game.initialState, #if (flixel < "5.0.0") game.zoom, #end game.framerate, game.framerate,
 			game.skipSplash, game.startFullscreen);
-		//#if BASE_GAME_FILES
-		//@:privateAccess
-		//game._customSoundTray = backend.FunkinSoundTray;
-		//#end
+		// #if BASE_GAME_FILES
+		// @:privateAccess
+		// game._customSoundTray = backend.FunkinSoundTray;
+		// #end
 		addChild(game);
 
-	fpsVar = new FPSCounter(10, 3, 0xFFFFFF);
-	Lib.current.stage.addChild(fpsVar);
-	Lib.current.stage.align = "tl";
-	Lib.current.stage.scaleMode = StageScaleMode.NO_SCALE;
+		fpsVar = new FPSCounter(10, 3, 0xFFFFFF);
+		Lib.current.stage.addChild(fpsVar);
+		Lib.current.stage.align = "tl";
+		Lib.current.stage.scaleMode = StageScaleMode.NO_SCALE;
 		if (fpsVar != null)
 		{
 			fpsVar.visible = ClientPrefs.data.showFPS;
@@ -265,47 +258,53 @@ class Main extends Sprite
 		Lib.current.stage.addEventListener(Event.DEACTIVATE, onAppDeactivate);
 		Lib.current.stage.addEventListener(Event.ACTIVATE, onAppActivate);
 	}
-	
+
 	// 应用进入后台时调用
 	private function onAppDeactivate(e:Event):Void
 	{
-		if (isInBackground || !ClientPrefs.data.backgroundVolume) return;
+		if (isInBackground || !ClientPrefs.data.backgroundVolume)
+			return;
 		isInBackground = true;
-		
+
 		// 取消正在进行的恢复动画（如果存在）
-		if (backgroundVolumeTween != null) {
+		if (backgroundVolumeTween != null)
+		{
 			backgroundVolumeTween.cancel();
 			backgroundVolumeTween = null;
 		}
-		
+
 		// 保存当前音量
 		originalVolume = FlxG.sound.volume;
-		
+
 		// 创建降低音量的动画
 		backgroundVolumeTween = FlxTween.tween(FlxG.sound, {volume: ClientPrefs.data.backgroundVolumeLevel}, 1, {
 			ease: FlxEase.quadOut,
-			onComplete: function(twn:FlxTween) {
+			onComplete: function(twn:FlxTween)
+			{
 				backgroundVolumeTween = null;
 			}
 		});
 	}
-	
+
 	// 应用回到前台时调用
 	private function onAppActivate(e:Event):Void
 	{
-		if (!isInBackground || !ClientPrefs.data.backgroundVolume) return;
+		if (!isInBackground || !ClientPrefs.data.backgroundVolume)
+			return;
 		isInBackground = false;
-		
+
 		// 取消正在进行的降低动画（如果存在）
-		if (backgroundVolumeTween != null) {
+		if (backgroundVolumeTween != null)
+		{
 			backgroundVolumeTween.cancel();
 			backgroundVolumeTween = null;
 		}
-		
+
 		// 创建恢复音量的动画
 		backgroundVolumeTween = FlxTween.tween(FlxG.sound, {volume: originalVolume}, 0.5, {
 			ease: FlxEase.quadOut,
-			onComplete: function(twn:FlxTween) {
+			onComplete: function(twn:FlxTween)
+			{
 				backgroundVolumeTween = null;
 			}
 		});
