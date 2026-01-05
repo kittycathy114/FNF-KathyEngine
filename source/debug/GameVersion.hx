@@ -26,12 +26,23 @@ class GameVersion {
       var pos = haxe.macro.Context.currentPos();
       haxe.macro.Context.error("Cannot execute `git rev-list --count HEAD`. " + message, pos);
     }
-    
+
     var commitCount:String = process.stdout.readLine();
     return macro $v{commitCount};
-    #else 
+    #else
     var commitCount:String = "";
     return macro $v{commitCount};
     #end
+  }
+
+  public static macro function getBuildTime():haxe.macro.Expr.ExprOf<String> {
+    var now = Date.now();
+    var year = now.getFullYear();
+    var month = StringTools.lpad(Std.string(now.getMonth() + 1), "0", 2);
+    var day = StringTools.lpad(Std.string(now.getDate()), "0", 2);
+    var hours = StringTools.lpad(Std.string(now.getHours()), "0", 2);
+    var minutes = StringTools.lpad(Std.string(now.getMinutes()), "0", 2);
+    var buildTime = '$year-$month-$day $hours:$minutes';
+    return macro $v{buildTime};
   }
 }

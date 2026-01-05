@@ -7,6 +7,9 @@ import openfl.Lib;
 import openfl.display.Sprite;
 import openfl.events.Event;
 import openfl.display.StageScaleMode;
+#if FLX_SOUND_TRAY
+import flixel.system.ui.FlxSoundTray;
+#end
 import lime.app.Application;
 import states.TitleState;
 #if HSCRIPT_ALLOWED
@@ -45,6 +48,10 @@ class Main extends Sprite
 	};
 
 	public static var fpsVar:FPSCounter;
+
+	#if FLX_SOUND_TRAY
+	public static var openflSoundTray:FlxSoundTray;
+	#end
 
 	public static final platform:String = #if mobile "Phones" #else "PCs" #end;
 
@@ -175,16 +182,16 @@ class Main extends Sprite
 
 		var game:FlxGame = new FlxGame(game.width, game.height, game.initialState, #if (flixel < "5.0.0") game.zoom, #end game.framerate, game.framerate,
 			game.skipSplash, game.startFullscreen);
-		#if BASE_GAME_FILES
-		@:privateAccess
-		game._customSoundTray = backend.FunkinSoundTray;
-		#end
+		//#if BASE_GAME_FILES
+		//@:privateAccess
+		//game._customSoundTray = backend.FunkinSoundTray;
+		//#end
 		addChild(game);
 
-		fpsVar = new FPSCounter(10, 3, 0xFFFFFF);
-		addChild(fpsVar);
-		Lib.current.stage.align = "tl";
-		Lib.current.stage.scaleMode = StageScaleMode.NO_SCALE;
+	fpsVar = new FPSCounter(10, 3, 0xFFFFFF);
+	Lib.current.stage.addChild(fpsVar);
+	Lib.current.stage.align = "tl";
+	Lib.current.stage.scaleMode = StageScaleMode.NO_SCALE;
 		if (fpsVar != null)
 		{
 			fpsVar.visible = ClientPrefs.data.showFPS;
@@ -241,10 +248,19 @@ class Main extends Sprite
 				resetSpriteCache(FlxG.game);
 		});
 
+		// 监听 stage 窗口大小变化，更新 FPS 计数器位置
+		Lib.current.stage.addEventListener(Event.RESIZE, function(e:Event):Void
+		{
+			if (fpsVar != null)
+			{
+				fpsVar.positionFPS(10, 3, 1);
+			}
+		});
+
 		#if (desktop && !mobile)
 		setCustomCursor();
 		#end
-		
+
 		// 添加应用激活/停用事件监听
 		Lib.current.stage.addEventListener(Event.DEACTIVATE, onAppDeactivate);
 		Lib.current.stage.addEventListener(Event.ACTIVATE, onAppActivate);

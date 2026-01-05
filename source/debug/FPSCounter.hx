@@ -19,22 +19,11 @@ import flixel.math.FlxMath;
 
 #if cpp
 #if windows
-@:cppFileCode('#include <windows.h>
-#include <psapi.h>')
-@:buildXml('
-<target id="haxe">
-    <lib name="psapi.lib" />
-</target>
-')
+@:cppFileCode('#include <windows.h>')
 #elseif (ios || mac)
-@:cppFileCode('#include <mach-o/arch.h>
-#include <mach/mach.h>
-#include <mach/mach_init.h>
-#include <mach/task.h>')
+@:cppFileCode('#include <mach-o/arch.h>')
 #else
 @:headerInclude('sys/utsname.h')
-@:headerInclude('sys/sysinfo.h')
-@:headerInclude('cstdio')
 #end
 #end
 class FPSCounter extends Sprite
@@ -58,36 +47,38 @@ class FPSCounter extends Sprite
 	public var os:String = '';
 
 	// 文本字段
-	private var fpsText:TextField;
-	private var ramText:TextField;
-	private var peakText:TextField;
-	private var delayText:TextField;
+	private var fpsInfoText:TextField;
 	private var versionText:TextField;
-	private var objectsText:TextField;
 
-	// 背景和装饰元素
-	private var background:Shape;
+	// 背景元素
+	private var fpsBackground:Shape;
+	private var versionBackground:Shape;
 
 	// 布局参数
 	private var padding:Float = 8;
 	private var cornerRadius:Float = 8;
+	private var panelGap:Float = 10; // 两个面板之间的间隔
 
 	// 性能优化变量
 	private var lastFpsUpdateTime:Float = 0;
 	private var lastRamUpdateTime:Float = 0;
 	private var lastObjectsUpdateTime:Float = 0;
-	private var lastBackgroundUpdateTime:Float = 0;
-	
-	// 移除平滑过渡效果
-	private var targetWidth:Float = 200;
-	private var targetHeight:Float = 120;
-	
-	// 颜色缓存，减少颜色计算
-	private var fpsColor:Int = 0xFF66FF66;
-	private var ramColor:Int = 0xFF66AAFF;
-	private var peakColor:Int = 0xFFFFA500;
-	private var delayColor:Int = 0xFFFFFF66;
-	private var objectsColor:Int = 0xFF00FF00;
+
+	// 背景平滑过渡变量（FPS面板）
+	private var targetFpsHeight:Float = 120;
+	private var currentFpsHeight:Float = 120;
+	private var lerpSpeed:Float = 0.2;
+
+	// 背景平滑过渡变量（版本面板）
+	private var targetVersionHeight:Float = 80;
+	private var currentVersionHeight:Float = 80;
+
+	// 版本面板显示/隐藏动画变量
+	private var versionPanelVisible:Bool = true;
+	private var versionPanelAlpha:Float = 1.0;
+	private var versionPanelOffset:Float = 0;
+	private var targetVersionAlpha:Float = 1.0;
+	private var targetVersionOffset:Float = 0;
 
 	// 修复：添加缺失的变量声明
 	@:noCompletion private var lastExGameVersion:Bool;
@@ -99,25 +90,21 @@ class FPSCounter extends Sprite
 	{
 		super();
 
-		// 创建半透明背景 - 简化
-		background = new Shape();
-		drawBackground(0x222222, 0.85, targetWidth, targetHeight);
-		addChild(background);
+		// 创建FPS信息背景
+		fpsBackground = new Shape();
+		drawFpsBackground(0x222222, 0.85, 200, 120);
+		addChild(fpsBackground);
 
-		// 创建文本字段 - 使用默认颜色，减少颜色变化
-		fpsText = createTextField(20, fpsColor, true);
-		ramText = createTextField(16, ramColor);
-		peakText = createTextField(16, peakColor);
-		delayText = createTextField(16, delayColor);
-		versionText = createTextField(12, 0xCCCCCC);
-		objectsText = createTextField(14, objectsColor);
+		// 创建版本信息背景
+		versionBackground = new Shape();
+		drawVersionBackground(0x222222, 0.85, 200, 80);
+		addChild(versionBackground);
 
-		addChild(fpsText);
-		addChild(ramText);
-		addChild(peakText);
-		addChild(delayText);
+		// 创建文本字段 - 统一字体大小为16
+		fpsInfoText = createTextField(16, 0xFFFFFF);
+		versionText = createTextField(16, 0xCCCCCC);
+		addChild(fpsInfoText);
 		addChild(versionText);
-		addChild(objectsText);
 
 		#if !officialBuild
 		if (LimeSystem.platformName == LimeSystem.platformVersion || LimeSystem.platformVersion == null)
@@ -129,9 +116,6 @@ class FPSCounter extends Sprite
 		// 修复：初始化设置跟踪变量
 		lastExGameVersion = ClientPrefs.data.exgameversion;
 		lastShowRunningOS = ClientPrefs.data.showRunningOS;
-
-		// 设置静态版本信息
-		updateVersionText();
 
 		positionFPS(x, y);
 
@@ -146,13 +130,12 @@ class FPSCounter extends Sprite
 		lastFpsUpdateTime = Timer.stamp();
 		lastRamUpdateTime = Timer.stamp();
 		lastObjectsUpdateTime = Timer.stamp();
-		lastBackgroundUpdateTime = Timer.stamp();
 		
-		// 初始定位
+		// 初始化背景尺寸
 		positionTextElements();
 	}
 
-	private function updateVersionText():Void
+	private function getVersionText():String
 	{
 		var versionTextContent = '';
 		if (ClientPrefs.data.exgameversion)
@@ -160,24 +143,42 @@ class FPSCounter extends Sprite
 			versionTextContent = 'Psych v${MainMenuState.psychEngineVersion}';
 			versionTextContent += '\nMR v${MainMenuState.mrExtendVersion}';
 			versionTextContent += '\nCommit: ${GameVersion.getGitCommitCount()} (${GameVersion.getGitCommitHash()})';
+			versionTextContent += '\nBuild: ${GameVersion.getBuildTime()}';
 		}
 
 		if (ClientPrefs.data.showRunningOS)
 			versionTextContent += '\n' + os;
 
-		versionText.text = versionTextContent;
+		return versionTextContent;
 	}
 
-	private function drawBackground(color:Int, alpha:Float, width:Float, height:Float):Void
+	private function drawFpsBackground(color:Int, alpha:Float, width:Float, height:Float):Void
 	{
-		background.graphics.clear();
-		background.graphics.beginFill(color, alpha);
-		background.graphics.drawRoundRect(0, 0, width, height, cornerRadius);
-		background.graphics.endFill();
+		fpsBackground.graphics.clear();
+		fpsBackground.graphics.beginFill(color, alpha);
+		fpsBackground.graphics.drawRoundRect(0, 0, width, height, cornerRadius);
+		fpsBackground.graphics.endFill();
 
-		// 移除边框以减少绘制调用
-		// background.graphics.lineStyle(1, 0xFFFFFF, 0.2);
-		// background.graphics.drawRoundRect(0, 0, width, height, cornerRadius);
+		// 添加边框
+		fpsBackground.graphics.lineStyle(1, 0xFFFFFF, 0.2);
+		fpsBackground.graphics.drawRoundRect(0, 0, width, height, cornerRadius);
+	}
+
+	private function drawVersionBackground(color:Int, alpha:Float, width:Float, height:Float):Void
+	{
+		versionBackground.graphics.clear();
+
+		// 如果高度为0或透明度为0，不绘制
+		if (height <= 0.5 || alpha <= 0.01)
+			return;
+
+		versionBackground.graphics.beginFill(color, alpha);
+		versionBackground.graphics.drawRoundRect(0, 0, width, height, cornerRadius);
+		versionBackground.graphics.endFill();
+
+		// 添加边框
+		versionBackground.graphics.lineStyle(1, 0xFFFFFF, 0.2 * versionPanelAlpha);
+		versionBackground.graphics.drawRoundRect(0, 0, width, height, cornerRadius);
 	}
 
 	private function createTextField(size:Int, color:Int, bold:Bool = false):TextField
@@ -196,14 +197,31 @@ class FPSCounter extends Sprite
 		var currentTime = Timer.stamp();
 		var memory = memoryMegas;
 
-		// 检查设置是否变化 - 减少检查频率
-		if (currentTime - lastBackgroundUpdateTime > 1.0 && 
-			(ClientPrefs.data.exgameversion != lastExGameVersion || ClientPrefs.data.showRunningOS != lastShowRunningOS))
+		// 检查设置是否变化
+		if (ClientPrefs.data.exgameversion != lastExGameVersion)
 		{
 			lastExGameVersion = ClientPrefs.data.exgameversion;
+
+			// 设置版本面板显示/隐藏动画目标
+			if (ClientPrefs.data.exgameversion)
+			{
+				// 显示版本面板
+				targetVersionAlpha = 1.0;
+				targetVersionOffset = 0;
+				versionPanelVisible = true;
+			}
+			else
+			{
+				// 隐藏版本面板
+				targetVersionAlpha = 0.0;
+				targetVersionOffset = 50; // 飞出距离
+				versionPanelVisible = false;
+			}
+		}
+
+		if (ClientPrefs.data.showRunningOS != lastShowRunningOS)
+		{
 			lastShowRunningOS = ClientPrefs.data.showRunningOS;
-			updateVersionText();
-			lastBackgroundUpdateTime = currentTime;
 		}
 
 		// 更新内存峰值
@@ -212,154 +230,84 @@ class FPSCounter extends Sprite
 			memoryPeakMegas = memory;
 		}
 
-		// 降低FPS更新频率（每秒最多10次）
-		if (currentTime - lastFpsUpdateTime > 0.1)
+		// 更新FPS信息文本
+		var fpsColor:String;
+		if (currentFPS < FlxG.stage.window.frameRate * 0.5)
 		{
-			// 更新 FPS 文本
-			fpsText.text = 'FPS: $currentFPS';
-
-			// 简化颜色变化逻辑 - 只在显著变化时更新颜色
-			if (currentFPS < FlxG.stage.window.frameRate * 0.5)
-			{
-				if (fpsColor != 0xFFFF4444) {
-					fpsColor = 0xFFFF4444;
-					fpsText.textColor = fpsColor;
-				}
-			}
-			else if (currentFPS < FlxG.stage.window.frameRate * 0.75)
-			{
-				if (fpsColor != 0xFFFFFF66) {
-					fpsColor = 0xFFFFFF66;
-					fpsText.textColor = fpsColor;
-				}
-			}
-			else
-			{
-				if (fpsColor != 0xFF66FF66) {
-					fpsColor = 0xFF66FF66;
-					fpsText.textColor = fpsColor;
-				}
-			}
-
-			lastFpsUpdateTime = currentTime;
+			fpsColor = "#FF4444";
+		}
+		else if (currentFPS < FlxG.stage.window.frameRate * 0.75)
+		{
+			fpsColor = "#FFFF66";
+		}
+		else
+		{
+			fpsColor = "#66FF66";
 		}
 
-		// 降低RAM更新频率（每秒最多2次）
-		if (currentTime - lastRamUpdateTime > 0.5)
-		{
-			// 更新内存信息
-			ramText.text = 'RAM: ${flixel.util.FlxStringUtil.formatBytes(memory)}';
-			
-			// 简化颜色变化
-			if (memory > 1024 * 1024 * 500 && ramColor != 0xFFFF6666) {
-				ramColor = 0xFFFF6666;
-				ramText.textColor = ramColor;
-			} else if (memory <= 1024 * 1024 * 500 && ramColor != 0xFF66AAFF) {
-				ramColor = 0xFF66AAFF;
-				ramText.textColor = ramColor;
-			}
+		var ramColor = memory > 1024 * 1024 * 500 ? "#FF6666" : "#66AAFF";
+		var delayColor = currentDelay > 16.7 ? "#FF6666" : "#FFFF66";
+		var objectsColor = objectCount > 2000 ? "#FF6666" : "#66FF66";
 
-			// 更新内存峰值
-			peakText.text = 'MEM Peak: ${flixel.util.FlxStringUtil.formatBytes(memoryPeakMegas)}';
-			// 移除峰值颜色变化 - 使用固定颜色
+		var fpsInfoContent = '';
 
-			lastRamUpdateTime = currentTime;
-		}
+		// FPS
+		fpsInfoContent += '<font color="$fpsColor">FPS: $currentFPS</font>\n';
 
-		// 降低延迟更新频率（每秒最多5次）
-		if (currentTime - lastDelayUpdateTime > 0.2)
-		{
-			// 计算并显示延迟
-			if (currentFPS > 0)
-			{
-				currentDelay = Math.fround(1000.0 / currentFPS * 10) / 10;
-			}
-			else
-			{
-				currentDelay = 0;
-			}
-			delayText.text = 'Delay: ${currentDelay}ms';
-			
-			// 简化颜色变化
-			if (currentDelay > 16.7 && delayColor != 0xFFFF6666) {
-				delayColor = 0xFFFF6666;
-				delayText.textColor = delayColor;
-			} else if (currentDelay <= 16.7 && delayColor != 0xFFFFFF66) {
-				delayColor = 0xFFFFFF66;
-				delayText.textColor = delayColor;
-			}
+		// Delay
+		fpsInfoContent += '<font color="$delayColor">Delay: ${currentDelay}ms</font>\n';
 
-			lastDelayUpdateTime = currentTime;
-		}
+		// RAM
+		fpsInfoContent += '<font color="$ramColor">RAM: ${flixel.util.FlxStringUtil.formatBytes(memory)}</font>\n';
 
-		// 降低对象计数更新频率（每秒最多1次）
-		if (currentTime - lastObjectsUpdateTime > 1.0)
-		{
-			// 更新对象数量
-			objectsText.text = 'Objects: $objectCount';
-			
-			// 简化颜色变化
-			if (objectCount > 2000 && objectsColor != 0xFFFF6666) {
-				objectsColor = 0xFFFF6666;
-				objectsText.textColor = objectsColor;
-			} else if (objectCount <= 2000 && objectsColor != 0xFF00FF00) {
-				objectsColor = 0xFF00FF00;
-				objectsText.textColor = objectsColor;
-			}
+		// MEM Peak
+		fpsInfoContent += '<font color="#FFA500">MEM Peak: ${flixel.util.FlxStringUtil.formatBytes(memoryPeakMegas)}</font>\n';
 
-			lastObjectsUpdateTime = currentTime;
-		}
+		// Objects
+		fpsInfoContent += '<font color="$objectsColor">Objects: $objectCount</font>';
 
-		// 减少背景更新频率
-		if (currentTime - lastBackgroundUpdateTime > 1.0)
-		{
-			positionTextElements();
-			lastBackgroundUpdateTime = currentTime;
-		}
+		fpsInfoText.htmlText = fpsInfoContent;
+
+		// 更新版本信息文本
+		var versionInfo = getVersionText();
+		versionText.htmlText = '<font color="#CCCCCC">$versionInfo</font>';
+
+		// 更新背景尺寸
+		positionTextElements();
 	}
 
 	private function positionTextElements()
 	{
-		// 计算背景所需高度
-		var totalHeight = padding * 2;
-		totalHeight += fpsText.height;
-		totalHeight += delayText.height;
-		totalHeight += ramText.height;
-		totalHeight += peakText.height;
-		totalHeight += objectsText.height;
-		totalHeight += versionText.height;
-		totalHeight += 6;
+		// 定位FPS信息
+		fpsInfoText.x = padding;
+		fpsInfoText.y = padding;
 
-		// 设置目标尺寸 - 移除平滑过渡
-		targetHeight = totalHeight;
-		drawBackground(0x222222, 0.85, targetWidth, targetHeight);
-		
-		// 定位文本
-		var textX = padding;
-		var yPos = padding;
+		// 计算FPS背景所需高度
+		var fpsHeight = padding * 2;
+		fpsHeight += fpsInfoText.height + 6;
 
-		fpsText.x = textX;
-		fpsText.y = yPos;
-		yPos += fpsText.height + 2;
+		// 设置目标高度
+		targetFpsHeight = fpsHeight;
 
-		delayText.x = textX;
-		delayText.y = yPos;
-		yPos += delayText.height + 2;
+		// 只在版本面板可见时计算尺寸
+		if (versionPanelVisible)
+		{
+			// 定位版本信息（在FPS信息下方）
+			versionText.x = padding;
+			versionText.y = currentFpsHeight + panelGap + padding;
 
-		ramText.x = textX;
-		ramText.y = yPos;
-		yPos += ramText.height + 2;
+			// 计算版本背景所需高度
+			var versionHeight = padding * 2;
+			versionHeight += versionText.height + 6;
 
-		peakText.x = textX;
-		peakText.y = yPos;
-		yPos += peakText.height + 2;
-
-		objectsText.x = textX;
-		objectsText.y = yPos;
-		yPos += objectsText.height + 3;
-
-		versionText.x = textX;
-		versionText.y = yPos;
+			// 设置版本背景目标高度
+			targetVersionHeight = versionHeight;
+		}
+		else
+		{
+			// 隐藏版本面板时，目标高度为0
+			targetVersionHeight = 0;
+		}
 	}
 
 	var deltaTimeout:Float = 0.0;
@@ -369,11 +317,51 @@ class FPSCounter extends Sprite
 		if (!visible)
 			return;
 
-		// 降低对象计数频率（每5秒一次）
-		if (Timer.stamp() - lastObjectCountUpdate > 5.0)
+		if (Timer.stamp() - lastObjectCountUpdate > 2.0)
 		{
 			objectCount = countObjects(FlxG.state);
 			lastObjectCountUpdate = Timer.stamp();
+		}
+
+		// FPS面板背景尺寸平滑过渡
+		if (currentFpsHeight != targetFpsHeight)
+		{
+			currentFpsHeight = FlxMath.lerp(currentFpsHeight, targetFpsHeight, lerpSpeed);
+			if (Math.abs(currentFpsHeight - targetFpsHeight) < 0.5)
+				currentFpsHeight = targetFpsHeight;
+
+			drawFpsBackground(0x222222, 0.85, 200, currentFpsHeight);
+		}
+
+		// 版本面板背景尺寸平滑过渡
+		if (currentVersionHeight != targetVersionHeight)
+		{
+			currentVersionHeight = FlxMath.lerp(currentVersionHeight, targetVersionHeight, lerpSpeed);
+			if (Math.abs(currentVersionHeight - targetVersionHeight) < 0.5)
+				currentVersionHeight = targetVersionHeight;
+
+			versionBackground.y = currentFpsHeight + panelGap + versionPanelOffset;
+			drawVersionBackground(0x222222, 0.85, 200, currentVersionHeight);
+		}
+
+		// 版本面板透明度和平移动画
+		if (versionPanelAlpha != targetVersionAlpha || versionPanelOffset != targetVersionOffset)
+		{
+			versionPanelAlpha = FlxMath.lerp(versionPanelAlpha, targetVersionAlpha, 0.15);
+			versionPanelOffset = FlxMath.lerp(versionPanelOffset, targetVersionOffset, 0.15);
+
+			if (Math.abs(versionPanelAlpha - targetVersionAlpha) < 0.01)
+				versionPanelAlpha = targetVersionAlpha;
+			if (Math.abs(versionPanelOffset - targetVersionOffset) < 0.5)
+				versionPanelOffset = targetVersionOffset;
+
+			// 应用透明度
+			versionBackground.alpha = versionPanelAlpha * 0.85;
+			versionText.alpha = versionPanelAlpha;
+
+			// 更新位置
+			versionBackground.y = currentFpsHeight + panelGap + versionPanelOffset;
+			versionText.y = versionBackground.y + padding;
 		}
 
 		if (ClientPrefs.data.fpsRework)
@@ -417,8 +405,7 @@ class FPSCounter extends Sprite
 			deltaTimeout = 0.0;
 		}
 
-		// 降低整体更新频率
-		if (Timer.stamp() - lastFpsUpdateTime > 0.1)
+		if (Timer.stamp() - lastFpsUpdateTime > 0.05)
 		{
 			updateText();
 		}
@@ -460,7 +447,6 @@ class FPSCounter extends Sprite
 			{
 				count++;
 
-				// 优化：跳过不需要计数的对象类型
 				if (Std.isOfType(member, flixel.group.FlxGroup.FlxTypedGroup))
 				{
 					var group:flixel.group.FlxGroup.FlxTypedGroup<flixel.FlxBasic> = cast member;
@@ -473,95 +459,7 @@ class FPSCounter extends Sprite
 	}
 
 	inline function get_memoryMegas():Float
-	{
-		#if cpp
-			#if windows
-				return getWindowsMemoryUsage();
-			#elseif (ios || mac)
-				return getMacMemoryUsage();
-			#elseif linux
-				return getLinuxMemoryUsage();
-			#else
-				return getFallbackMemoryUsage();
-			#end
-		#else
-			return getFallbackMemoryUsage();
-		#end
-	}
-
-	#if cpp
-	#if windows
-	@:functionCode('
-		PROCESS_MEMORY_COUNTERS_EX pmc;
-		if (GetProcessMemoryInfo(GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS*)&pmc, sizeof(pmc)))
-			return (double)pmc.WorkingSetSize;
-		else
-			return 0;
-	')
-	private function getWindowsMemoryUsage():Float
-	{
-		return 0;
-	}
-	#end
-
-	#if (ios || mac)
-	@:functionCode('
-		task_vm_info_data_t vmInfo;
-		mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
-		if (task_info(mach_task_self(), TASK_VM_INFO, (task_info_t)&vmInfo, &count) == KERN_SUCCESS)
-			return (double)vmInfo.phys_footprint;
-		else
-			return 0;
-	')
-	private function getMacMemoryUsage():Float
-	{
-		return 0;
-	}
-	#end
-
-	#if linux
-	@:functionCode('
-		FILE* file = fopen("/proc/self/status", "r");
-		if (file) {
-			char line[128];
-			unsigned long vmRSS = 0;
-			
-			while (fgets(line, sizeof(line), file) {
-				if (strncmp(line, "VmRSS:", 6) == 0) {
-					vmRSS = parseLine(line);
-					break;
-				}
-			}
-			fclose(file);
-			return vmRSS * 1024.0;
-		}
-		return 0;
-	')
-	private function getLinuxMemoryUsage():Float
-	{
-		return 0;
-	}
-	
-	@:functionCode('
-		char* p = line;
-		while (*p < \'0\' || *p > \'9\') p++;
-		return strtoul(p, NULL, 10);
-	')
-	private function parseLine(line:cpp.ConstCharStar):cpp.UInt64
-	{
-		return 0;
-	}
-	#end
-	#end
-
-	private function getFallbackMemoryUsage():Float
-	{
-		#if sys
 		return cpp.vm.Gc.memInfo64(cpp.vm.Gc.MEM_INFO_USAGE);
-		#else
-		return openfl.system.System.totalMemory;
-		#end
-	}
 
 	public inline function positionFPS(X:Float, Y:Float, ?scale:Float = 1)
 	{
@@ -571,22 +469,28 @@ class FPSCounter extends Sprite
 		var isRight = ClientPrefs.data.fpsPosition.indexOf("RIGHT") != -1;
 		var isBottom = ClientPrefs.data.fpsPosition.indexOf("BOTTOM") != -1;
 
-		if (isRight)
+		// 使用 OpenFL stage 坐标系而非 FlxG.game
+		var stage = Lib.current.stage;
+		if (stage != null)
 		{
-			x = FlxG.game.x + FlxG.width - background.width - spacing;
-		}
-		else
-		{
-			x = FlxG.game.x + spacing;
-		}
+			if (isRight)
+			{
+				x = stage.stageWidth - 200 - spacing;
+			}
+			else
+			{
+				x = spacing;
+			}
 
-		if (isBottom)
-		{
-			y = FlxG.game.y + FlxG.height - background.height - spacing;
-		}
-		else
-		{
-			y = FlxG.game.y + spacing;
+			if (isBottom)
+			{
+				var totalHeight = currentFpsHeight + panelGap + currentVersionHeight;
+				y = stage.stageHeight - totalHeight - spacing;
+			}
+			else
+			{
+				y = spacing;
+			}
 		}
 	}
 

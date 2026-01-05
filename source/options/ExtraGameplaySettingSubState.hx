@@ -21,6 +21,11 @@ class ExtraGameplaySettingSubState extends BaseOptionsMenu
 			Language.get("show_version_desc"),
 			'exgameversion',
 			BOOL);
+		option.onChange = function() {
+			if(Main.fpsVar != null) {
+				Main.fpsVar.updateText();
+			}
+		};
 		addOption(option);
 
 		/*Psych Engine v1.0.4已经有这个了，故隐藏此项

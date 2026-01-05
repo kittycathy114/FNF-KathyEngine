@@ -175,8 +175,8 @@ class ClientPrefs {
 		
 		'debug_1'		=> [SEVEN],
 		'debug_2'		=> [EIGHT],
-		'debug_3'		=> [NINE],
-		'debug_4'		=> [SIX],
+		'debug_3'		=> [F7],
+		'debug_4'		=> [F6],
 		
 		'fullscreen'	=> [F11]
 	];
