@@ -3500,7 +3500,7 @@ function showEventDebug(eventName:String, values:Array<String>, strumTime:Float)
 		// more accurate hit time for the ratings?
 		//判定修改（？）
 		//var lastTime:Float = Conductor.songPosition;
-		if(Conductor.songPosition >= 0) Conductor.songPosition = FlxG.sound.music.time + Conductor.offset;
+		//if(Conductor.songPosition >= 0) Conductor.songPosition = FlxG.sound.music.time + Conductor.offset;
 
 		// obtain notes that the player can hit
 		var plrInputNotes:Array<Note> = notes.members.filter(function(n:Note):Bool {
