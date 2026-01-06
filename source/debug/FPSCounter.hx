@@ -9,13 +9,10 @@ import lime.system.System as LimeSystem;
 import states.MainMenuState;
 import debug.GameVersion;
 import openfl.display.Sprite;
-import openfl.display.Shape;
 import flixel.FlxState;
-import flixel.util.FlxColor;
 import openfl.utils.Assets;
 import backend.ClientPrefs;
 import backend.Paths;
-import flixel.math.FlxMath;
 
 #if cpp
 #if windows
@@ -47,42 +44,13 @@ class FPSCounter extends Sprite
 	public var os:String = '';
 
 	// 文本字段
-	private var fpsInfoText:TextField;
-	private var versionText:TextField;
-
-	// 背景元素
-	private var fpsBackground:Shape;
-	private var versionBackground:Shape;
+	private var allInfoText:TextField;
 
 	// 布局参数
-	private var padding:Float = 8;
-	private var cornerRadius:Float = 8;
-	private var panelGap:Float = 10; // 两个面板之间的间隔
+	private var lineHeight:Float = 18;
 
 	// 性能优化变量
 	private var lastFpsUpdateTime:Float = 0;
-	private var lastRamUpdateTime:Float = 0;
-	private var lastObjectsUpdateTime:Float = 0;
-
-	// 背景平滑过渡变量（FPS面板）
-	private var targetFpsHeight:Float = 120;
-	private var currentFpsHeight:Float = 120;
-	private var lerpSpeed:Float = 0.2;
-
-	// 背景平滑过渡变量（版本面板）
-	private var targetVersionHeight:Float = 80;
-	private var currentVersionHeight:Float = 80;
-
-	// 版本面板显示/隐藏动画变量
-	private var versionPanelVisible:Bool = true;
-	private var versionPanelAlpha:Float = 1.0;
-	private var versionPanelOffset:Float = 0;
-	private var targetVersionAlpha:Float = 1.0;
-	private var targetVersionOffset:Float = 0;
-
-	// 修复：添加缺失的变量声明
-	@:noCompletion private var lastExGameVersion:Bool;
-	@:noCompletion private var lastShowRunningOS:Bool;
 
 	public var fontName:String = Paths.font("vcr.ttf");
 
@@ -90,21 +58,9 @@ class FPSCounter extends Sprite
 	{
 		super();
 
-		// 创建FPS信息背景
-		fpsBackground = new Shape();
-		drawFpsBackground(0x222222, 0.85, 200, 120);
-		addChild(fpsBackground);
-
-		// 创建版本信息背景
-		versionBackground = new Shape();
-		drawVersionBackground(0x222222, 0.85, 200, 80);
-		addChild(versionBackground);
-
-		// 创建文本字段 - 统一字体大小为16
-		fpsInfoText = createTextField(16, 0xFFFFFF);
-		versionText = createTextField(16, 0xCCCCCC);
-		addChild(fpsInfoText);
-		addChild(versionText);
+		// 创建单个文本字段，显示所有信息
+		allInfoText = createTextField(18, 0xFFFFFF);
+		addChild(allInfoText);
 
 		#if !officialBuild
 		if (LimeSystem.platformName == LimeSystem.platformVersion || LimeSystem.platformVersion == null)
@@ -112,10 +68,6 @@ class FPSCounter extends Sprite
 		else
 			os = 'OS: ${LimeSystem.platformName}' #if cpp + ' ${getArch() != 'Unknown' ? getArch() : ''}' #end + ' - ${LimeSystem.platformVersion}';
 		#end
-
-		// 修复：初始化设置跟踪变量
-		lastExGameVersion = ClientPrefs.data.exgameversion;
-		lastShowRunningOS = ClientPrefs.data.showRunningOS;
 
 		positionFPS(x, y);
 
@@ -128,57 +80,6 @@ class FPSCounter extends Sprite
 
 		// 初始化更新时间
 		lastFpsUpdateTime = Timer.stamp();
-		lastRamUpdateTime = Timer.stamp();
-		lastObjectsUpdateTime = Timer.stamp();
-		
-		// 初始化背景尺寸
-		positionTextElements();
-	}
-
-	private function getVersionText():String
-	{
-		var versionTextContent = '';
-		if (ClientPrefs.data.exgameversion)
-		{
-			versionTextContent = 'Psych v${MainMenuState.psychEngineVersion}';
-			versionTextContent += '\nMR v${MainMenuState.mrExtendVersion}';
-			versionTextContent += '\nCommit: ${GameVersion.getGitCommitCount()} (${GameVersion.getGitCommitHash()})';
-			versionTextContent += '\nBuild: ${GameVersion.getBuildTime()}';
-		}
-
-		if (ClientPrefs.data.showRunningOS)
-			versionTextContent += '\n' + os;
-
-		return versionTextContent;
-	}
-
-	private function drawFpsBackground(color:Int, alpha:Float, width:Float, height:Float):Void
-	{
-		fpsBackground.graphics.clear();
-		fpsBackground.graphics.beginFill(color, alpha);
-		fpsBackground.graphics.drawRoundRect(0, 0, width, height, cornerRadius);
-		fpsBackground.graphics.endFill();
-
-		// 添加边框
-		fpsBackground.graphics.lineStyle(1, 0xFFFFFF, 0.2);
-		fpsBackground.graphics.drawRoundRect(0, 0, width, height, cornerRadius);
-	}
-
-	private function drawVersionBackground(color:Int, alpha:Float, width:Float, height:Float):Void
-	{
-		versionBackground.graphics.clear();
-
-		// 如果高度为0或透明度为0，不绘制
-		if (height <= 0.5 || alpha <= 0.01)
-			return;
-
-		versionBackground.graphics.beginFill(color, alpha);
-		versionBackground.graphics.drawRoundRect(0, 0, width, height, cornerRadius);
-		versionBackground.graphics.endFill();
-
-		// 添加边框
-		versionBackground.graphics.lineStyle(1, 0xFFFFFF, 0.2 * versionPanelAlpha);
-		versionBackground.graphics.drawRoundRect(0, 0, width, height, cornerRadius);
 	}
 
 	private function createTextField(size:Int, color:Int, bold:Bool = false):TextField
@@ -186,7 +87,6 @@ class FPSCounter extends Sprite
 		var tf = new TextField();
 		tf.selectable = false;
 		tf.mouseEnabled = false;
-
 		tf.defaultTextFormat = new TextFormat(fontName, size, color, bold);
 		tf.autoSize = LEFT;
 		return tf;
@@ -197,117 +97,76 @@ class FPSCounter extends Sprite
 		var currentTime = Timer.stamp();
 		var memory = memoryMegas;
 
-		// 检查设置是否变化
-		if (ClientPrefs.data.exgameversion != lastExGameVersion)
-		{
-			lastExGameVersion = ClientPrefs.data.exgameversion;
-
-			// 设置版本面板显示/隐藏动画目标
-			if (ClientPrefs.data.exgameversion)
-			{
-				// 显示版本面板
-				targetVersionAlpha = 1.0;
-				targetVersionOffset = 0;
-				versionPanelVisible = true;
-			}
-			else
-			{
-				// 隐藏版本面板
-				targetVersionAlpha = 0.0;
-				targetVersionOffset = 50; // 飞出距离
-				versionPanelVisible = false;
-			}
-		}
-
-		if (ClientPrefs.data.showRunningOS != lastShowRunningOS)
-		{
-			lastShowRunningOS = ClientPrefs.data.showRunningOS;
-		}
-
 		// 更新内存峰值
 		if (memory > memoryPeakMegas)
 		{
 			memoryPeakMegas = memory;
 		}
 
-		// 更新FPS信息文本
-		var fpsColor:String;
-		if (currentFPS < FlxG.stage.window.frameRate * 0.5)
+		// 构建所有信息的文本
+		var allText = '';
+
+		// FPS信息 - 所有文本统一为白色
+		allText += 'FPS: $currentFPS\n';
+		allText += 'Delay: ${currentDelay}ms\n';
+		allText += 'RAM: ${flixel.util.FlxStringUtil.formatBytes(memory)}\n';
+		allText += 'MEM Peak: ${flixel.util.FlxStringUtil.formatBytes(memoryPeakMegas)}\n';
+		allText += 'Objects: $objectCount\n';
+
+		// 版本信息
+		if (ClientPrefs.data.exgameversion)
 		{
-			fpsColor = "#FF4444";
-		}
-		else if (currentFPS < FlxG.stage.window.frameRate * 0.75)
-		{
-			fpsColor = "#FFFF66";
-		}
-		else
-		{
-			fpsColor = "#66FF66";
-		}
+			allText += '\n';
+			allText += 'Psych v${MainMenuState.psychEngineVersion}\n';
+			allText += 'MR v${MainMenuState.mrExtendVersion}\n';
+			allText += 'Commit: ${GameVersion.getGitCommitCount()} (${GameVersion.getGitCommitHash()})\n';
+			allText += 'Build: ${GameVersion.getBuildTime()}';
 
-		var ramColor = memory > 1024 * 1024 * 500 ? "#FF6666" : "#66AAFF";
-		var delayColor = currentDelay > 16.7 ? "#FF6666" : "#FFFF66";
-		var objectsColor = objectCount > 2000 ? "#FF6666" : "#66FF66";
+			if (ClientPrefs.data.showRunningOS)
+			{
+				allText += '\n' + os;
+			}
 
-		var fpsInfoContent = '';
+			// 系统信息（默认一直显示）
+			allText += '\n';
 
-		// FPS
-		fpsInfoContent += '<font color="$fpsColor">FPS: $currentFPS</font>\n';
+			// 平台信息
+			#if cpp
+			var arch = getArch() != 'Unknown' ? ' (${getArch()})' : '';
+			#else
+			var arch = '';
+			#end
+			allText += 'Platform: ${LimeSystem.platformName}$arch\n';
 
-		// Delay
-		fpsInfoContent += '<font color="$delayColor">Delay: ${currentDelay}ms</font>\n';
+			// 平台版本
+			if (LimeSystem.platformVersion != null && LimeSystem.platformVersion != LimeSystem.platformName)
+				allText += 'OS Version: ${LimeSystem.platformVersion}\n';
 
-		// RAM
-		fpsInfoContent += '<font color="$ramColor">RAM: ${flixel.util.FlxStringUtil.formatBytes(memory)}</font>\n';
-
-		// MEM Peak
-		fpsInfoContent += '<font color="#FFA500">MEM Peak: ${flixel.util.FlxStringUtil.formatBytes(memoryPeakMegas)}</font>\n';
-
-		// Objects
-		fpsInfoContent += '<font color="$objectsColor">Objects: $objectCount</font>';
-
-		fpsInfoText.htmlText = fpsInfoContent;
-
-		// 更新版本信息文本
-		var versionInfo = getVersionText();
-		versionText.htmlText = '<font color="#CCCCCC">$versionInfo</font>';
-
-		// 更新背景尺寸
-		positionTextElements();
-	}
-
-	private function positionTextElements()
-	{
-		// 定位FPS信息
-		fpsInfoText.x = padding;
-		fpsInfoText.y = padding;
-
-		// 计算FPS背景所需高度
-		var fpsHeight = padding * 2;
-		fpsHeight += fpsInfoText.height + 6;
-
-		// 设置目标高度
-		targetFpsHeight = fpsHeight;
-
-		// 只在版本面板可见时计算尺寸
-		if (versionPanelVisible)
-		{
-			// 定位版本信息（在FPS信息下方）
-			versionText.x = padding;
-			versionText.y = currentFpsHeight + panelGap + padding;
-
-			// 计算版本背景所需高度
-			var versionHeight = padding * 2;
-			versionHeight += versionText.height + 6;
-
-			// 设置版本背景目标高度
-			targetVersionHeight = versionHeight;
+			// 显示器信息
+			try
+			{
+				var display = LimeSystem.getDisplay(0);
+				if (display != null)
+				{
+					allText += 'Resolution: ${display.currentMode.width}x${display.currentMode.height}\n';
+					allText += 'Refresh: ${display.currentMode.refreshRate}Hz\n';
+				}
+			}
+			catch (e:Dynamic)
+			{
+				// 忽略显示器信息错误
+			}
 		}
 		else
 		{
-			// 隐藏版本面板时，目标高度为0
-			targetVersionHeight = 0;
+			// 如果版本信息不显示，只显示操作系统信息
+			if (ClientPrefs.data.showRunningOS)
+			{
+				allText += '\n' + os;
+			}
 		}
+
+		allInfoText.htmlText = '<font color="#FFFFFF">$allText</font>';
 	}
 
 	var deltaTimeout:Float = 0.0;
@@ -321,47 +180,6 @@ class FPSCounter extends Sprite
 		{
 			objectCount = countObjects(FlxG.state);
 			lastObjectCountUpdate = Timer.stamp();
-		}
-
-		// FPS面板背景尺寸平滑过渡
-		if (currentFpsHeight != targetFpsHeight)
-		{
-			currentFpsHeight = FlxMath.lerp(currentFpsHeight, targetFpsHeight, lerpSpeed);
-			if (Math.abs(currentFpsHeight - targetFpsHeight) < 0.5)
-				currentFpsHeight = targetFpsHeight;
-
-			drawFpsBackground(0x222222, 0.85, 200, currentFpsHeight);
-		}
-
-		// 版本面板背景尺寸平滑过渡
-		if (currentVersionHeight != targetVersionHeight)
-		{
-			currentVersionHeight = FlxMath.lerp(currentVersionHeight, targetVersionHeight, lerpSpeed);
-			if (Math.abs(currentVersionHeight - targetVersionHeight) < 0.5)
-				currentVersionHeight = targetVersionHeight;
-
-			versionBackground.y = currentFpsHeight + panelGap + versionPanelOffset;
-			drawVersionBackground(0x222222, 0.85, 200, currentVersionHeight);
-		}
-
-		// 版本面板透明度和平移动画
-		if (versionPanelAlpha != targetVersionAlpha || versionPanelOffset != targetVersionOffset)
-		{
-			versionPanelAlpha = FlxMath.lerp(versionPanelAlpha, targetVersionAlpha, 0.15);
-			versionPanelOffset = FlxMath.lerp(versionPanelOffset, targetVersionOffset, 0.15);
-
-			if (Math.abs(versionPanelAlpha - targetVersionAlpha) < 0.01)
-				versionPanelAlpha = targetVersionAlpha;
-			if (Math.abs(versionPanelOffset - targetVersionOffset) < 0.5)
-				versionPanelOffset = targetVersionOffset;
-
-			// 应用透明度
-			versionBackground.alpha = versionPanelAlpha * 0.85;
-			versionText.alpha = versionPanelAlpha;
-
-			// 更新位置
-			versionBackground.y = currentFpsHeight + panelGap + versionPanelOffset;
-			versionText.y = versionBackground.y + padding;
 		}
 
 		if (ClientPrefs.data.fpsRework)
@@ -484,8 +302,8 @@ class FPSCounter extends Sprite
 
 			if (isBottom)
 			{
-				var totalHeight = currentFpsHeight + panelGap + currentVersionHeight;
-				y = stage.stageHeight - totalHeight - spacing;
+				var textHeight = allInfoText.height;
+				y = stage.stageHeight - textHeight - spacing;
 			}
 			else
 			{
