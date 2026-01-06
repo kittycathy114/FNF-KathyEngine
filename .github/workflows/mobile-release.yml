@@ -7,7 +7,7 @@ permissions:
 
 env:
   PROJECT_NAME: mrEngine
-  REPO_PATH: kittycathy233/FNF-MintRhythm-Engine
+  REPO_PATH: kittycathy114/MintRhythm-Extended
 
 jobs:
   get-commit-hash:
