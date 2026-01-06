@@ -113,9 +113,10 @@ class PlayState extends MusicBeatState
 	var timeBarLeftColorTarget:FlxColor = FlxColor.BLACK;
 	var timeBarRightColorTarget:FlxColor = FlxColor.WHITE;
 
-	var eventDebugGroup:FlxTypedGroup<FlxText>; // 存储事件文本的组
-	var eventTexts:Array<FlxText> = []; // 活动事件文本数组
-	var maxEventTexts:Int = 8; // 最大显示事件数量
+	public var eventDebugGroup:FlxTypedGroup<FlxText>; // 存储事件文本的组
+
+	// 事件处理器
+	public var eventHandler:EventHandler;
 
 	//可以被lua调用的杂项
     public var targetZoom:Float = ClientPrefs.data.hudSize;
@@ -172,7 +173,7 @@ class PlayState extends MusicBeatState
 		];
 
 	//event variables
-	private var isCameraOnForcedPos:Bool = false;
+	public var isCameraOnForcedPos:Bool = false;
 
 	public var boyfriendMap:Map<String, Character> = new Map<String, Character>();
 	public var dadMap:Map<String, Character> = new Map<String, Character>();
@@ -195,6 +196,9 @@ class PlayState extends MusicBeatState
 	public var noteKillOffset:Float = 350;
 
 	public var playbackRate(default, set):Float = 1;
+
+	public var eventsPushed(get, never):Array<String>;
+	private function get_eventsPushed():Array<String> { return eventHandler != null ? eventHandler.eventsPushed : []; }
 
 	public var boyfriendGroup:FlxSpriteGroup;
 	public var dadGroup:FlxSpriteGroup;
@@ -579,6 +583,9 @@ class PlayState extends MusicBeatState
 		eventDebugGroup.cameras = [camArchived];
 		add(eventDebugGroup);
 
+		// 初始化事件处理器
+		eventHandler = new EventHandler(this);
+
 		var camPos:FlxPoint = FlxPoint.get(girlfriendCameraOffset[0], girlfriendCameraOffset[1]);
 		if(gf != null)
 		{
@@ -620,6 +627,7 @@ class PlayState extends MusicBeatState
 		timeTxt.alpha = 0;
 		timeTxt.borderSize = ClientPrefs.data.timebarStyle == "Leather" ? 1 : 2;
 		timeTxt.visible = updateTime = showTime;
+		timeTxt.screenCenter(X);
 
 		if (ClientPrefs.data.downScroll)
 			timeTxt.y = FlxG.height - 44;
@@ -653,8 +661,6 @@ class PlayState extends MusicBeatState
 			timeBar.y = FlxG.height - (timeBar.height + 1);
 			timeTxt.y = timeBar.y - (timeTxt.height);
 			timeTxt.text = SONG.song + " ~ " + Difficulty.getString().toUpperCase() + " (0:00)";
-			// Leather样式需要重新居中文本
-			timeTxt.screenCenter(X);
 		}
 		
 		else
@@ -765,7 +771,7 @@ class PlayState extends MusicBeatState
 			botplayTxt.y = ClientPrefs.data.botplayStyle == 'Kade' ? healthBar.y + 120 : healthBar.y + 70;
 
 		watermarkText = new FlxText(20, FlxG.height - 20, 0,
-			(ClientPrefs.data.timebarStyle == 'Leather' ? 'MRE v${Application.current.meta.get('version')}' : '${SONG.song}-${Difficulty.getString().toUpperCase()} | M.R.E v${MainMenuState.mrExtendVersion}'),
+			(ClientPrefs.data.timebarStyle == 'Leather' ? 'M.R.E v${Application.current.meta.get('version')}' : '${SONG.song}-${Difficulty.getString().toUpperCase()} | PE-MRE ${MainMenuState.mrExtendVersion}'),
 			14);
 		watermarkText.setFormat(Paths.font("vcr.ttf"), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		watermarkText.scrollFactor.set();
@@ -776,7 +782,7 @@ class PlayState extends MusicBeatState
 		if (ClientPrefs.data.waterMarkPlay)	uiGroup.add(watermarkText);
 
 		ratingCounter = new FlxText(6, 0, 0, "", 20);
-		ratingCounter.setFormat(Paths.font("vcr.ttf"), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		ratingCounter.setFormat(Paths.font("vcr.ttf"), 18, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		//ratingCounter.borderSize = 1;
 		ratingCounter.scrollFactor.set();
 		ratingCounter.visible = !ClientPrefs.data.hideHud;
@@ -805,7 +811,6 @@ class PlayState extends MusicBeatState
 			startHScriptsNamed('custom_events/' + event + '.hx');
 		#end
 		noteTypes = null;
-		eventsPushed = null;
 
 		// SONG SPECIFIC SCRIPTS
 		#if (LUA_ALLOWED || HSCRIPT_ALLOWED)
@@ -835,7 +840,7 @@ class PlayState extends MusicBeatState
 
 		if(eventNotes.length > 0)
 		{
-			for (event in eventNotes) event.strumTime -= eventEarlyTrigger(event);
+			for (event in eventNotes) event.strumTime -= eventHandler.eventEarlyTrigger(event);
 			eventNotes.sort(sortByTime);
 		}
 
@@ -877,7 +882,7 @@ class PlayState extends MusicBeatState
 		cacheCountdown();
 		cachePopUpScore();
 
-		if(eventNotes.length < 1) checkEventNote();
+		if(eventNotes.length < 1) eventHandler.checkEventNote();
 	}
 
 	function set_songSpeed(value:Float):Float
@@ -943,50 +948,6 @@ class PlayState extends MusicBeatState
 		Sys.println(text);
 	}
 	#end
-
-function showEventDebug(eventName:String, values:Array<String>, strumTime:Float):Void {
-    if (!chartingMode) return;
-
-    var text:String = 'TriggerEvent: $eventName\nTime: ${Math.round(strumTime)}ms | Step: ${curStep}';
-    if (values.length > 0) text += '\nValues: ${values.join(", ")}';
-
-    var debugText:FlxText = new FlxText(20, 0, FlxG.width - 40, text, 16);
-    debugText.setFormat(Paths.font("unifont-16.0.02.otf"), 16, FlxColor.CYAN, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
-    debugText.borderSize = 3;
-    debugText.scrollFactor.set();
-    debugText.cameras = [camArchived];
-
-    // 添加到组和数组
-    eventDebugGroup.add(debugText);
-    eventTexts.push(debugText);
-
-    // 更新所有文本位置，使其显示在上部
-    for (i in 0...eventTexts.length) {
-        eventTexts[i].y = 90 + (i * 55);
-    }
-
-    FlxTween.tween(debugText, { alpha: 0 },	(60 / Conductor.bpm) * 4 , {
-        ease: FlxEase.circIn,
-        onComplete: function(tween:FlxTween) {
-            // 动画完成后移除文本
-            eventDebugGroup.remove(debugText, true);
-            eventTexts.remove(debugText);
-            debugText.destroy();
-
-            // 重新调整剩余文本的位置
-            for (i in 0...eventTexts.length) {
-                eventTexts[i].y = 90 + (i * 55);
-            }
-        }
-    });
-
-    // 清理旧文本
-    if (eventTexts.length > maxEventTexts) {
-        var oldText = eventTexts.shift();
-        eventDebugGroup.remove(oldText, true);
-        oldText.destroy();
-    }
-}
 
 	public function reloadHealthBarColors() {
 		healthBar.setColors(FlxColor.fromRGB(dad.healthColorArray[0], dad.healthColorArray[1], dad.healthColorArray[2]),
@@ -1614,7 +1575,6 @@ function showEventDebug(eventName:String, values:Array<String>, strumTime:Float)
 	}
 
 	private var noteTypes:Array<String> = [];
-	private var eventsPushed:Array<String> = [];
 	private var totalColumns: Int = 4;
 
 	private function generateSong():Void
@@ -1804,57 +1764,18 @@ function showEventDebug(eventName:String, values:Array<String>, strumTime:Float)
 		generatedMusic = true;
 	}
 
-	// called only once per different event (Used for precaching)
-	function eventPushed(event:EventNote) {
-		eventPushedUnique(event);
-		if(eventsPushed.contains(event.event)) {
-			return;
-		}
-
-		stagesFunc(function(stage:BaseStage) stage.eventPushed(event));
-		eventsPushed.push(event.event);
-	}
-
-	// called by every event with the same name
-	function eventPushedUnique(event:EventNote) {
-		switch(event.event) {
-			case "Change Character":
-				var charType:Int = 0;
-				switch(event.value1.toLowerCase()) {
-					case 'gf' | 'girlfriend':
-						charType = 2;
-					case 'dad' | 'opponent':
-						charType = 1;
-					default:
-						var val1:Int = Std.parseInt(event.value1);
-						if(Math.isNaN(val1)) val1 = 0;
-						charType = val1;
-				}
-
-				var newCharacter:String = event.value2;
-				addCharacterToList(newCharacter, charType);
-
-			case 'Play Sound':
-				Paths.sound(event.value1); //Precache sound
-		}
-		stagesFunc(function(stage:BaseStage) stage.eventPushedUnique(event));
-	}
-
-	function eventEarlyTrigger(event:EventNote):Float {
-		var returnedValue:Null<Float> = callOnScripts('eventEarlyTrigger', [event.event, event.value1, event.value2, event.value3, event.value4, event.strumTime], true);
-		if(returnedValue != null && returnedValue != 0) {
-			return returnedValue;
-		}
-
-		switch(event.event) {
-			case 'Kill Henchmen': //Better timing so that the kill sound matches the beat intended
-				return 280; //Plays 280ms before the actual position
-		}
-		return 0;
-	}
-
 	public static function sortByTime(Obj1:Dynamic, Obj2:Dynamic):Int
 		return FlxSort.byValues(FlxSort.ASCENDING, Obj1.strumTime, Obj2.strumTime);
+
+	public function triggerEvent(eventName:String, value1:String, value2:String, value3:String, value4:String, strumTime:Float) {
+		eventHandler.triggerEvent(eventName, value1, value2, value3, value4, strumTime);
+	}
+
+	override public function stagesFunc(func:BaseStage->Void) {
+		for (stage in stages)
+			if(stage != null && stage.exists && stage.active)
+				func(stage);
+	}
 
 	function makeEvent(event:Array<Dynamic>, i:Int)
 	{
@@ -1867,7 +1788,7 @@ function showEventDebug(eventName:String, values:Array<String>, strumTime:Float)
 			value4: event[1][i][4]
 		};
 		eventNotes.push(subEvent);
-		eventPushed(subEvent);
+		eventHandler.eventPushed(subEvent);
 		callOnScripts('onEventPushed', [subEvent.event, subEvent.value1 != null ? subEvent.value1 : '', subEvent.value2 != null ? subEvent.value2 : '', subEvent.value3 != null ? subEvent.value3 : '', subEvent.value4 != null ? subEvent.value4 : '', subEvent.strumTime]);
 	}
 
@@ -2302,7 +2223,7 @@ function showEventDebug(eventName:String, values:Array<String>, strumTime:Float)
 					}
 				}
 			}
-			checkEventNote();
+			eventHandler.checkEventNote();
 		}
 
 		#if debug
@@ -2580,339 +2501,6 @@ function showEventDebug(eventName:String, values:Array<String>, strumTime:Float)
 			}
 		}
 		return false;
-	}
-
-	public function checkEventNote() {
-		while(eventNotes.length > 0) {
-			var leStrumTime:Float = eventNotes[0].strumTime;
-			if(Conductor.songPosition < leStrumTime) {
-				return;
-			}
-
-			var value1:String = '';
-			if(eventNotes[0].value1 != null)
-				value1 = eventNotes[0].value1;
-
-			var value2:String = '';
-			if(eventNotes[0].value2 != null)
-				value2 = eventNotes[0].value2;
-
-			var value3:String = '';
-			if(eventNotes[0].value1 != null)
-				value3 = eventNotes[0].value3;
-
-			var value4:String = '';
-			if(eventNotes[0].value4 != null)
-				value4 = eventNotes[0].value4;
-
-			triggerEvent(eventNotes[0].event, value1, value2, value3, value4, leStrumTime);
-			eventNotes.shift();
-		}
-	}
-
-	public function triggerEvent(eventName:String, value1:String, value2:String, value3:String, value4:String, strumTime:Float) {
-		var flValue1:Null<Float> = Std.parseFloat(value1);
-		var flValue2:Null<Float> = Std.parseFloat(value2);
-		var flValue3:Null<Float> = Std.parseFloat(value3);
-		var flValue4:Null<Float> = Std.parseFloat(value4);
-		if(Math.isNaN(flValue1)) flValue1 = null;
-		if(Math.isNaN(flValue2)) flValue2 = null;
-		if(Math.isNaN(flValue3)) flValue3 = null;
-		if(Math.isNaN(flValue4)) flValue4 = null;
-		if (chartingMode && ClientPrefs.data.eventDebug) {
-    	showEventDebug(eventName, [value1, value2, value3, value4], strumTime);
-		}
-		switch(eventName) {
-			case 'Hey!':
-				var value:Int = 2;
-				switch(value1.toLowerCase().trim()) {
-					case 'bf' | 'boyfriend' | '0':
-						value = 0;
-					case 'gf' | 'girlfriend' | '1':
-						value = 1;
-				}
-
-				if(flValue2 == null || flValue2 <= 0) flValue2 = 0.6;
-
-				if(value != 0) {
-					if(dad.curCharacter.startsWith('gf')) { //Tutorial GF is actually Dad! The GF is an imposter!! ding ding ding ding ding ding ding, dindinding, end my suffering
-						dad.playAnim('cheer', true);
-						dad.specialAnim = true;
-						dad.heyTimer = flValue2;
-					} else if (gf != null) {
-						gf.playAnim('cheer', true);
-						gf.specialAnim = true;
-						gf.heyTimer = flValue2;
-					}
-				}
-				if(value != 1) {
-					boyfriend.playAnim('hey', true);
-					boyfriend.specialAnim = true;
-					boyfriend.heyTimer = flValue2;
-				}
-
-			case 'Set GF Speed':
-				if(flValue1 == null || flValue1 < 1) flValue1 = 1;
-				gfSpeed = Math.round(flValue1);
-
-			case 'Add Camera Zoom':
-				if(ClientPrefs.data.camZooms/* && FlxG.camera.zoom < 1.35*/) {
-					if(flValue1 == null) flValue1 = 0.015;
-					if(flValue2 == null) flValue2 = 0.03;
-
-					FlxG.camera.zoom += flValue1;
-					camHUD.zoom += flValue2;
-				}
-
-			case 'Play Animation':
-				//trace('Anim to play: ' + value1);
-				var char:Character = dad;
-				switch(value2.toLowerCase().trim()) {
-					case 'bf' | 'boyfriend':
-						char = boyfriend;
-					case 'gf' | 'girlfriend':
-						char = gf;
-					default:
-						if(flValue2 == null) flValue2 = 0;
-						switch(Math.round(flValue2)) {
-							case 1: char = boyfriend;
-							case 2: char = gf;
-						}
-				}
-
-				if (char != null)
-				{
-					char.playAnim(value1, true);
-					char.specialAnim = true;
-				}
-
-			case 'Camera Follow Pos':
-				if(camFollow != null)
-				{
-					isCameraOnForcedPos = false;
-					if(flValue1 != null || flValue2 != null)
-					{
-						isCameraOnForcedPos = true;
-						if(flValue1 == null) flValue1 = 0;
-						if(flValue2 == null) flValue2 = 0;
-						camFollow.x = flValue1;
-						camFollow.y = flValue2;
-					}
-				}
-
-			case 'Alt Idle Animation':
-				var char:Character = dad;
-				switch(value1.toLowerCase().trim()) {
-					case 'gf' | 'girlfriend':
-						char = gf;
-					case 'boyfriend' | 'bf':
-						char = boyfriend;
-					default:
-						var val:Int = Std.parseInt(value1);
-						if(Math.isNaN(val)) val = 0;
-
-						switch(val) {
-							case 1: char = boyfriend;
-							case 2: char = gf;
-						}
-				}
-
-				if (char != null)
-				{
-					char.idleSuffix = value2;
-					char.recalculateDanceIdle();
-				}
-
-			case 'Screen Shake':
-				var valuesArray:Array<String> = [value1, value2];
-				var targetsArray:Array<FlxCamera> = [camGame, camHUD];
-				for (i in 0...targetsArray.length) {
-					var split:Array<String> = valuesArray[i].split(',');
-					var duration:Float = 0;
-					var intensity:Float = 0;
-					if(split[0] != null) duration = Std.parseFloat(split[0].trim());
-					if(split[1] != null) intensity = Std.parseFloat(split[1].trim());
-					if(Math.isNaN(duration)) duration = 0;
-					if(Math.isNaN(intensity)) intensity = 0;
-
-					if(duration > 0 && intensity != 0) {
-						targetsArray[i].shake(intensity, duration);
-					}
-				}
-
-
-			case 'Change Character':
-				var charType:Int = 0;
-				switch(value1.toLowerCase().trim()) {
-					case 'gf' | 'girlfriend':
-						charType = 2;
-					case 'dad' | 'opponent':
-						charType = 1;
-					default:
-						charType = Std.parseInt(value1);
-						if(Math.isNaN(charType)) charType = 0;
-				}
-
-				switch(charType) {
-					case 0:
-						if(boyfriend.curCharacter != value2) {
-							if(!boyfriendMap.exists(value2)) {
-								addCharacterToList(value2, charType);
-							}
-
-							var lastAlpha:Float = boyfriend.alpha;
-							boyfriend.alpha = 0.00001;
-							boyfriend = boyfriendMap.get(value2);
-							boyfriend.alpha = lastAlpha;
-							iconP1.changeIcon(boyfriend.healthIcon);
-						}
-						setOnScripts('boyfriendName', boyfriend.curCharacter);
-
-					case 1:
-						if(dad.curCharacter != value2) {
-							if(!dadMap.exists(value2)) {
-								addCharacterToList(value2, charType);
-							}
-
-							var wasGf:Bool = dad.curCharacter.startsWith('gf-') || dad.curCharacter == 'gf';
-							var lastAlpha:Float = dad.alpha;
-							dad.alpha = 0.00001;
-							dad = dadMap.get(value2);
-							if(!dad.curCharacter.startsWith('gf-') && dad.curCharacter != 'gf') {
-								if(wasGf && gf != null) {
-									gf.visible = true;
-								}
-							} else if(gf != null) {
-								gf.visible = false;
-							}
-							dad.alpha = lastAlpha;
-							iconP2.changeIcon(dad.healthIcon);
-						}
-						setOnScripts('dadName', dad.curCharacter);
-
-					case 2:
-						if(gf != null)
-						{
-							if(gf.curCharacter != value2)
-							{
-								if(!gfMap.exists(value2)) {
-									addCharacterToList(value2, charType);
-								}
-
-								var lastAlpha:Float = gf.alpha;
-								gf.alpha = 0.00001;
-								gf = gfMap.get(value2);
-								gf.alpha = lastAlpha;
-							}
-							setOnScripts('gfName', gf.curCharacter);
-						}
-				}
-				reloadHealthBarColors();
-
-			case 'Change Scroll Speed':
-				if (songSpeedType != "constant")
-				{
-					if(flValue1 == null) flValue1 = 1;
-					if(flValue2 == null) flValue2 = 0;
-					if(value3 == null) value3 = 'linear';
-
-					var newValue:Float = SONG.speed * ClientPrefs.getGameplaySetting('scrollspeed') * flValue1;
-					var easeFunc:EaseFunction = getEaseFunctionFromString(value3); // Helper function to get ease
-					if(flValue2 <= 0) {
-						songSpeed = newValue;
-					} else {
-						songSpeedTween = FlxTween.tween(this, {songSpeed: newValue}, flValue2 / playbackRate, {
-							ease: easeFunc,
-							onComplete: function(twn:FlxTween) {
-								songSpeedTween = null;
-							}
-						});
-					}
-				}
-
-			case 'Set Property':
-				try
-				{
-					var trueValue:Dynamic = value2.trim();
-					if (trueValue == 'true' || trueValue == 'false') trueValue = trueValue == 'true';
-					else if (flValue2 != null) trueValue = flValue2;
-					else trueValue = value2;
-
-					var split:Array<String> = value1.split('.');
-					if(split.length > 1) {
-						LuaUtils.setVarInArray(LuaUtils.getPropertyLoop(split), split[split.length-1], trueValue);
-					} else {
-						LuaUtils.setVarInArray(this, value1, trueValue);
-					}
-				}
-				catch(e:Dynamic)
-				{
-					var len:Int = e.message.indexOf('\n') + 1;
-					if(len <= 0) len = e.message.length;
-					#if (LUA_ALLOWED || HSCRIPT_ALLOWED)
-					addTextToDebug('ERROR ("Set Property" Event) - ' + e.message.substr(0, len), FlxColor.RED);
-					#else
-					FlxG.log.warn('ERROR ("Set Property" Event) - ' + e.message.substr(0, len));
-					#end
-				}
-
-			case 'Play Sound':
-				if(flValue2 == null) flValue2 = 1;
-				FlxG.sound.play(Paths.sound(value1), flValue2);
-				
-			case 'Change Window Title':
-				if (value1 != null && value1.trim() != "") {
-					FlxG.stage.window.title = value1.trim();
-				} else {
-					FlxG.stage.window.title = 'IDK';
-				}
-		}
-
-		stagesFunc(function(stage:BaseStage) stage.eventCalled(eventName, value1, value2, flValue1, flValue2, strumTime));
-		callOnScripts('onEvent', [eventName, value1, value2, value3, value4, strumTime]);
-	}
-
-	function getEaseFunctionFromString(easeName:String):EaseFunction {
-		return switch(easeName.toLowerCase()) {
-			case 'linear': FlxEase.linear;
-			case 'quadIn': FlxEase.quadIn;
-			case 'quadOut': FlxEase.quadOut;
-			case 'quadInOut': FlxEase.quadInOut;
-			case 'cubeIn': FlxEase.cubeIn;
-			case 'cubeOut': FlxEase.cubeOut;
-			case 'cubeInOut': FlxEase.cubeInOut;
-			case 'quartIn': FlxEase.quartIn;
-			case 'quartOut': FlxEase.quartOut;
-			case 'quartInOut': FlxEase.quartInOut;
-			case 'quintIn': FlxEase.quintIn;
-			case 'quintOut': FlxEase.quintOut;
-			case 'quintInOut': FlxEase.quintInOut;
-			case 'sineIn': FlxEase.sineIn;
-			case 'sineOut': FlxEase.sineOut;
-			case 'sineInOut': FlxEase.sineInOut;
-			case 'bounceIn': FlxEase.bounceIn;
-			case 'bounceOut': FlxEase.bounceOut;
-			case 'bounceInOut': FlxEase.bounceInOut;
-			case 'circIn': FlxEase.circIn;
-			case 'circOut': FlxEase.circOut;
-			case 'circInOut': FlxEase.circInOut;
-			case 'expoIn': FlxEase.expoIn;
-			case 'expoOut': FlxEase.expoOut;
-			case 'expoInOut': FlxEase.expoInOut;
-			case 'backIn': FlxEase.backIn;
-			case 'backOut': FlxEase.backOut;
-			case 'backInOut': FlxEase.backInOut;
-			case 'elasticIn': FlxEase.elasticIn;
-			case 'elasticOut': FlxEase.elasticOut;
-			case 'elasticInOut': FlxEase.elasticInOut;
-			case 'smoothStepIn': FlxEase.smoothStepIn;
-			case 'smoothStepOut': FlxEase.smoothStepOut;
-			case 'smoothStepInOut': FlxEase.smoothStepInOut;
-			case 'smootherStepIn': FlxEase.smootherStepIn;
-			case 'smootherStepOut': FlxEase.smootherStepOut;
-			case 'smootherStepInOut': FlxEase.smootherStepInOut;
-			default: FlxEase.linear; // Default to linear if unknown
-		}
 	}
 
 	public function moveCameraSection(?sec:Null<Int>):Void {
@@ -3354,12 +2942,9 @@ function showEventDebug(eventName:String, values:Array<String>, strumTime:Float)
             {
                 theEXrating.scale.set(0.8, 0.8);
                 var targetAngle:Float = (Math.random() * 10) * (Math.random() > .5 ? 1 : -1);
-                    FlxTween.tween(theEXrating, {angle: targetAngle}, 0.025, {ease: FlxEase.quartOut,
-                        onComplete: function(tween:FlxTween) {
-                            FlxTween.tween(theEXrating, {angle: 0}, 0.3, {ease: FlxEase.circOut});
-                        }
-                    });
-                    FlxTween.tween(theEXrating.scale, {x: 0.7, y: 0.7}, 0.4, {ease: FlxEase.circOut});
+				theEXrating.angle = targetAngle;
+				FlxTween.tween(theEXrating, {angle: 0}, 0.3, {ease: FlxEase.circOut});
+				FlxTween.tween(theEXrating.scale, {x: 0.7, y: 0.7}, 0.4, {ease: FlxEase.circOut});
             }
 	
 			comboSpr.updateHitbox();
