@@ -946,6 +946,12 @@ class PlayState extends MusicBeatState
 		luaDebugGroup.add(newText);
 
 		Sys.println(text);
+		
+		// 同时输出到游戏日志显示
+		if (Main.gameLogVar != null && Main.gameLogVar.isEnabled)
+		{
+			Main.gameLogVar.addLogWithColor(text, color);
+		}
 	}
 	#end
 

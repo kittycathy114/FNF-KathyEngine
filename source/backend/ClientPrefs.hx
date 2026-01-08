@@ -147,6 +147,7 @@ import states.TitleState;
 
 	public var ratCounter:Bool = true; // 评分计数器
 	public var waterMarkPlay:Bool = true; // 水印
+	public var enableGameLog:Bool = false; // 启用游戏内日志显示（按F3切换）
 }
 
 class ClientPrefs {
@@ -277,6 +278,9 @@ class ClientPrefs {
 
 		if(Main.fpsVar != null)
 			Main.fpsVar.visible = data.showFPS;
+
+		if(Main.gameLogVar != null)
+			Main.gameLogVar.setEnabled(data.enableGameLog);
 
 		#if (!html5 && !switch)
 		FlxG.autoPause = ClientPrefs.data.autoPause;

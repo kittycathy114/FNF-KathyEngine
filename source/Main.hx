@@ -1,6 +1,7 @@
 package;
 
 import debug.FPSCounter;
+import debug.GameLogDisplay;
 import backend.Highscore;
 import flixel.FlxGame;
 import openfl.Lib;
@@ -26,6 +27,7 @@ import backend.Highscore;
 import flixel.tweens.FlxTween;
 import flixel.tweens.FlxEase;
 import backend.ClientPrefs;
+import openfl.ui.Keyboard;
 
 // NATIVE API STUFF, YOU CAN IGNORE THIS AND SCROLL //
 #if (linux && !debug)
@@ -45,6 +47,7 @@ class Main extends Sprite
 	};
 
 	public static var fpsVar:FPSCounter;
+	public static var gameLogVar:GameLogDisplay;
 
 	public static final platform:String = #if mobile "Phones" #else "PCs" #end;
 
@@ -192,6 +195,11 @@ class Main extends Sprite
 			fpsVar.visible = ClientPrefs.data.showFPS;
 		}
 
+		// 创建游戏日志显示
+		gameLogVar = new GameLogDisplay();
+		gameLogVar.setEnabled(ClientPrefs.data.enableGameLog);
+		Lib.current.stage.addChild(gameLogVar);
+
 		Language.load();
 
 		#if (linux || mac) // fix the app icon not showing up on the Linux Panel / Mac Dock
@@ -216,7 +224,7 @@ class Main extends Sprite
 		DiscordClient.prepare();
 		#end
 
-		#if desktop FlxG.stage.addEventListener(KeyboardEvent.KEY_UP, toggleFullScreen); #end
+		#if desktop FlxG.stage.addEventListener(KeyboardEvent.KEY_UP, onKeyPress); #end
 
 		#if mobile
 		#if android FlxG.android.preventDefaultKeys = [BACK]; #end
@@ -249,6 +257,10 @@ class Main extends Sprite
 			if (fpsVar != null)
 			{
 				fpsVar.positionFPS(10, 3, 1);
+			}
+			if (gameLogVar != null)
+			{
+				gameLogVar.updatePositionOnResize();
 			}
 		});
 
@@ -320,10 +332,16 @@ class Main extends Sprite
 		}
 	}
 
-	function toggleFullScreen(event:KeyboardEvent)
+	function onKeyPress(event:KeyboardEvent)
 	{
 		if (Controls.instance.justReleased('fullscreen'))
 			FlxG.fullscreen = !FlxG.fullscreen;
+
+		// F3键切换日志显示
+		if (event.keyCode == Keyboard.F3 && gameLogVar != null)
+		{
+			gameLogVar.toggleVisibility();
+		}
 	}
 
 	function setCustomCursor():Void

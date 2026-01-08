@@ -170,6 +170,17 @@ class ExtraGameplaySettingSubState extends BaseOptionsMenu
 			BOOL);
 		addOption(option);
 
+		option = new Option('Enable Game Log Display',
+			'Enable in-game log display (Press F3 to toggle)',
+			'enableGameLog',
+			BOOL);
+		option.onChange = function() {
+			if(Main.gameLogVar != null) {
+				Main.gameLogVar.setEnabled(ClientPrefs.data.enableGameLog);
+			}
+		};
+		addOption(option);
+
 		// PERCENT 类型设置
 		option = new Option('Ratings Opacity',
 			Language.get("rating_opac_desc"),
