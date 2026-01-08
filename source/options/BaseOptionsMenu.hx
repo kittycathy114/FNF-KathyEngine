@@ -127,7 +127,10 @@ class BaseOptionsMenu extends MusicBeatSubstate
 
 		changeSelection();
 		reloadCheckboxes();
-		
+
+		// Initialize keybind manager
+		keybindManager = new KeybindManager();
+
 		addTouchPad('LEFT_FULL', 'A_B_C');
 	}
 
@@ -141,11 +144,7 @@ class BaseOptionsMenu extends MusicBeatSubstate
 	var holdTime:Float = 0;
 	var holdValue:Float = 0;
 
-	var bindingKey:Bool = false;
-	var holdingEsc:Float = 0;
-	var bindingBlack:FlxSprite;
-	var bindingText:Alphabet;
-	var bindingText2:Alphabet;
+	var keybindManager:KeybindManager;
 	var lastMouseClickTime:Float = 0;
 	var lastMouseClickIndex:Int = -1;
 	override function update(elapsed:Float)
@@ -161,7 +160,7 @@ class BaseOptionsMenu extends MusicBeatSubstate
 		// 检测鼠标左右键
 		if (FlxG.mouse.justPressed) {
 			var now = FlxG.game.ticks / 1000.0;
-			if (lastMouseClickIndex == curSelected && (now - lastMouseClickTime) < 0.25) {
+			if (lastMouseClickIndex == curSelected && (now - lastMouseClickTime) < OptionsConfig.DOUBLE_CLICK_THRESHOLD) {
 				// 双击，什么都不做（交由右键或其它逻辑处理）
 			} else {
 				// 单击，BOOL类型切换
@@ -181,6 +180,14 @@ class BaseOptionsMenu extends MusicBeatSubstate
 			FlxG.sound.play(Paths.sound('cancelMenu'));
 		}
 #end
+
+		// Handle keybinding
+		if (keybindManager != null && keybindManager.isBinding) {
+			if (keybindManager.update(elapsed)) {
+				reloadCheckboxes();
+			}
+			return;
+		}
 
 		if (controls.UI_UP_P)
 		{
@@ -212,49 +219,34 @@ class BaseOptionsMenu extends MusicBeatSubstate
 				case KEYBIND:
 					if(controls.ACCEPT)
 					{
-						bindingBlack = new FlxSprite().makeGraphic(1, 1, FlxColor.WHITE);
-						bindingBlack.scale.set(FlxG.width, FlxG.height);
-						bindingBlack.updateHitbox();
-						bindingBlack.alpha = 0;
-						FlxTween.tween(bindingBlack, {alpha: 0.6}, 0.35, {ease: FlxEase.linear});
-						add(bindingBlack);
-	
-						bindingText = new Alphabet(FlxG.width / 2, 160, LanguageBasic.getPhrase('controls_rebinding', 'Rebinding {1}', [curOption.name]), false);
-						bindingText.alignment = CENTERED;
-						add(bindingText);
-
-						final escape:String = (controls.mobileC) ? "B" : "ESC";
-						final backspace:String = (controls.mobileC) ? "C" : "Backspace";
-						
-						bindingText2 = new Alphabet(FlxG.width / 2, 340, LanguageBasic.getPhrase('controls_rebinding2', 'Hold {1} to Cancel\nHold {2} to Delete', [escape, backspace]), true);
-						bindingText2.alignment = CENTERED;
-						add(bindingText2);
-	
-						bindingKey = true;
-						holdingEsc = 0;
-						ClientPrefs.toggleVolumeKeys(false);
-						FlxG.sound.play(Paths.sound('scrollMenu'));
+						keybindManager.startBinding(curOption, function() {
+							reloadCheckboxes();
+						});
+						// Add UI elements to display
+						if (keybindManager.getOverlay() != null) add(keybindManager.getOverlay());
+						if (keybindManager.getTitle() != null) add(keybindManager.getTitle());
+						if (keybindManager.getInstructions() != null) add(keybindManager.getInstructions());
 					}
 
 				default:
 					if(controls.UI_LEFT || controls.UI_RIGHT)
 					{
 						var pressed = (controls.UI_LEFT_P || controls.UI_RIGHT_P);
-						if(holdTime > 0.5 || pressed)
+						if(holdTime > OptionsConfig.INPUT_COOLDOWN || pressed)
 						{
 							if(pressed)
 							{
 								var add:Dynamic = null;
 								if(curOption.type != STRING)
 									add = controls.UI_LEFT ? -curOption.changeValue : curOption.changeValue;
-		
+
 								switch(curOption.type)
 								{
 									case INT, FLOAT, PERCENT:
 										holdValue = curOption.getValue() + add;
 										if(holdValue < curOption.minValue) holdValue = curOption.minValue;
 										else if (holdValue > curOption.maxValue) holdValue = curOption.maxValue;
-		
+
 										if(curOption.type == INT)
 										{
 											holdValue = Math.round(holdValue);
@@ -265,20 +257,19 @@ class BaseOptionsMenu extends MusicBeatSubstate
 											holdValue = FlxMath.roundDecimal(holdValue, curOption.decimals);
 											curOption.setValue(holdValue);
 										}
-		
+
 									case STRING:
-										var num:Int = curOption.curOption; //lol
+										var num:Int = curOption.curOption;
 										if(controls.UI_LEFT_P) --num;
 										else num++;
-		
+
 										if(num < 0)
 											num = curOption.options.length - 1;
 										else if(num >= curOption.options.length)
 											num = 0;
-		
+
 										curOption.curOption = num;
 										curOption.setValue(curOption.options[num]);
-										//trace(curOption.options[num]);
 
 									default:
 								}
@@ -291,12 +282,12 @@ class BaseOptionsMenu extends MusicBeatSubstate
 								holdValue += curOption.scrollSpeed * elapsed * (controls.UI_LEFT ? -1 : 1);
 								if(holdValue < curOption.minValue) holdValue = curOption.minValue;
 								else if (holdValue > curOption.maxValue) holdValue = curOption.maxValue;
-		
+
 								switch(curOption.type)
 								{
 									case INT:
 										curOption.setValue(Math.round(holdValue));
-									
+
 									case PERCENT:
 										curOption.setValue(FlxMath.roundDecimal(holdValue, curOption.decimals));
 
@@ -306,13 +297,13 @@ class BaseOptionsMenu extends MusicBeatSubstate
 								curOption.change();
 							}
 						}
-		
+
 						if(curOption.type != STRING)
 							holdTime += elapsed;
 					}
 					else if(controls.UI_LEFT_R || controls.UI_RIGHT_R)
 					{
-						if(holdTime > 0.5) FlxG.sound.play(Paths.sound('scrollMenu'));
+						if(holdTime > OptionsConfig.INPUT_COOLDOWN) FlxG.sound.play(Paths.sound('scrollMenu'));
 						holdTime = 0;
 					}
 			}
@@ -332,7 +323,9 @@ class BaseOptionsMenu extends MusicBeatSubstate
 				else
 				{
 					leOption.setValue(!Controls.instance.controllerMode ? leOption.defaultKeys.keyboard : leOption.defaultKeys.gamepad);
-					updateBind(leOption);
+					if (keybindManager != null) {
+						keybindManager.updateBindDisplay(null, leOption, grpTexts);
+					}
 				}
 				leOption.change();
 				FlxG.sound.play(Paths.sound('cancelMenu'));
@@ -345,178 +338,12 @@ class BaseOptionsMenu extends MusicBeatSubstate
 		}
 	}
 
-	function bindingKeyUpdate(elapsed:Float)
-	{
-		if(touchPad.buttonB.pressed || FlxG.keys.pressed.ESCAPE || FlxG.gamepads.anyPressed(B))
-		{
-			holdingEsc += elapsed;
-			if(holdingEsc > 0.5)
-			{
-				FlxG.sound.play(Paths.sound('cancelMenu'));
-				closeBinding();
-			}
-		}
-		else if (touchPad.buttonC.pressed || FlxG.keys.pressed.BACKSPACE || FlxG.gamepads.anyPressed(BACK))
-		{
-			holdingEsc += elapsed;
-			if(holdingEsc > 0.5)
-			{
-				if (!controls.controllerMode) curOption.keys.keyboard = NONE;
-				else curOption.keys.gamepad = NONE;
-				updateBind(!controls.controllerMode ? InputFormatter.getKeyName(NONE) : InputFormatter.getGamepadName(NONE));
-				FlxG.sound.play(Paths.sound('cancelMenu'));
-				closeBinding();
-			}
-		}
-		else
-		{
-			holdingEsc = 0;
-			var changed:Bool = false;
-			if(!controls.controllerMode)
-			{
-				if(FlxG.keys.justPressed.ANY || FlxG.keys.justReleased.ANY)
-				{
-					var keyPressed:FlxKey = cast (FlxG.keys.firstJustPressed(), FlxKey);
-					var keyReleased:FlxKey = cast (FlxG.keys.firstJustReleased(), FlxKey);
-
-					if(keyPressed != NONE && keyPressed != ESCAPE && keyPressed != BACKSPACE)
-					{
-						changed = true;
-						curOption.keys.keyboard = keyPressed;
-					}
-					else if(keyReleased != NONE && (keyReleased == ESCAPE || keyReleased == BACKSPACE))
-					{
-						changed = true;
-						curOption.keys.keyboard = keyReleased;
-					}
-				}
-			}
-			else if(FlxG.gamepads.anyJustPressed(ANY) || FlxG.gamepads.anyJustPressed(LEFT_TRIGGER) || FlxG.gamepads.anyJustPressed(RIGHT_TRIGGER) || FlxG.gamepads.anyJustReleased(ANY))
-			{
-				var keyPressed:FlxGamepadInputID = NONE;
-				var keyReleased:FlxGamepadInputID = NONE;
-				if(FlxG.gamepads.anyJustPressed(LEFT_TRIGGER))
-					keyPressed = LEFT_TRIGGER; //it wasnt working for some reason
-				else if(FlxG.gamepads.anyJustPressed(RIGHT_TRIGGER))
-					keyPressed = RIGHT_TRIGGER; //it wasnt working for some reason
-				else
-				{
-					for (i in 0...FlxG.gamepads.numActiveGamepads)
-					{
-						var gamepad:FlxGamepad = FlxG.gamepads.getByID(i);
-						if(gamepad != null)
-						{
-							keyPressed = gamepad.firstJustPressedID();
-							keyReleased = gamepad.firstJustReleasedID();
-							if(keyPressed != NONE || keyReleased != NONE) break;
-						}
-					}
-				}
-
-				if(keyPressed != NONE && keyPressed != FlxGamepadInputID.BACK && keyPressed != FlxGamepadInputID.B)
-				{
-					changed = true;
-					curOption.keys.gamepad = keyPressed;
-				}
-				else if(keyReleased != NONE && (keyReleased == FlxGamepadInputID.BACK || keyReleased == FlxGamepadInputID.B))
-				{
-					changed = true;
-					curOption.keys.gamepad = keyReleased;
-				}
-			}
-
-			if(changed)
-			{
-				var key:String = null;
-				if(!controls.controllerMode)
-				{
-					if(curOption.keys.keyboard == null) curOption.keys.keyboard = 'NONE';
-					curOption.setValue(curOption.keys.keyboard);
-					key = InputFormatter.getKeyName(FlxKey.fromString(curOption.keys.keyboard));
-				}
-				else
-				{
-					if(curOption.keys.gamepad == null) curOption.keys.gamepad = 'NONE';
-					curOption.setValue(curOption.keys.gamepad);
-					key = InputFormatter.getGamepadName(FlxGamepadInputID.fromString(curOption.keys.gamepad));
-				}
-				updateBind(key);
-				FlxG.sound.play(Paths.sound('confirmMenu'));
-				closeBinding();
-			}
-		}
-	}
-
-	final MAX_KEYBIND_WIDTH = 320;
-	function updateBind(?text:String = null, ?option:Option = null)
-	{
-		if(option == null) option = curOption;
-		if(text == null)
-		{
-			text = option.getValue();
-			if(text == null) text = 'NONE';
-
-			if(!controls.controllerMode)
-				text = InputFormatter.getKeyName(FlxKey.fromString(text));
-			else
-				text = InputFormatter.getGamepadName(FlxGamepadInputID.fromString(text));
-		}
-
-		var bind:AttachedText = cast option.child;
-		var attach:AttachedText = new AttachedText(text, bind.offsetX);
-		attach.sprTracker = bind.sprTracker;
-		attach.copyAlpha = true;
-		attach.ID = bind.ID;
-		playstationCheck(attach);
-		attach.scaleX = Math.min(1, MAX_KEYBIND_WIDTH / attach.width);
-		attach.x = bind.x;
-		attach.y = bind.y;
-
-		option.child = attach;
-		grpTexts.insert(grpTexts.members.indexOf(bind), attach);
-		grpTexts.remove(bind);
-		bind.destroy();
-	}
-
-	function playstationCheck(alpha:Alphabet)
-	{
-		if(!controls.controllerMode) return;
-
-		var gamepad:FlxGamepad = FlxG.gamepads.firstActive;
-		var model:FlxGamepadModel = gamepad != null ? gamepad.detectedModel : UNKNOWN;
-		var letter = alpha.letters[0];
-		if(model == PS4)
-		{
-			switch(alpha.text)
-			{
-				case '[', ']': //Square and Triangle respectively
-					letter.image = 'alphabet_playstation';
-					letter.updateHitbox();
-					
-					letter.offset.x += 4;
-					letter.offset.y -= 5;
-			}
-		}
-	}
-
-	function closeBinding()
-	{
-		bindingKey = false;
-		bindingBlack.destroy();
-		remove(bindingBlack);
-
-		bindingText.destroy();
-		remove(bindingText);
-
-		bindingText2.destroy();
-		remove(bindingText2);
-		ClientPrefs.toggleVolumeKeys(true);
-	}
-
 	function updateTextFrom(option:Option) {
 		if(option.type == KEYBIND)
 		{
-			updateBind(option);
+			if (keybindManager != null) {
+				keybindManager.updateBindDisplay(null, option, grpTexts);
+			}
 			return;
 		}
 
@@ -562,14 +389,24 @@ class BaseOptionsMenu extends MusicBeatSubstate
 	function refreshAllTexts() {
 		// 刷新标题
 		//titleText.text = title;
-	
+
 		// 刷新选项文本
 		for (i in 0...grpOptions.length) {
 			var opt = grpOptions.members[i];
 			opt.text = optionsArray[i].name;
 		}
-	
+
 		// 刷新描述
 		descText.text = optionsArray[curSelected].description;
+	}
+
+	override function destroy()
+	{
+		if (keybindManager != null)
+		{
+			keybindManager.destroy();
+			keybindManager = null;
+		}
+		super.destroy();
 	}
 }

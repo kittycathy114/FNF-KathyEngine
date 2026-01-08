@@ -41,8 +41,8 @@ class OptionsState extends MusicBeatState
 	var selectorRight:FlxText;
 	var descriptionText:FlxText;
 
-	private var optionTargetYs:Array<Float> = [];
-	private var optionCurYs:Array<Float> = [];
+	private var _inSubState:Bool = false;
+
 	private var itemSpacing:Int = 72; // 减小垂直间距
 	private var startY:Float = 0;
 
@@ -51,26 +51,20 @@ class OptionsState extends MusicBeatState
 	private var selectorRightTargetX:Float = 0;
 	private var selectorRightTargetY:Float = 0;
 
-	private var allowInput:Bool = true; // 新增：控制输入的标志
+	private var allowInput:Bool = true;
 	private var descriptionTween:FlxTween;
-
-	// 新增：拖动相关变量
-	private var startTouchY:Null<Float> = null;
-	private var scrollOffset:Float = 0;
-	private var maxScrollSpeed:Float = 4000; // 调整最大滚动速度
-	private var scrollDamping:Float = 0.75; // 调整阻尼系数
-	private var currentScrollSpeed:Float = 0;
 
 	private var lastClickTime:Float = 0;
 	private var lastClickIndex:Int = -1;
 
 	function openSelectedSubstate(label:String) {
+		_inSubState = true; // 标记进入子状态，阻止主界面UI操作
+
 		if (label != Language.get("adjust_delay_combo") && label != Language.get("extra_options")) {
 			removeTouchPad();
 			persistentUpdate = false;
 		} else if (label == Language.get("extra_options")) {
 			persistentUpdate = true;
-			allowInput = false; // 进入ExtraGameplaySettingSubState时禁用输入
 		}
 
 		var substateMap:Map<String, () -> Void> = [
@@ -80,7 +74,7 @@ class OptionsState extends MusicBeatState
 			Language.get("visuals") => () -> openSubState(new options.VisualsSettingsSubState()),
 			Language.get("gameplay") => () -> openSubState(new options.GameplaySettingsSubState()),
 			Language.get("extra_options") => () -> {
-				persistentUpdate = true; // 保持父状态更新
+				persistentUpdate = true;
 				openSubState(new options.ExtraGameplaySettingSubState());
 			},
 			Language.get("adjust_delay_combo") => () -> MusicBeatState.switchState(new options.NoteOffsetState()),
@@ -119,14 +113,11 @@ class OptionsState extends MusicBeatState
 		grpOptions = new FlxTypedGroup<FlxText>();
 		add(grpOptions);
 
-		itemSpacing = 72; // 更新垂直间距
+		itemSpacing = OptionsConfig.ITEM_SPACING;
 		var totalHeight = itemSpacing * options.length;
 		startY = (FlxG.height - totalHeight) / 2 + itemSpacing / 2;
 
-		optionTargetYs = [];
-		optionCurYs = [];
-
-		var leftMargin = 120; // 左对齐的x坐标
+		var leftMargin = OptionsConfig.LEFT_MARGIN;
 
 		for (num => option in options)
 		{
@@ -137,9 +128,6 @@ class OptionsState extends MusicBeatState
 			optionText.x = leftMargin;
 			optionText.y = startY + num * itemSpacing;
 			grpOptions.add(optionText);
-
-			optionTargetYs.push(optionText.y);
-			optionCurYs.push(optionText.y);
 		}
 
 		selectorLeft = new FlxText(0, 0, 0, ">", 48);
@@ -194,12 +182,16 @@ class OptionsState extends MusicBeatState
 		removeTouchPad();
 		addTouchPad('UP_DOWN', 'A_B_C');
 		persistentUpdate = true;
-		allowInput = true; // 退出子状态时重新启用输入
+		allowInput = true;
+		_inSubState = false; // 退出子状态
 	}
 
 	var exiting = false;
 	override function update(elapsed:Float) {
 		super.update(elapsed);
+
+		// 如果在子状态中，阻止所有UI操作
+		if (_inSubState) return;
 
 		// 始终显示鼠标指针
 		FlxG.mouse.visible = true;
@@ -211,7 +203,7 @@ class OptionsState extends MusicBeatState
 					changeSelection(-1);
 				if (controls.UI_DOWN_P)
 					changeSelection(1);
-				
+
 				if (touchPad.buttonC.justPressed || FlxG.keys.justPressed.CONTROL && controls.mobileC)
 				{
 					persistentUpdate = false;
@@ -252,49 +244,16 @@ class OptionsState extends MusicBeatState
 			}
 			// 双击检测
 			var now = FlxG.game.ticks / 1000.0;
-			if (lastClickIndex == mouseOverOption && (now - lastClickTime) < 0.25) {
+			if (lastClickIndex == mouseOverOption && (now - lastClickTime) < OptionsConfig.DOUBLE_CLICK_THRESHOLD) {
 				openSelectedSubstate(options[mouseOverOption]);
-			}
-			lastClickTime = now;
-			lastClickIndex = mouseOverOption;
-			startTouchY = mouse.y; // 允许拖动
 		}
+		lastClickTime = now;
+		lastClickIndex = mouseOverOption;
+	}
 
 		// 鼠标右键双击也可进入
 		if (mouseOverOption != -1 && mouse.justPressedRight) {
 			openSelectedSubstate(options[mouseOverOption]);
-		}
-
-		// 拖动惯性与视差优化
-		if (mouse.pressed && startTouchY != null && mouseOverOption == -1) {
-			var deltaY = mouse.y - startTouchY;
-			currentScrollSpeed = deltaY / elapsed; // 记录速度
-			scrollOffset += deltaY;
-			startTouchY = mouse.y;
-		} else if (!mouse.pressed) {
-			startTouchY = null;
-		}
-
-		// 应用阻尼和惯性
-		if (!mouse.pressed && Math.abs(currentScrollSpeed) > 1) {
-			scrollOffset += currentScrollSpeed * elapsed;
-			currentScrollSpeed *= Math.pow(scrollDamping, elapsed * 10);
-		} else if (!mouse.pressed) {
-			currentScrollSpeed = 0;
-		}
-
-		// 限制滚动范围
-		var minScroll = -(itemSpacing * (options.length - 1));
-		var maxScroll = 0;
-		scrollOffset = FlxMath.bound(scrollOffset, minScroll, maxScroll);
-
-		// 平滑滚动动画，减轻滚动程度
-		for (i in 0...grpOptions.length)
-		{
-			// 视差影响减轻（0.4~0.6）
-			var targetY = optionTargetYs[i] + scrollOffset * (0.4 + 0.6 * (i / (grpOptions.length-1)));
-			optionCurYs[i] = FlxMath.lerp(targetY, optionCurYs[i], Math.exp(-elapsed * 6));
-			grpOptions.members[i].y = optionCurYs[i];
 		}
 
 		// 选中项动效
@@ -303,13 +262,13 @@ class OptionsState extends MusicBeatState
 			var item = grpOptions.members[i];
 			if (i == curSelected)
 			{
-				item.scale.x = FlxMath.lerp(1.08, item.scale.x, Math.exp(-elapsed * 16));
-				item.scale.y = FlxMath.lerp(1.08, item.scale.y, Math.exp(-elapsed * 16));
+				item.scale.x = FlxMath.lerp(OptionsConfig.SELECTED_SCALE, item.scale.x, Math.exp(-elapsed * OptionsConfig.SCALE_LERP_SPEED));
+				item.scale.y = FlxMath.lerp(OptionsConfig.SELECTED_SCALE, item.scale.y, Math.exp(-elapsed * OptionsConfig.SCALE_LERP_SPEED));
 			}
 			else
 			{
-				item.scale.x = FlxMath.lerp(1.0, item.scale.x, Math.exp(-elapsed * 16));
-				item.scale.y = FlxMath.lerp(1.0, item.scale.y, Math.exp(-elapsed * 16));
+				item.scale.x = FlxMath.lerp(OptionsConfig.NORMAL_SCALE, item.scale.x, Math.exp(-elapsed * OptionsConfig.SCALE_LERP_SPEED));
+				item.scale.y = FlxMath.lerp(OptionsConfig.NORMAL_SCALE, item.scale.y, Math.exp(-elapsed * OptionsConfig.SCALE_LERP_SPEED));
 			}
 		}
 
@@ -324,40 +283,25 @@ class OptionsState extends MusicBeatState
 		}
 
 		// < 和 > 选择器平滑动画
-		selectorLeft.x = FlxMath.lerp(selectorLeftTargetX, selectorLeft.x, Math.exp(-elapsed * 12));
-		selectorLeft.y = FlxMath.lerp(selectorLeftTargetY, selectorLeft.y, Math.exp(-elapsed * 12));
-		selectorRight.x = FlxMath.lerp(selectorRightTargetX, selectorRight.x, Math.exp(-elapsed * 12));
-		selectorRight.y = FlxMath.lerp(selectorRightTargetY, selectorRight.y, Math.exp(-elapsed * 12));
+		selectorLeft.x = FlxMath.lerp(selectorLeftTargetX, selectorLeft.x, Math.exp(-elapsed * OptionsConfig.SELECTOR_LERP_SPEED));
+		selectorLeft.y = FlxMath.lerp(selectorLeftTargetY, selectorLeft.y, Math.exp(-elapsed * OptionsConfig.SELECTOR_LERP_SPEED));
+		selectorRight.x = FlxMath.lerp(selectorRightTargetX, selectorRight.x, Math.exp(-elapsed * OptionsConfig.SELECTOR_LERP_SPEED));
+		selectorRight.y = FlxMath.lerp(selectorRightTargetY, selectorRight.y, Math.exp(-elapsed * OptionsConfig.SELECTOR_LERP_SPEED));
 	}
 
 	function changeSelection(change:Int = 0)
 	{
 		curSelected = FlxMath.wrap(curSelected + change, 0, options.length - 1);
-		updateOptionPositions();
-		updateDescriptionText();
 
-		FlxG.sound.play(Paths.sound('scrollMenu'));
-	}
-
-	// 更新选项位置
-	private function updateOptionPositions():Void
-	{
-		// 计算视觉聚焦的目标位置
-		var focusY = FlxG.height / 3 + (FlxG.height / 3) * (curSelected / (options.length - 1));
-
-		for (num => item in grpOptions.members)
+		for (i in 0...grpOptions.length)
 		{
-			item.alpha = 0.6;
-
-			// 根据当前选中项动态调整每个选项的目标位置
-			var offset = (num - curSelected) * itemSpacing;
-			optionTargetYs[num] = focusY + offset;
-
-			if (num == curSelected)
-			{
-				item.alpha = 1;
-			}
+			var item = grpOptions.members[i];
+			item.y = startY + i * itemSpacing;
+			item.alpha = (i == curSelected) ? 1 : 0.6;
 		}
+
+		updateDescriptionText();
+		FlxG.sound.play(Paths.sound('scrollMenu'));
 	}
 
 	// 更新描述文本
@@ -372,10 +316,10 @@ class OptionsState extends MusicBeatState
 		}
 		
 		// 重置位置并创建新的tween
-		descriptionText.y = FlxG.height - 250;
-		descriptionTween = FlxTween.tween(descriptionText, 
-			{y: FlxG.height - 200}, 
-			0.3, 
+		descriptionText.y = FlxG.height + OptionsConfig.DESC_Y_START;
+		descriptionTween = FlxTween.tween(descriptionText,
+			{y: FlxG.height + OptionsConfig.DESC_Y_END},
+			OptionsConfig.TWEEN_DURATION,
 			{
 				ease: FlxEase.quadOut,
 				onComplete: function(twn:FlxTween) {
