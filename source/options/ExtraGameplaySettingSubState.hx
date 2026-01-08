@@ -137,6 +137,16 @@ class ExtraGameplaySettingSubState extends BaseOptionsMenu
 			BOOL);
 		addOption(option);
 
+		option = new Option('Fixed Timestep',
+			Language.get("fixed_timestep_desc"),
+			'fixedTimestep',
+			BOOL);
+		addOption(option);
+		option.onChange = function() {
+			FlxG.fixedTimestep = ClientPrefs.data.fixedTimestep;
+			trace("Fixed timestep changed to: " + FlxG.fixedTimestep);
+		};
+
 		option = new Option('Background Volume Level',
 			Language.get("bgvol_level_desc"),
 			'backgroundVolumeLevel',

@@ -13,7 +13,6 @@ import flixel.FlxState;
 import openfl.utils.Assets;
 import backend.ClientPrefs;
 import backend.Paths;
-
 #if cpp
 #if windows
 @:cppFileCode('#include <windows.h>')
@@ -25,7 +24,8 @@ import backend.Paths;
 #end
 class FPSCounter extends Sprite
 {
-	public var currentFPS(default, null):Int;
+	public var currentFPS(default, null):Int = 0;
+
 	public var memoryMegas(get, never):Float;
 	public var memoryPeakMegas(default, null):Float = 0;
 
@@ -34,6 +34,8 @@ class FPSCounter extends Sprite
 	@:noCompletion private var updateTime:Int;
 	@:noCompletion private var framesCount:Int;
 	@:noCompletion private var prevTime:Int;
+	@:noCompletion private var currentTime:Float;
+	@:noCompletion private var cacheCount:Int;
 
 	public var objectCount(default, null):Int = 0;
 
@@ -71,12 +73,14 @@ class FPSCounter extends Sprite
 
 		positionFPS(x, y);
 
-		currentFPS = 0;
+		// 初始化 FPS 计算变量
 		times = [];
 		lastFramerateUpdateTime = Timer.stamp();
 		prevTime = Lib.getTimer();
 		updateTime = prevTime + 500;
 		framesCount = 0;
+		currentTime = 0;
+		cacheCount = 0;
 
 		// 初始化更新时间
 		lastFpsUpdateTime = Timer.stamp();
@@ -112,7 +116,6 @@ class FPSCounter extends Sprite
 		allText += 'RAM: ${flixel.util.FlxStringUtil.formatBytes(memory)}\n';
 		allText += 'MEM Peak: ${flixel.util.FlxStringUtil.formatBytes(memoryPeakMegas)}\n';
 		allText += 'Objects: $objectCount\n';
-
 		// 版本信息
 		if (ClientPrefs.data.exgameversion)
 		{
@@ -166,15 +169,40 @@ class FPSCounter extends Sprite
 			}
 		}
 
-		allInfoText.htmlText = '<font color="#FFFFFF">$allText</font>';
+		allInfoText.htmlText = '<font color="#E6CAFF">$allText</font>';
 	}
-
-	var deltaTimeout:Float = 0.0;
 
 	private override function __enterFrame(deltaTime:Float):Void
 	{
 		if (!visible)
 			return;
+
+		// 限制 Delay 更新频率为每 0.2 秒
+		if (Timer.stamp() - lastDelayUpdateTime > 0.2)
+		{
+			// 更新延迟时间（以毫秒为单位）
+			currentDelay = Math.round(deltaTime * 1000) / 1000;
+			lastDelayUpdateTime = Timer.stamp();
+		}
+
+		// 持续追踪时间（用于 FPS 计算）
+		currentTime += deltaTime;
+		times.push(currentTime);
+
+		while (times[0] < currentTime - 1000)
+		{
+			times.shift();
+		}
+
+		var currentCount = times.length;
+		// 只在显示更新时更新 FPS 值，避免数值跳动
+		if (Timer.stamp() - lastFpsUpdateTime > 0.5)
+		{
+			currentFPS = Math.round((currentCount + cacheCount) / 2);
+			cacheCount = currentCount;
+			lastFpsUpdateTime = Timer.stamp();
+			updateText();
+		}
 
 		if (Timer.stamp() - lastObjectCountUpdate > 2.0)
 		{
@@ -187,16 +215,15 @@ class FPSCounter extends Sprite
 			if (FlxG.stage.window.frameRate != ClientPrefs.data.framerate && FlxG.stage.window.frameRate != FlxG.game.focusLostFramerate)
 				FlxG.stage.window.frameRate = ClientPrefs.data.framerate;
 
-			var currentTime = openfl.Lib.getTimer();
+			var nowTime = openfl.Lib.getTimer();
 			framesCount++;
 
-			if (currentTime >= updateTime)
+			if (nowTime >= updateTime)
 			{
-				var elapsed = currentTime - prevTime;
-				currentFPS = Math.ceil((framesCount * 1000) / elapsed);
+				var elapsed = nowTime - prevTime;
 				framesCount = 0;
-				prevTime = currentTime;
-				updateTime = currentTime + 500;
+				prevTime = nowTime;
+				updateTime = nowTime + 500;
 			}
 
 			if ((FlxG.updateFramerate >= currentFPS + 5 || FlxG.updateFramerate <= currentFPS - 5)
@@ -206,26 +233,6 @@ class FPSCounter extends Sprite
 				FlxG.updateFramerate = FlxG.drawFramerate = currentFPS;
 				lastFramerateUpdateTime = haxe.Timer.stamp();
 			}
-		}
-		else
-		{
-			final now:Float = haxe.Timer.stamp() * 1000;
-			times.push(now);
-			while (times[0] < now - 1000)
-				times.shift();
-			if (deltaTimeout < 50)
-			{
-				deltaTimeout += deltaTime;
-				return;
-			}
-
-			currentFPS = times.length < FlxG.updateFramerate ? times.length : FlxG.updateFramerate;
-			deltaTimeout = 0.0;
-		}
-
-		if (Timer.stamp() - lastFpsUpdateTime > 0.05)
-		{
-			updateText();
 		}
 	}
 

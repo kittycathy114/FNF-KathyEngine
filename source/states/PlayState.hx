@@ -712,14 +712,14 @@ class PlayState extends MusicBeatState
 		uiGroup.add(healthBar);
 
 		msTimeTxt = new FlxText(0, 0, 250, "", 32);
-		msTimeTxt.setFormat(Paths.font('vcr.ttf'), 23, 0xFF87CEEB, RIGHT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		msTimeTxt.setFormat(Paths.font('vcr.ttf'), 24, FlxColor.WHITE, RIGHT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		msTimeTxt.scrollFactor.set();
 		msTimeTxt.alpha = 0;
 		msTimeTxt.visible = true;
 		msTimeTxt.borderSize = 1.3;
 		/*mstimeTxt.y = comboSpr.y + 20;
 		mstimeTxt.x += comboSpr.x + 100;*/
-		msTimeTxt.x = ClientPrefs.data.comboOffset[2] + 450;
+		msTimeTxt.x = ClientPrefs.data.comboOffset[2] + 480;
 		msTimeTxt.y = -ClientPrefs.data.comboOffset[3] + 480 ;
 		uiGroup.add(msTimeTxt);
 
@@ -2773,24 +2773,30 @@ class PlayState extends MusicBeatState
 		}
 
 		if (!ClientPrefs.data.rmmsTimeTxt) {
+			if (isPixelStage) {
+				msTimeTxt.font = Paths.font("pixel.otf");
+				msTimeTxt.size = 16;
+
+			}
 			msTimeTxt.alpha = ratingAlpha;
-			msTimeTxt.scale.set(1.33, 0.8);
+			msTimeTxt.y = -ClientPrefs.data.comboOffset[3] + 480;
 			// 调整显示格式，保留两位小数
 			if(cpuControlled) msTimeTxt.text = Std.string(CoolUtil.floorDecimal(noteDiff, 2)) + "ms(BOT)";
 			else msTimeTxt.text = Std.string(CoolUtil.floorDecimal(noteDiff, 2)) + "ms";
+			msTimeTxt.color = noteDiff < 0 ? FlxColor.ORANGE : FlxColor.CYAN;
 
 			if (msTimeTxtTween1 != null){
 				msTimeTxtTween1.cancel(); msTimeTxtTween1.destroy(); // top 10 awesome code
 			}
-			msTimeTxtTween1 = FlxTween.tween(msTimeTxt, {alpha: 0}, (60 / Conductor.bpm) * 1.5, {
-				onComplete: function(tw:FlxTween) {msTimeTxtTween1 = null;}, startDelay: (60 / Conductor.bpm) * 0.7
+			msTimeTxtTween1 = FlxTween.tween(msTimeTxt, {alpha: 0}, 0.5, {
+				onComplete: function(tw:FlxTween) {msTimeTxtTween1 = null;}, startDelay: (60 / Conductor.bpm) * 0.5
 			});
 
 			if (msTimeTxtTween2 != null){
 				msTimeTxtTween2.cancel(); msTimeTxtTween2.destroy(); // top 10 awesome code
 			}
-			msTimeTxtTween2 = FlxTween.tween(msTimeTxt.scale, {x: 1, y: 1}, (60 / Conductor.bpm), {
-				ease: FlxEase.circOut,
+			msTimeTxtTween2 = FlxTween.tween(msTimeTxt, {y: msTimeTxt.y + 10}, 0.2, {
+				ease: FlxEase.quintOut,
 			});
 		}
 

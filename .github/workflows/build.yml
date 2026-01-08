@@ -46,7 +46,7 @@ jobs:
         id: setup-ndk
         uses: nttld/setup-ndk@main
         with:
-          ndk-version: r27c
+          ndk-version: r27d
           add-to-path: false
 
       - name: Install libVLC

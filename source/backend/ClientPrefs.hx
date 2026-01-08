@@ -143,6 +143,8 @@ import states.TitleState;
 	public var backgroundVolume:Bool = true; // 是否启用后台降音
 	public var backgroundVolumeLevel:Float = 0.2; // 后台音量级别
 
+	public var fixedTimestep:Bool = true; // 固定时间步长（？）
+
 	public var ratCounter:Bool = true; // 评分计数器
 	public var waterMarkPlay:Bool = true; // 水印
 }
@@ -269,7 +271,10 @@ class ClientPrefs {
 		for (key in Reflect.fields(data))
 			if (key != 'gameplaySettings' && Reflect.hasField(FlxG.save.data, key))
 				Reflect.setField(data, key, Reflect.field(FlxG.save.data, key));
-		
+
+		// 应用固定时间步长设置
+		FlxG.fixedTimestep = data.fixedTimestep;
+
 		if(Main.fpsVar != null)
 			Main.fpsVar.visible = data.showFPS;
 

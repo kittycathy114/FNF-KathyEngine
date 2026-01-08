@@ -173,8 +173,10 @@ class Main extends Sprite
 		#end
 		// addChild(new FlxGame(game.width, game.height, #if COPYSTATE_ALLOWED !CopyState.checkExistingFiles() ? CopyState : #end game.initialState, game.framerate, game.framerate, game.skipSplash, game.startFullscreen));
 
-		var game:FlxGame = new FlxGame(game.width, game.height, game.initialState, #if (flixel < "5.0.0") game.zoom, #end game.framerate, game.framerate,
-			game.skipSplash, game.startFullscreen);
+	var game:FlxGame = new FlxGame(game.width, game.height,
+		#if COPYSTATE_ALLOWED !CopyState.checkExistingFiles() ? CopyState : #end game.initialState,
+		#if (flixel < "5.0.0") game.zoom, #end game.framerate, game.framerate,
+		game.skipSplash, game.startFullscreen);
 		// #if BASE_GAME_FILES
 		// @:privateAccess
 		// game._customSoundTray = backend.FunkinSoundTray;
@@ -202,7 +204,7 @@ class Main extends Sprite
 		FlxG.mouse.visible = false;
 		#end
 
-		FlxG.fixedTimestep = false;
+		FlxG.fixedTimestep = ClientPrefs.data.fixedTimestep;
 		FlxG.game.focusLostFramerate = #if mobile 30 #else 60 #end;
 		#if web
 		FlxG.keys.preventDefaultKeys.push(TAB);

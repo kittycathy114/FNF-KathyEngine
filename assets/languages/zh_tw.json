@@ -210,6 +210,7 @@
     "camhud_zoom_desc": "調整HUD介面元素的縮放大小",
     "legacy_notepos_desc": "使用舊的音符位置系統",
     "ratings_pos_desc": "設定評分在螢幕上的位置",
+    "events_debug_desc": "(實驗性功能)\n犧牲部分效能來顯示事件資訊，只有在ChartingMode中有效！",
     "firstlaunch_select": "選擇語言",
     "firstlaunch_flashing": "停用閃光效果？",
     "firstlaunch_warning": "本模組包含可能引起不適的閃光效果",
@@ -224,9 +225,9 @@
     "mods_import_desc": "(實驗性功能)\n啟用後，你可以通過拖放模組ZIP檔案來導入模組",
     "hud_zoomstyle_desc": "調整HUD元素的縮放樣式",
     "bgvol_desc": "啟用背景音量調整功能\n前提是禁用了「Auto Pause」選項",
-    "bgvol_leveldesc": "調整遊戲在背景時的音量\n同上，前提是禁用了「Auto Pause」",
+    "bgvol_level_desc": "調整遊戲在背景時的音量\n同上，前提是禁用了「Auto Pause」",
     "gameplay_combospr_desc": "命中箭頭時添加「Combo」彈出效果",
-
+    "fixed_timestep_desc": "使用固定時間步長\n可以緩解畫面丟幀，但是低幀率時會導致遊戲畫面滯後",
     "ratcounter_desc": "啟用評分計數器以顯示每種評分類型的命中次數",
     "watermark_desc": "在遊戲畫面上顯示水印"
 

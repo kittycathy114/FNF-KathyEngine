@@ -113,7 +113,8 @@
 	<!-- _______________________________ Libraries ______________________________ -->
 
 	<haxelib name="flixel" version="5.9.0"/>
-	<haxelib name="flixel-addons" version="3.3.2"/>
+	<haxelib name="openfl" version="9.4.2"/>
+	<haxelib name="flixel-addons" version="4.0.1"/>
 	<haxelib name="tjson" version="1.4.0"/>
 
 	<!--Psych stuff needed-->

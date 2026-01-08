@@ -22,6 +22,8 @@
 
 package mobile.backend;
 
+import flixel.util.FlxTimer;
+
 /**
  * A storage class for mobile.
  * @author Karim Akra and Homura Akemi (HomuHomu833)
@@ -65,6 +67,10 @@ class StorageUtil
 
 		if (!AndroidEnvironment.isExternalStorageManager())
 			AndroidSettings.requestSetting('MANAGE_APP_ALL_FILES_ACCESS_PERMISSION');
+
+		// 延迟检查权限，给用户时间授予权限
+		// 使用 Sys.sleep 而不是 FlxTimer，因为此时 FlxG 可能还未初始化
+		Sys.sleep(1.0);
 
 		if ((AndroidVersion.SDK_INT >= AndroidVersionCode.TIRAMISU
 			&& !AndroidPermissions.getGrantedPermissions().contains('android.permission.READ_MEDIA_IMAGES'))

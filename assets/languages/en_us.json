@@ -314,6 +314,7 @@
     "camhud_zoom_desc": "Adjust the zoom level of HUD elements.",
     "legacy_notepos_desc": "Use the old note position system.",
     "ratings_pos_desc": "Set the position of the ratings on screen.",
+    "events_debug_desc": "(Experimental Feature)\nSacrifices some performance to display event information. Only shows in ChartingMode!",
     "firstlaunch_select": "Select Language",
     "firstlaunch_flashing": "Disable Flashing Lights?",
     "firstlaunch_warning": "This mod contains flashing effects that may cause discomfort",
@@ -330,8 +331,9 @@
     "bgvol_desc": "Enable background volume adjustment.\nThis requires 'Auto Pause' to be disabled.",
     "bgvol_level_desc": "Adjust the volume of the game when it is in the background.\nSame as above, requires 'Auto Pause' to be disabled.",
     "gameplay_combospr_desc": "Add a 'Combo' pop-up effect when hitting arrows.",
-
+    "fixed_timestep_desc": "Use fixed timestep\nMay alleviate frame drops, but causes game visual lag at low FPS",
     "ratcounter_desc": "Enable the rating counter to display the number of hits for each rating type.",
     "watermark_desc": "Show a watermark on the gameplay screen."
+
 
 }
