@@ -88,7 +88,9 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		//未完成
 		['Change Window Title', "Value 1: Window title name"],
 		['Change Opponent Scroll Speed', "same as Change Scroll Speed, but only for Opponent"],
-		['Change Player Scroll Speed', "same as Change Scroll Speed, but only for Player"]
+		['Change Player Scroll Speed', "same as Change Scroll Speed, but only for Player"],
+		['Toggle IconBop', "Enable or disable icon bopping.\nValue 1: on/off/true/false/0/1 (default: on)"],
+		['Add IconBop', "Make the health icons bop once immediately."]
 	];
 	
 	public static var keysArray:Array<FlxKey> = [ONE, TWO, THREE, FOUR, FIVE, SIX, SEVEN, EIGHT]; //Used for Vortex Editor

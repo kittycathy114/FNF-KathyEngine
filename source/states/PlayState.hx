@@ -94,6 +94,7 @@ class PlayState extends MusicBeatState
 	var scoreTxtTweenAngle:FlxTween;
 	var dancingLeft:Bool = false;
 	var icondancingLeft:Bool = false;
+	public var iconBopEnabled:Bool = true;
 	var ratingexspr:String = '';
 	var exratingexspr:String = '-extra';
 	var numexspr:String = '';
@@ -3647,7 +3648,98 @@ class PlayState extends MusicBeatState
 		if (generatedMusic)
 			notes.sort(FlxSort.byY, ClientPrefs.data.downScroll ? FlxSort.ASCENDING : FlxSort.DESCENDING);
 
-		if (ClientPrefs.data.iconbopstyle != "NONE") 
+		if (iconBopEnabled)
+		{
+			if (ClientPrefs.data.iconbopstyle != "NONE")
+			{
+				switch (ClientPrefs.data.iconbopstyle)
+				{
+					case "Kade":
+						iconP1.scale.set(1.4, 1.4);
+						iconP2.scale.set(1.4, 1.4);
+
+            	case /*"Leather" | */"VSlice(New)" | "Codename" | "VSlice(Old)" | "NovaFlare" | "MintRhythm":
+						iconP1.scale.set(1.3, 1.3);
+						iconP2.scale.set(1.3, 1.3);
+
+					case "Vanilla":
+						iconP1.scale.set(1.1, 1.1);
+						iconP2.scale.set(1.1, 1.1);
+
+					case "Dave":
+						var funny:Float = Math.max(Math.min(1.2, 1.9), 0.1);
+						iconP1.setGraphicSize(Std.int(iconP1.width + (70 * (funny + 0.1))), Std.int(iconP1.height - (35 * funny))); // 调整宽度和高度
+                    iconP2.setGraphicSize(Std.int(iconP2.width + (70 * ((2 - funny) + 0.1))), Std.int(iconP2.height - (35 * ((2 - funny) + 0.1)))); // 调整宽度和高度
+					default:
+						iconP1.scale.set(1.2, 1.2);
+						iconP2.scale.set(1.2, 1.2);
+				}
+			}
+			dancingLeft = !dancingLeft;
+
+			if (ClientPrefs.data.iconbopstyle == "OS")
+			{
+				if (dancingLeft)
+				{
+					iconP1.angle = 8;
+					iconP2.angle = 8; // maybe i should do it with tweens, but i'm lazy // i'll make it in -1.0.0, i promise //这是OS引擎的作者写的，然而OS已经停更了（悲）
+				}
+				else
+				{
+					iconP1.angle = -8;
+					iconP2.angle = -8;
+				}
+			}
+			else if (ClientPrefs.data.iconbopstyle == "SB")
+			{
+				if (dancingLeft)
+				{
+					iconP1.angle = -15;
+					iconP2.angle = 15;
+				}
+				else
+				{
+					iconP1.angle = 15;
+					iconP2.angle = -15;
+				}
+			}
+			else if (ClientPrefs.data.iconbopstyle == "MintRhythm")
+			{
+				var healthPercent:Float = healthBar.percent;
+				if (healthPercent < 20)
+				{
+					if (curBeat % 2 == 0)
+					{
+						iconP2.angle += icondancingLeft ? -17 : 17;
+						icondancingLeft = !icondancingLeft;
+					}
+				}
+				else if (healthPercent > 80)
+				{
+					if (curBeat % 2 == 0)
+					{
+						iconP1.angle += icondancingLeft ? -17 : 17;
+						icondancingLeft = !icondancingLeft;
+					}
+				}
+			}
+		}
+
+		iconP1.updateHitbox();
+		iconP2.updateHitbox();
+
+		characterBopper(curBeat);
+
+		super.beatHit();
+		lastBeatHit = curBeat;
+
+		setOnScripts('curBeat', curBeat);
+		callOnScripts('onBeatHit');
+	}
+
+	public function iconBopNow():Void
+	{
+		if (ClientPrefs.data.iconbopstyle != "NONE")
     	{
         	switch(ClientPrefs.data.iconbopstyle) {
             	case "Kade":
@@ -3664,61 +3756,45 @@ class PlayState extends MusicBeatState
                 
             	case "Dave": 
                     var funny:Float = Math.max(Math.min(1.2, 1.9), 0.1);
-                    iconP1.setGraphicSize(Std.int(iconP1.width + (70 * (funny + 0.1))), Std.int(iconP1.height - (35 * funny))); // 调整宽度和高度
-                    iconP2.setGraphicSize(Std.int(iconP2.width + (70 * ((2 - funny) + 0.1))), Std.int(iconP2.height - (35 * ((2 - funny) + 0.1)))); // 调整宽度和高度
+                    iconP1.setGraphicSize(Std.int(iconP1.width + (70 * (funny + 0.1))), Std.int(iconP1.height - (35 * funny)));
+                    iconP2.setGraphicSize(Std.int(iconP2.width + (70 * ((2 - funny) + 0.1))), Std.int(iconP2.height - (35 * ((2 - funny) + 0.1))));
             	default:
                 	iconP1.scale.set(1.2, 1.2);
                 	iconP2.scale.set(1.2, 1.2);
         	}
     	}
-		dancingLeft = !dancingLeft;
-	
-		if (ClientPrefs.data.iconbopstyle == "OS") {
-			if (dancingLeft){
-				iconP1.angle = 8; iconP2.angle = 8; // maybe i should do it with tweens, but i'm lazy // i'll make it in -1.0.0, i promise //这是OS引擎的作者写的，然而OS已经停更了（悲）
-			} else { 
-				iconP1.angle = -8; iconP2.angle = -8;
-			}
-		} 	
-		else if (ClientPrefs.data.iconbopstyle == "SB") {
-			if (dancingLeft){
-				iconP1.angle = -15; iconP2.angle = 15;
-			} else { 
-				iconP1.angle = 15; iconP2.angle = -15;
-			}
-		}
-		else if (ClientPrefs.data.iconbopstyle == "MintRhythm")
-		{
-			var healthPercent:Float = healthBar.percent;
-			if (healthPercent < 20)
-			{
-				if (curBeat % 2 == 0)
-				{
-					iconP2.angle += icondancingLeft ? -17 : 17;
-					icondancingLeft = !icondancingLeft;
-				}
-			}
-			else if (healthPercent > 80)
-			{
-				if (curBeat % 2 == 0)
-				{
-					iconP1.angle += icondancingLeft ? -17 : 17;
-					icondancingLeft = !icondancingLeft;
-				}
-			}
-		}
-		
+    	dancingLeft = !dancingLeft;
 
-		iconP1.updateHitbox();
-		iconP2.updateHitbox();
-
-		characterBopper(curBeat);
-
-		super.beatHit();
-		lastBeatHit = curBeat;
-
-		setOnScripts('curBeat', curBeat);
-		callOnScripts('onBeatHit');
+    	if (ClientPrefs.data.iconbopstyle == "OS") {
+    		if (dancingLeft){
+    			iconP1.angle = 8; iconP2.angle = 8;
+    		} else { 
+    			iconP1.angle = -8; iconP2.angle = -8;
+    		}
+    	} 	
+    	else if (ClientPrefs.data.iconbopstyle == "SB") {
+    		if (dancingLeft){
+    			iconP1.angle = -15; iconP2.angle = 15;
+    		} else { 
+    			iconP1.angle = 15; iconP2.angle = -15;
+    		}
+    	}
+    	else if (ClientPrefs.data.iconbopstyle == "MintRhythm")
+    	{
+    		var healthPercent:Float = healthBar.percent;
+    		if (healthPercent < 20)
+    		{
+    			iconP2.angle += icondancingLeft ? -17 : 17;
+    			icondancingLeft = !icondancingLeft;
+    		}
+    		else if (healthPercent > 80)
+    		{
+    			iconP1.angle += icondancingLeft ? -17 : 17;
+    			icondancingLeft = !icondancingLeft;
+    		}
+    	}
+    	iconP1.updateHitbox();
+    	iconP2.updateHitbox();
 	}
 
 	public function characterBopper(beat:Int):Void
@@ -3751,7 +3827,7 @@ class PlayState extends MusicBeatState
             camHUD.zoom += 0.03 * camZoomingMult;
         }
 
-        if (ClientPrefs.data.iconbopstyle == "MintRhythm")
+        if (ClientPrefs.data.iconbopstyle == "MintRhythm" && iconBopEnabled)
 			{
 				var healthPercent:Float = healthBar.percent;
 				if (healthPercent < 20)

@@ -330,6 +330,16 @@ class EventHandler
                 } else {
                     FlxG.stage.window.title = 'IDK';
                 }
+
+            case 'Toggle IconBop':
+                var enable:Bool = true;
+                if(value1.toLowerCase().trim() == 'off' || value1.toLowerCase().trim() == 'false' || value1.toLowerCase().trim() == '0') {
+                    enable = false;
+                }
+                playState.iconBopEnabled = enable;
+
+            case 'Add IconBop':
+                playState.iconBopNow();
         }
 
         playState.stagesFunc(function(stage:BaseStage) stage.eventCalled(eventName, value1, value2, flValue1, flValue2, strumTime));
