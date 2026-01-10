@@ -28,6 +28,7 @@ import flixel.tweens.FlxTween;
 import flixel.tweens.FlxEase;
 import backend.ClientPrefs;
 import openfl.ui.Keyboard;
+import ui.MouseTrail;
 
 // NATIVE API STUFF, YOU CAN IGNORE THIS AND SCROLL //
 #if (linux && !debug)
@@ -48,6 +49,9 @@ class Main extends Sprite
 
 	public static var fpsVar:FPSCounter;
 	public static var gameLogVar:GameLogDisplay;
+
+	// 鼠标拖尾效果实例
+	private static var mouseTrail:MouseTrail;
 
 	public static final platform:String = #if mobile "Phones" #else "PCs" #end;
 
@@ -200,6 +204,11 @@ class Main extends Sprite
 		gameLogVar.setEnabled(ClientPrefs.data.enableGameLog);
 		Lib.current.stage.addChild(gameLogVar);
 
+		// 初始化鼠标拖尾效果 (仅桌面端)
+		#if desktop
+		initMouseTrail();
+		#end
+
 		Language.load();
 
 		#if (linux || mac) // fix the app icon not showing up on the Linux Panel / Mac Dock
@@ -271,6 +280,29 @@ class Main extends Sprite
 		// 添加应用激活/停用事件监听
 		Lib.current.stage.addEventListener(Event.DEACTIVATE, onAppDeactivate);
 		Lib.current.stage.addEventListener(Event.ACTIVATE, onAppActivate);
+	}
+
+	/**
+	 * 初始化鼠标拖尾效果
+	 */
+	private function initMouseTrail():Void
+	{
+		mouseTrail = new MouseTrail();
+
+		// 配置拖尾参数（可根据需要调整）
+		mouseTrail.trailLength = 12;      // 拖尾粒子数量
+		mouseTrail.trailSize = 12;        // 粒子大小
+		mouseTrail.trailDecay = 0.9;      // 衰减系数
+		mouseTrail.trailColor = 0xFFFFFF; // 白色拖尾
+		mouseTrail.trailAlpha = 0.6;      // 初始透明度
+
+		// 添加到舞台顶层，在游戏和FPS之上但在UI之下
+		// 这样拖尾不会被游戏内容遮挡，也不会遮挡UI
+		Lib.current.stage.addChild(mouseTrail);
+
+		// 设置拖尾为固定层，不随其他内容移动
+		mouseTrail.mouseEnabled = false;
+		mouseTrail.mouseChildren = false;
 	}
 
 	// 应用进入后台时调用
@@ -347,5 +379,260 @@ class Main extends Sprite
 	function setCustomCursor():Void
 	{
 		FlxG.mouse.load('assets/shared/images/cursor.png');
+	}
+
+	// ==================== 鼠标拖尾公共API ====================
+
+	/**
+	 * 显示/隐藏鼠标拖尾
+	 * @param visible 是否显示拖尾
+	 */
+	public static function setMouseTrailVisible(visible:Bool):Void
+	{
+		#if desktop
+		if (mouseTrail != null)
+		{
+			mouseTrail.visible = visible;
+		}
+		#end
+	}
+
+	/**
+	 * 设置拖尾颜色
+	 * @param color 颜色值 (如: 0xFFFFFF 表示白色)
+	 */
+	public static function setMouseTrailColor(color:Int):Void
+	{
+		#if desktop
+		if (mouseTrail != null)
+		{
+			mouseTrail.setTrailColor(color);
+		}
+		#end
+	}
+
+	/**
+	 * 设置点击效果颜色
+	 * @param color 颜色值 (如: 0x00BFFF 表示蓝色)
+	 */
+	public static function setMouseClickEffectColor(color:Int):Void
+	{
+		#if desktop
+		if (mouseTrail != null)
+		{
+			mouseTrail.setClickEffectColor(color);
+		}
+		#end
+	}
+
+	/**
+	 * 设置是否启用光圈效果
+	 * @param enabled 是否启用
+	 */
+	public static function setMouseRippleEnabled(enabled:Bool):Void
+	{
+		#if desktop
+		if (mouseTrail != null)
+		{
+			mouseTrail.setRippleEnabled(enabled);
+		}
+		#end
+	}
+
+	/**
+	 * 设置光圈最大扩散半径
+	 * @param size 最大半径
+	 */
+	public static function setMouseRippleMaxSize(size:Float):Void
+	{
+		#if desktop
+		if (mouseTrail != null)
+		{
+			mouseTrail.setRippleMaxSize(size);
+		}
+		#end
+	}
+
+	/**
+	 * 设置光圈扩散速度
+	 * @param speed 扩散速度
+	 */
+	public static function setMouseRippleSpeed(speed:Float):Void
+	{
+		#if desktop
+		if (mouseTrail != null)
+		{
+			mouseTrail.setRippleSpeed(speed);
+		}
+		#end
+	}
+
+	/**
+	 * 设置光圈颜色
+	 * @param color 颜色值
+	 */
+	public static function setMouseRippleColor(color:Int):Void
+	{
+		#if desktop
+		if (mouseTrail != null)
+		{
+			mouseTrail.setRippleColor(color);
+		}
+		#end
+	}
+
+	/**
+	 * 设置是否启用发光效果
+	 * @param enabled 是否启用
+	 */
+	public static function setMouseGlowEnabled(enabled:Bool):Void
+	{
+		#if desktop
+		if (mouseTrail != null)
+		{
+			mouseTrail.setGlowEnabled(enabled);
+		}
+		#end
+	}
+
+	/**
+	 * 设置发光颜色
+	 * @param color 颜色值
+	 */
+	public static function setMouseGlowColor(color:Int):Void
+	{
+		#if desktop
+		if (mouseTrail != null)
+		{
+			mouseTrail.setGlowColor(color);
+		}
+		#end
+	}
+
+	/**
+	 * 设置发光透明度
+	 * @param alpha 透明度 (0.0 - 1.0)
+	 */
+	public static function setMouseGlowAlpha(alpha:Float):Void
+	{
+		#if desktop
+		if (mouseTrail != null)
+		{
+			mouseTrail.setGlowAlpha(alpha);
+		}
+		#end
+	}
+
+	/**
+	 * 设置发光模糊度
+	 * @param blur 模糊度
+	 */
+	public static function setMouseGlowBlur(blur:Float):Void
+	{
+		#if desktop
+		if (mouseTrail != null)
+		{
+			mouseTrail.setGlowBlur(blur);
+		}
+		#end
+	}
+
+	/**
+	 * 设置发光强度
+	 * @param strength 强度
+	 */
+	public static function setMouseGlowStrength(strength:Float):Void
+	{
+		#if desktop
+		if (mouseTrail != null)
+		{
+			mouseTrail.setGlowStrength(strength);
+		}
+		#end
+	}
+
+	/**
+	 * 设置拖尾长度
+	 * @param length 粒子数量 (建议 5-30)
+	 */
+	public static function setMouseTrailLength(length:Int):Void
+	{
+		#if desktop
+		if (mouseTrail != null)
+		{
+			mouseTrail.setTrailLength(length);
+		}
+		#end
+	}
+
+	/**
+	 * 设置拖尾大小
+	 * @param size 粒子初始大小
+	 */
+	public static function setMouseTrailSize(size:Float):Void
+	{
+		#if desktop
+		if (mouseTrail != null)
+		{
+			mouseTrail.setTrailSize(size);
+		}
+		#end
+	}
+
+	/**
+	 * 设置拖尾透明度
+	 * @param alpha 透明度值 (0.0 - 1.0)
+	 */
+	public static function setMouseTrailAlpha(alpha:Float):Void
+	{
+		#if desktop
+		if (mouseTrail != null)
+		{
+			mouseTrail.setTrailAlpha(alpha);
+		}
+		#end
+	}
+
+	/**
+	 * 清除当前拖尾
+	 */
+	public static function clearMouseTrail():Void
+	{
+		#if desktop
+		if (mouseTrail != null)
+		{
+			mouseTrail.clearTrail();
+		}
+		#end
+	}
+
+	/**
+	 * 手动设置拖尾的 DPI 缩放比例
+	 * @param scale DPI 缩放比例 (1.0 = 100%, 1.5 = 150%, 2.0 = 200%)
+	 * @usage Main.setMouseTrailDPIScale(1.5); // 150% DPI
+	 */
+	public static function setMouseTrailDPIScale(scale:Float):Void
+	{
+		#if desktop
+		if (mouseTrail != null)
+		{
+			mouseTrail.setDPIScale(scale);
+		}
+		#end
+	}
+
+	/**
+	 * 获取当前拖尾的 DPI 缩放比例
+	 * @return DPI 缩放比例
+	 */
+	public static function getMouseTrailDPIScale():Float
+	{
+		#if desktop
+		if (mouseTrail != null)
+		{
+			return mouseTrail.getDPIScale();
+		}
+		#end
+		return 1.0;
 	}
 }
