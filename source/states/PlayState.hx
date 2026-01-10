@@ -2894,7 +2894,7 @@ class PlayState extends MusicBeatState
 				rating.velocity.y -= FlxG.random.int(140, 175) * playbackRate;
 
 				theEXrating.acceleration.y = 550 * playbackRate * playbackRate;
-				theEXrating.velocity.y -= FlxG.random.int(140, 175) * playbackRate;
+				theEXrating.velocity.y -= FlxG.random.int(140, 150) * playbackRate;
 
 				comboSpr.acceleration.y = FlxG.random.int(200, 300) * playbackRate * playbackRate;
 				comboSpr.velocity.y -= FlxG.random.int(140, 160) * playbackRate;
@@ -2947,17 +2947,16 @@ class PlayState extends MusicBeatState
 
 			if (ClientPrefs.data.ratbounce == true && !PlayState.isPixelStage) 
 			{
-				rating.scale.set(0.87, 0.73);
-				FlxTween.tween(rating.scale, {x: 0.7, y: 0.7}, 0.3, {ease: FlxEase.circOut});
+				rating.scale.set(0.85, 0.8);
+				FlxTween.tween(rating.scale, {x: 0.7, y: 0.7}, 0.35, {ease: FlxEase.quartOut});
 			}
 			
 			if(ClientPrefs.data.exratbounce == true && ClientPrefs.data.exratingDisplay)
             {
-                theEXrating.scale.set(0.8, 0.8);
-                var targetAngle:Float = (Math.random() * 10) * (Math.random() > .5 ? 1 : -1);
-				theEXrating.angle = targetAngle;
-				FlxTween.tween(theEXrating, {angle: 0}, 0.3, {ease: FlxEase.circOut});
-				FlxTween.tween(theEXrating.scale, {x: 0.7, y: 0.7}, 0.4, {ease: FlxEase.circOut});
+				theEXrating.angle = (Math.random() * 10) * (Math.random() > .5 ? 1 : -1);
+                theEXrating.scale.set(0.85, 0.85);
+				FlxTween.tween(theEXrating, {angle: 0}, 0.4, {ease: FlxEase.backOut});
+				FlxTween.tween(theEXrating.scale, {x: 0.7, y: 0.7}, 0.4, {ease: FlxEase.quartOut});
             }
 	
 			comboSpr.updateHitbox();
@@ -3024,20 +3023,29 @@ class PlayState extends MusicBeatState
 			}
 			comboSpr.x = xThing + 50;
 			FlxTween.tween(rating, {alpha: 0}, 0.2 / playbackRate, {
+				onComplete: function(tween:FlxTween)
+				{
+					FlxTween.cancelTweensOf(rating);
+					rating.destroy();
+				},
 				startDelay: Conductor.crochet * 0.001 / playbackRate
 			});
 			FlxTween.tween(theEXrating, {alpha: 0}, 0.2 / playbackRate, {
-				startDelay: Conductor.crochet * 0.00075 / playbackRate
+				onComplete: function(tween:FlxTween)
+				{
+					FlxTween.cancelTweensOf(theEXrating);
+					theEXrating.destroy();
+				},
+				startDelay: Conductor.crochet * 0.0008 / playbackRate
 			});
 
 			FlxTween.tween(comboSpr, {alpha: 0}, 0.2 / playbackRate, {
 				onComplete: function(tween:FlxTween)
 				{
+					FlxTween.cancelTweensOf(comboSpr);
 					comboSpr.destroy();
-					rating.destroy();
-					theEXrating.destroy();
 				},
-				startDelay: Conductor.crochet * 0.002 / playbackRate
+				startDelay: Conductor.crochet * 0.0015 / playbackRate
 			});
 		}
 	}
@@ -3667,9 +3675,9 @@ class PlayState extends MusicBeatState
 						iconP2.scale.set(1.1, 1.1);
 
 					case "Dave":
-						var funny:Float = Math.max(Math.min(1.2, 1.9), 0.1);
-						iconP1.setGraphicSize(Std.int(iconP1.width + (70 * (funny + 0.1))), Std.int(iconP1.height - (35 * funny))); // 调整宽度和高度
-                    iconP2.setGraphicSize(Std.int(iconP2.width + (70 * ((2 - funny) + 0.1))), Std.int(iconP2.height - (35 * ((2 - funny) + 0.1)))); // 调整宽度和高度
+						var funny:Float = Math.max(Math.min(2.4, 3.8), 0.1);
+						iconP1.setGraphicSize(Std.int(iconP1.width + (100 * (funny + 0.1))), Std.int(iconP1.height - (35 * funny))); // 调整宽度和高度
+                    iconP2.setGraphicSize(Std.int(iconP2.width + (100 * ((2 - funny) + 0.1))), Std.int(iconP2.height - (35 * ((2 - funny) + 0.1)))); // 调整宽度和高度
 					default:
 						iconP1.scale.set(1.2, 1.2);
 						iconP2.scale.set(1.2, 1.2);
