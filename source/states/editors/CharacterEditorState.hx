@@ -2,7 +2,6 @@ package states.editors;
 
 import flixel.graphics.FlxGraphic;
 
-import flixel.system.debug.interaction.tools.Pointer.GraphicCursorCross;
 import flixel.util.FlxDestroyUtil;
 
 import openfl.net.FileReference;
@@ -11,6 +10,8 @@ import openfl.events.IOErrorEvent;
 import openfl.events.MouseEvent;
 import openfl.geom.Point;
 import openfl.utils.Assets;
+import openfl.display.BitmapData;
+import openfl.display.Shape;
 
 import objects.Character;
 import objects.HealthIcon;
@@ -114,7 +115,7 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 
 		addCharacter();
 
-		cameraFollowPointer = new FlxSprite().loadGraphic(FlxGraphic.fromClass(GraphicCursorCross));
+		cameraFollowPointer = createCrosshairSprite();
 		cameraFollowPointer.setGraphicSize(40, 40);
 		cameraFollowPointer.updateHitbox();
 
@@ -179,6 +180,77 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 		if(ClientPrefs.data.cacheOnGPU) Paths.clearUnusedMemory();
 
 		super.create();
+	}
+
+	/**
+	 * 创建十字准星图形
+	 * @return FlxSprite 带有十字准星图案的精灵
+	 */
+	function createCrosshairSprite():FlxSprite
+	{
+		var size:Int = 48;
+		var halfSize = Std.int(size / 2);
+
+		var shape = new Shape();
+		shape.graphics.clear();
+
+		// 设置线条样式
+		shape.graphics.lineStyle(2, FlxColor.WHITE, 1.0);
+
+		// 绘制水平线
+		shape.graphics.moveTo(2, halfSize);
+		shape.graphics.lineTo(size - 2, halfSize);
+
+		// 绘制垂直线
+		shape.graphics.moveTo(halfSize, 2);
+		shape.graphics.lineTo(halfSize, size - 2);
+
+		// 绘制中心十字（更粗）
+		shape.graphics.lineStyle(3, FlxColor.WHITE, 1.0);
+		shape.graphics.moveTo(halfSize - 6, halfSize);
+		shape.graphics.lineTo(halfSize + 6, halfSize);
+		shape.graphics.moveTo(halfSize, halfSize - 6);
+		shape.graphics.lineTo(halfSize, halfSize + 6);
+
+		// 绘制外圈（半透明）
+		shape.graphics.lineStyle(1.5, FlxColor.WHITE, 0.5);
+		var ringRadius = size * 0.35;
+		shape.graphics.drawCircle(halfSize, halfSize, ringRadius);
+
+		// 绘制四个角的小标记
+		shape.graphics.lineStyle(2, FlxColor.WHITE, 0.8);
+		var cornerSize = 6;
+		var cornerOffset = size * 0.25;
+
+		// 左上角
+		shape.graphics.moveTo(cornerOffset - cornerSize, cornerOffset);
+		shape.graphics.lineTo(cornerOffset, cornerOffset);
+		shape.graphics.lineTo(cornerOffset, cornerOffset - cornerSize);
+
+		// 右上角
+		shape.graphics.moveTo(size - cornerOffset + cornerSize, cornerOffset);
+		shape.graphics.lineTo(size - cornerOffset, cornerOffset);
+		shape.graphics.lineTo(size - cornerOffset, cornerOffset - cornerSize);
+
+		// 左下角
+		shape.graphics.moveTo(cornerOffset - cornerSize, size - cornerOffset);
+		shape.graphics.lineTo(cornerOffset, size - cornerOffset);
+		shape.graphics.lineTo(cornerOffset, size - cornerOffset + cornerSize);
+
+		// 右下角
+		shape.graphics.moveTo(size - cornerOffset + cornerSize, size - cornerOffset);
+		shape.graphics.lineTo(size - cornerOffset, size - cornerOffset);
+		shape.graphics.lineTo(size - cornerOffset, size - cornerOffset + cornerSize);
+
+		// 创建 BitmapData
+		var bitmapData = new BitmapData(size, size, true, 0x00000000);
+		bitmapData.draw(shape);
+
+		var sprite = new FlxSprite();
+		sprite.loadGraphic(FlxGraphic.fromBitmapData(bitmapData));
+		sprite.antialiasing = true;
+
+		return sprite;
 	}
 
 	function addHelpScreen()
@@ -1123,15 +1195,15 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 		// bg data //
 		/////////////
 		#if !BASE_GAME_FILES
-		camEditor.bgColor = 0xFF666666;
+			camEditor.bgColor = 0xFF666666;
 		#else
-		var bg:BGSprite = new BGSprite('stageback', -600, -200, 0.9, 0.9);
-		add(bg);
+			var bg:BGSprite = new BGSprite('stageback', -600, -200, 0.9, 0.9);
+			add(bg);
 
-		var stageFront:BGSprite = new BGSprite('stagefront', -650, 600, 0.9, 0.9);
-		stageFront.setGraphicSize(Std.int(stageFront.width * 1.1));
-		stageFront.updateHitbox();
-		add(stageFront);
+			var stageFront:BGSprite = new BGSprite('stagefront', -650, 600, 0.9, 0.9);
+			stageFront.setGraphicSize(Std.int(stageFront.width * 1.1));
+			stageFront.updateHitbox();
+			add(stageFront);
 		#end
 
 		dadPosition.set(100, 100);
