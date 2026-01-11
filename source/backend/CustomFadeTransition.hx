@@ -15,7 +15,9 @@ import backend.ClientPrefs;
 
 class CustomFadeTransition extends FlxSubState {
     public static var finishCallback: Void -> Void;
+    public static var isReloading: Bool = false; // 标记是否是刷新操作
     var isTransIn: Bool = false;
+    var isReloadingTransition: Bool = false; // 记住这个转场是否是刷新操作
     var transBlack: FlxSprite;
     var transGradient: FlxSprite;
     var duration: Float;
@@ -41,10 +43,12 @@ class CustomFadeTransition extends FlxSubState {
     var imageTimer:Float = 0;
     var frameDuration:Float = 0.02; // Time between frames in seconds
     var totalFrames:Int = 39; // Total number of frames (0-39)
-    
+
     public function new(duration: Float, isTransIn: Bool) {
         this.duration = duration;
         this.isTransIn = isTransIn;
+        this.isReloadingTransition = isReloading; // 保存当前是否是刷新操作
+        isReloading = false; // 立即重置标志，确保只影响当前转场
         super();
     }
     override function create() {
@@ -318,25 +322,50 @@ class CustomFadeTransition extends FlxSubState {
             baLoadingPics.updateHitbox();
             add(baLoadingPics);
 
-            // 透明通道设置
-            baLoadingPics.alpha = isTransIn ? 1 : 0;
+            // 保存图片的最终位置
+            var finalY:Float = baLoadingPics.y;
 
-            // 动画效果（保持和NovaFlare相同的缓动逻辑）
+            // 透明通道设置和初始位置
+            baLoadingPics.alpha = isTransIn ? 1 : 0;
+            if (!isTransIn) {
+                // 渐显：从屏幕下方开始
+                baLoadingPics.y = 100;
+            }
+            // 渐隐：从当前位置开始，飞出到下方
+
+            // 简易Loading文本（右下角）
+            var loadingText:String = isTransIn ? 'Done!' : (isReloadingTransition ? 'Reloading...' : 'Loading...');
+            EventText = new FlxText(FlxG.width - 280, FlxG.height - 150, 250, loadingText, 36);
+            EventText.scrollFactor.set();
+            EventText.setFormat(Assets.getFont("assets/fonts/arturito-slab.ttf").fontName, 36, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+            EventText.antialiasing = ClientPrefs.data.antialiasing;
+            EventText.alpha = isTransIn ? 1 : 0;
+            add(EventText);
+
+            // 动画效果
             if (!isTransIn) {
                 FlxG.sound.play(Paths.sound('BA/UI_Loading'));
-                baLoadingPicTween = FlxTween.tween(baLoadingPics, {alpha: 1}, duration, {
+                // 从下方飞入 + 淡入
+                baLoadingPicTween = FlxTween.tween(baLoadingPics, {y: finalY, alpha: 1}, duration, {
                     onComplete: function(twn:FlxTween) {
                         if (finishCallback != null) finishCallback();
                     },
                     ease: FlxEase.quartOut
                 });
+                EventText.alpha = 1;
             } else {
                 FlxG.sound.play(Paths.sound('BA/UI_Login'));
-                baLoadingPicTween = FlxTween.tween(baLoadingPics, {alpha: 0}, duration, {
+                // 修改文本为Done!
+                EventText.text = 'Done!';
+                EventText.alpha = 1;
+                // 设置文本淡出动画（比图片稍早一点完成）
+                FlxTween.tween(EventText, {alpha: 0}, duration * 0.7, {ease: FlxEase.linear});
+                // 飞出到下方 + 淡出
+                baLoadingPicTween = FlxTween.tween(baLoadingPics, {y: 100, alpha: 0}, duration, {
                     onComplete: function(twn:FlxTween) {
                         close();
                     },
-                    ease: FlxEase.linear
+                    ease: FlxEase.quartIn
                 });
             }
         } else {

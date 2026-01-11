@@ -62,10 +62,10 @@ class BaseOptionsMenu extends MusicBeatSubstate
 		FlxTween.tween(bg2, {alpha: 0.6}, 0.5, {ease: FlxEase.quadOut});
 
 		// 添加背景方块移动效果
-		var grid:FlxBackdrop = new FlxBackdrop(FlxGridOverlay.createGrid(80, 80, 160, 160, true, 0x3300BFFF, 0x0));
-		grid.velocity.set(-40, -40); // 设置为反方向移动
+		var grid:FlxBackdrop = new FlxBackdrop(FlxGridOverlay.createGrid(80, 80, 160, 160, true, 0x33FFFFFF, 0x0));
+		grid.velocity.set(40, 40);
 		grid.alpha = 0;
-		FlxTween.tween(grid, {alpha: 0.9}, 0.5, {ease: FlxEase.quadOut});
+		FlxTween.tween(grid, {alpha: 1}, 0.5, {ease: FlxEase.quadOut});
 		add(grid);
 
 		// avoids lagspikes while scrolling through menus!

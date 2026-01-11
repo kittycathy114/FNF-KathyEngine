@@ -190,8 +190,33 @@ class OptionsState extends MusicBeatState
 	override function update(elapsed:Float) {
 		super.update(elapsed);
 
-		// 如果在子状态中，阻止所有UI操作
-		if (_inSubState) return;
+		// 在子状态中，淡出选择器，但保持位置更新
+		if (_inSubState) {
+			// 更新选择器位置到当前选中项
+			var selectedOption = grpOptions.members[curSelected];
+			if (selectedOption != null)
+			{
+				selectorLeftTargetX = selectedOption.x - 63;
+				selectorLeftTargetY = selectedOption.y;
+				selectorRightTargetX = selectedOption.x + selectedOption.width + 15;
+				selectorRightTargetY = selectedOption.y;
+
+				// 平滑移动到目标位置
+				selectorLeft.x = FlxMath.lerp(selectorLeftTargetX, selectorLeft.x, Math.exp(-elapsed * OptionsConfig.SELECTOR_LERP_SPEED));
+				selectorLeft.y = FlxMath.lerp(selectorLeftTargetY, selectorLeft.y, Math.exp(-elapsed * OptionsConfig.SELECTOR_LERP_SPEED));
+				selectorRight.x = FlxMath.lerp(selectorRightTargetX, selectorRight.x, Math.exp(-elapsed * OptionsConfig.SELECTOR_LERP_SPEED));
+				selectorRight.y = FlxMath.lerp(selectorRightTargetY, selectorRight.y, Math.exp(-elapsed * OptionsConfig.SELECTOR_LERP_SPEED));
+			}
+
+			// 淡出选择器
+			selectorLeft.alpha = FlxMath.lerp(0, selectorLeft.alpha, Math.exp(-elapsed * 10));
+			selectorRight.alpha = FlxMath.lerp(0, selectorRight.alpha, Math.exp(-elapsed * 10));
+			return;
+		}
+
+		// 恢复选择器显示
+		selectorLeft.alpha = FlxMath.lerp(1, selectorLeft.alpha, Math.exp(-elapsed * 10));
+		selectorRight.alpha = FlxMath.lerp(1, selectorRight.alpha, Math.exp(-elapsed * 10));
 
 		// 始终显示鼠标指针
 		FlxG.mouse.visible = true;
@@ -353,6 +378,29 @@ class OptionsState extends MusicBeatState
 			selectorRightTargetX = selectedOption.x + selectedOption.width + 15;
 			selectorRightTargetY = selectedOption.y;
 		}
+	}
+
+	override function draw()
+	{
+		// 在子状态打开时，强制选择器为完全透明（防止persistentUpdate=false时选择器可见）
+		if (_inSubState && FlxG.state.subState != null)
+		{
+			// 更新选择器位置到当前选中项
+			var selectedOption = grpOptions.members[curSelected];
+			if (selectedOption != null)
+			{
+				selectorLeft.x = selectedOption.x - 63;
+				selectorLeft.y = selectedOption.y;
+				selectorRight.x = selectedOption.x + selectedOption.width + 15;
+				selectorRight.y = selectedOption.y;
+			}
+
+			// 强制选择器为完全透明
+			selectorLeft.alpha = 0;
+			selectorRight.alpha = 0;
+		}
+
+		super.draw();
 	}
 
 	override function destroy()

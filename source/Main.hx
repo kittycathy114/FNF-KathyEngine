@@ -204,10 +204,9 @@ class Main extends Sprite
 		gameLogVar.setEnabled(ClientPrefs.data.enableGameLog);
 		Lib.current.stage.addChild(gameLogVar);
 
-		// 初始化鼠标拖尾效果 (仅桌面端)
-		#if desktop
+		// 初始化鼠标拖尾效果 (所有平台都初始化)
+		// 但在桌面端显示拖尾，在手机端只显示点击效果
 		initMouseTrail();
-		#end
 
 		Language.load();
 
@@ -290,7 +289,7 @@ class Main extends Sprite
 		mouseTrail = new MouseTrail();
 
 		// 配置拖尾参数（可根据需要调整）
-		mouseTrail.trailLength = 12;      // 拖尾粒子数量
+		mouseTrail.trailLength = 8;       // 拖尾粒子数量（PC和手机统一8个）
 		mouseTrail.trailSize = 12;        // 粒子大小
 		mouseTrail.trailDecay = 0.9;      // 衰减系数
 		mouseTrail.trailColor = 0xFFFFFF; // 白色拖尾
@@ -303,6 +302,12 @@ class Main extends Sprite
 		// 设置拖尾为固定层，不随其他内容移动
 		mouseTrail.mouseEnabled = false;
 		mouseTrail.mouseChildren = false;
+
+		// 初始化鼠标位置，确保拖尾效果能正常工作
+		if (Lib.current.stage != null)
+		{
+			mouseTrail.setInitPosition(Lib.current.stage.mouseX, Lib.current.stage.mouseY);
+		}
 	}
 
 	// 应用进入后台时调用
@@ -374,6 +379,38 @@ class Main extends Sprite
 		{
 			gameLogVar.toggleVisibility();
 		}
+
+		// F5键刷新当前state（使用CustomFadeTransition无缝切换）
+		if (event.keyCode == Keyboard.F5 && FlxG.state != null)
+		{
+			// 获取当前state的类型
+			var currentStateType:Class<flixel.FlxState> = Type.getClass(FlxG.state);
+
+			// 创建新的state实例
+			if (currentStateType != null)
+			{
+				var newState:flixel.FlxState = Type.createInstance(currentStateType, []);
+
+				// 标记为刷新操作（CustomFadeTransition构造函数中会立即读取并重置）
+				backend.CustomFadeTransition.isReloading = true;
+
+				// 检查是否是MusicBeatState，使用自定义转场
+				#if !macro
+				// 尝试使用MusicBeatState的startTransition方法
+				if (Std.isOfType(FlxG.state, backend.MusicBeatState))
+				{
+					backend.MusicBeatState.startTransition(newState);
+				}
+				else
+				{
+					// 非MusicBeatState，直接切换
+					FlxG.switchState(newState);
+				}
+				#else
+				FlxG.switchState(newState);
+				#end
+			}
+		}
 	}
 
 	function setCustomCursor():Void
@@ -389,12 +426,11 @@ class Main extends Sprite
 	 */
 	public static function setMouseTrailVisible(visible:Bool):Void
 	{
-		#if desktop
 		if (mouseTrail != null)
 		{
 			mouseTrail.visible = visible;
+			mouseTrail.enabled = visible;
 		}
-		#end
 	}
 
 	/**
@@ -403,12 +439,10 @@ class Main extends Sprite
 	 */
 	public static function setMouseTrailColor(color:Int):Void
 	{
-		#if desktop
 		if (mouseTrail != null)
 		{
 			mouseTrail.setTrailColor(color);
 		}
-		#end
 	}
 
 	/**
@@ -417,12 +451,34 @@ class Main extends Sprite
 	 */
 	public static function setMouseClickEffectColor(color:Int):Void
 	{
-		#if desktop
 		if (mouseTrail != null)
 		{
 			mouseTrail.setClickEffectColor(color);
 		}
-		#end
+	}
+
+	/**
+	 * 设置是否启用点击效果
+	 * @param enabled 是否启用
+	 */
+	public static function setMouseClickEffectEnabled(enabled:Bool):Void
+	{
+		if (mouseTrail != null)
+		{
+			mouseTrail.setClickEffectEnabled(enabled);
+		}
+	}
+
+	/**
+	 * 设置是否只在手机端显示点击效果
+	 * @param enabled true=只在手机端显示，false=所有平台显示
+	 */
+	public static function setMouseMobileOnlyClickEffect(enabled:Bool):Void
+	{
+		if (mouseTrail != null)
+		{
+			mouseTrail.setMobileOnlyClickEffect(enabled);
+		}
 	}
 
 	/**
@@ -431,12 +487,10 @@ class Main extends Sprite
 	 */
 	public static function setMouseRippleEnabled(enabled:Bool):Void
 	{
-		#if desktop
 		if (mouseTrail != null)
 		{
 			mouseTrail.setRippleEnabled(enabled);
 		}
-		#end
 	}
 
 	/**
@@ -445,12 +499,10 @@ class Main extends Sprite
 	 */
 	public static function setMouseRippleMaxSize(size:Float):Void
 	{
-		#if desktop
 		if (mouseTrail != null)
 		{
 			mouseTrail.setRippleMaxSize(size);
 		}
-		#end
 	}
 
 	/**
@@ -459,12 +511,10 @@ class Main extends Sprite
 	 */
 	public static function setMouseRippleSpeed(speed:Float):Void
 	{
-		#if desktop
 		if (mouseTrail != null)
 		{
 			mouseTrail.setRippleSpeed(speed);
 		}
-		#end
 	}
 
 	/**
@@ -473,12 +523,10 @@ class Main extends Sprite
 	 */
 	public static function setMouseRippleColor(color:Int):Void
 	{
-		#if desktop
 		if (mouseTrail != null)
 		{
 			mouseTrail.setRippleColor(color);
 		}
-		#end
 	}
 
 	/**
@@ -487,12 +535,10 @@ class Main extends Sprite
 	 */
 	public static function setMouseGlowEnabled(enabled:Bool):Void
 	{
-		#if desktop
 		if (mouseTrail != null)
 		{
 			mouseTrail.setGlowEnabled(enabled);
 		}
-		#end
 	}
 
 	/**
@@ -501,12 +547,10 @@ class Main extends Sprite
 	 */
 	public static function setMouseGlowColor(color:Int):Void
 	{
-		#if desktop
 		if (mouseTrail != null)
 		{
 			mouseTrail.setGlowColor(color);
 		}
-		#end
 	}
 
 	/**
@@ -515,12 +559,10 @@ class Main extends Sprite
 	 */
 	public static function setMouseGlowAlpha(alpha:Float):Void
 	{
-		#if desktop
 		if (mouseTrail != null)
 		{
 			mouseTrail.setGlowAlpha(alpha);
 		}
-		#end
 	}
 
 	/**
@@ -529,12 +571,10 @@ class Main extends Sprite
 	 */
 	public static function setMouseGlowBlur(blur:Float):Void
 	{
-		#if desktop
 		if (mouseTrail != null)
 		{
 			mouseTrail.setGlowBlur(blur);
 		}
-		#end
 	}
 
 	/**
@@ -543,40 +583,46 @@ class Main extends Sprite
 	 */
 	public static function setMouseGlowStrength(strength:Float):Void
 	{
-		#if desktop
 		if (mouseTrail != null)
 		{
 			mouseTrail.setGlowStrength(strength);
 		}
-		#end
 	}
 
 	/**
 	 * 设置拖尾长度
-	 * @param length 粒子数量 (建议 5-30)
+	 * @param length 粒子数量 (推荐8，PC和手机统一)
 	 */
 	public static function setMouseTrailLength(length:Int):Void
 	{
-		#if desktop
 		if (mouseTrail != null)
 		{
 			mouseTrail.setTrailLength(length);
 		}
-		#end
 	}
 
 	/**
-	 * 设置拖尾大小
+	 * 设置拖尾效果大小比例（用户设置）
+	 * @param scale 大小比例 (0.5 = 50%, 1.0 = 100%, 2.0 = 200%)
+	 */
+	public static function setMouseTrailSize(scale:Float):Void
+	{
+		if (mouseTrail != null)
+		{
+			mouseTrail.setTrailSizeScale(scale);
+		}
+	}
+
+	/**
+	 * 设置拖尾基础大小
 	 * @param size 粒子初始大小
 	 */
-	public static function setMouseTrailSize(size:Float):Void
+	public static function setMouseTrailBaseSize(size:Float):Void
 	{
-		#if desktop
 		if (mouseTrail != null)
 		{
 			mouseTrail.setTrailSize(size);
 		}
-		#end
 	}
 
 	/**
@@ -585,12 +631,10 @@ class Main extends Sprite
 	 */
 	public static function setMouseTrailAlpha(alpha:Float):Void
 	{
-		#if desktop
 		if (mouseTrail != null)
 		{
 			mouseTrail.setTrailAlpha(alpha);
 		}
-		#end
 	}
 
 	/**
@@ -598,12 +642,10 @@ class Main extends Sprite
 	 */
 	public static function clearMouseTrail():Void
 	{
-		#if desktop
 		if (mouseTrail != null)
 		{
 			mouseTrail.clearTrail();
 		}
-		#end
 	}
 
 	/**
@@ -613,12 +655,49 @@ class Main extends Sprite
 	 */
 	public static function setMouseTrailDPIScale(scale:Float):Void
 	{
-		#if desktop
 		if (mouseTrail != null)
 		{
 			mouseTrail.setDPIScale(scale);
 		}
-		#end
+	}
+
+	/**
+	 * 设置更新间隔（性能优化）
+	 * @param interval 更新间隔帧数 (1=每帧更新，2=每2帧更新一次)
+	 * @usage Main.setMouseTrailUpdateInterval(3); // 每3帧更新一次（手机端推荐）
+	 */
+	public static function setMouseTrailUpdateInterval(interval:Int):Void
+	{
+		if (mouseTrail != null)
+		{
+			mouseTrail.setUpdateInterval(interval);
+		}
+	}
+
+	/**
+	 * 设置最大点击效果数量（性能优化）
+	 * @param count 最大同时存在的点击效果数量
+	 * @usage Main.setMouseTrailMaxClickEffects(4); // 最多4个点击效果（PC端推荐）
+	 */
+	public static function setMouseTrailMaxClickEffects(count:Int):Void
+	{
+		if (mouseTrail != null)
+		{
+			mouseTrail.setMaxClickEffects(count);
+		}
+	}
+
+	/**
+	 * 设置最大光圈效果数量（性能优化）
+	 * @param count 最大同时存在的光圈效果数量
+	 * @usage Main.setMouseTrailMaxRippleEffects(4); // 最多4个光圈效果（推荐值）
+	 */
+	public static function setMouseTrailMaxRippleEffects(count:Int):Void
+	{
+		if (mouseTrail != null)
+		{
+			mouseTrail.setMaxRippleEffects(count);
+		}
 	}
 
 	/**
@@ -627,12 +706,61 @@ class Main extends Sprite
 	 */
 	public static function getMouseTrailDPIScale():Float
 	{
-		#if desktop
 		if (mouseTrail != null)
 		{
 			return mouseTrail.getDPIScale();
 		}
-		#end
 		return 1.0;
+	}
+
+	/**
+	 * 获取当前屏幕尺寸缩放因子
+	 * @return 屏幕尺寸缩放因子
+	 */
+	public static function getMouseTrailScreenScale():Float
+	{
+		if (mouseTrail != null)
+		{
+			return mouseTrail.getScreenScale();
+		}
+		return 1.0;
+	}
+
+	/**
+	 * 手动设置屏幕尺寸缩放因子
+	 * @param scale 屏幕尺寸缩放因子 (0.6-2.5)
+	 * @usage Main.setMouseTrailScreenScale(1.5); // 设置为150%大小
+	 */
+	public static function setMouseTrailScreenScale(scale:Float):Void
+	{
+		if (mouseTrail != null)
+		{
+			mouseTrail.setScreenScale(scale);
+		}
+	}
+
+	/**
+	 * 获取组合缩放因子（DPI × 屏幕尺寸）
+	 * @return 组合缩放因子
+	 */
+	public static function getMouseTrailCombinedScale():Float
+	{
+		if (mouseTrail != null)
+		{
+			return mouseTrail.getCombinedScale();
+		}
+		return 1.0;
+	}
+
+	/**
+	 * 重新计算屏幕尺寸缩放（启用自动缩放）
+	 * @usage Main.recalculateMouseTrailScreenScale(); // 重新计算屏幕缩放
+	 */
+	public static function recalculateMouseTrailScreenScale():Void
+	{
+		if (mouseTrail != null)
+		{
+			mouseTrail.recalculateScreenScale();
+		}
 	}
 }
