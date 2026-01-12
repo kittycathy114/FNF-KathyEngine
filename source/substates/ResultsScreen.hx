@@ -17,6 +17,11 @@ import backend.ClientPrefs;
 
 import openfl.geom.Matrix;
 import openfl.display.BitmapData;
+import openfl.display.Sprite;
+import openfl.text.TextField;
+import openfl.text.TextFormat;
+import openfl.text.TextFormatAlign;
+import openfl.text.TextFieldAutoSize;
 import flixel.system.FlxSound;
 import flixel.util.FlxAxes;
 import flixel.FlxSubState;
@@ -24,36 +29,29 @@ import flixel.input.FlxInput;
 import flixel.input.keyboard.FlxKey;
 import flixel.FlxG;
 import flixel.FlxObject;
-import flixel.FlxSprite;
-import flixel.effects.FlxFlicker;
-import flixel.graphics.frames.FlxAtlasFrames;
-import flixel.group.FlxGroup.FlxTypedGroup;
-import flixel.text.FlxText;
 import flixel.tweens.FlxEase;
 import flixel.tweens.FlxTween;
 import flixel.util.FlxColor;
 import lime.app.Application;
 import flixel.math.FlxMath;
-import flixel.text.FlxText;
-import flixel.input.FlxKeyManager;
 
-import backend.ui.OFLSprite;
 import backend.HitGraph;
 
 using StringTools;
 
 class ResultsScreen extends FlxSubState
 {
+	// OpenFL 层容器
+	public var overlaySprite:Sprite;
+
 	public var background:FlxSprite;
-	public var text:FlxText;
+	public var text:TextField;
 
-	public var anotherBackground:FlxSprite;
 	public var graph:HitGraph;
-	public var graphSprite:OFLSprite;
 
-	public var comboText:FlxText;
-	public var contText:FlxText;
-	public var settingsText:FlxText;
+	public var comboText:TextField;
+	public var contText:TextField;
+	public var settingsText:TextField;
 
 	public var music:FlxSound;
 
@@ -64,9 +62,39 @@ class ResultsScreen extends FlxSubState
 
 	override function create()
 	{
-		background = new FlxSprite(0, 0).makeGraphic(FlxG.width, FlxG.height, FlxColor.BLACK);
+		// 创建 OpenFL 层容器
+		overlaySprite = new Sprite();
+
+		// 创建背景（Flixel 对象）
+		background = new FlxSprite().makeGraphic(FlxG.width, FlxG.height, FlxColor.BLACK);
+		background.alpha = 0;
 		background.scrollFactor.set();
 		add(background);
+
+		// 将 overlay 添加到 OpenFL stage 的最顶层
+		if (FlxG.stage != null)
+		{
+			FlxG.stage.addChild(overlaySprite);
+		}
+
+		// 获取实际的物理屏幕尺寸
+		var stageWidth:Float = FlxG.stage.stageWidth;
+		var stageHeight:Float = FlxG.stage.stageHeight;
+
+		// 计算缩放比例（基于逻辑分辨率到物理分辨率的比例）
+		var scaleX:Float = stageWidth / 1280;
+		var scaleY:Float = stageHeight / 720;
+		var scale:Float = Math.min(scaleX, scaleY); // 保持宽高比
+
+		// 创建 HitGraph（偏右上角，宽度放大一倍，高度适中）
+		graph = new HitGraph(
+			Math.floor(stageWidth - 560 * scale),
+			Math.floor(20 * scale),
+			Math.floor(500 * scale),
+			Math.floor(250 * scale)
+		);
+		graph.alpha = 0;
+		overlaySprite.addChild(graph);
 
 		//if (!PlayState.inResults)
 		{
@@ -76,51 +104,13 @@ class ResultsScreen extends FlxSubState
 			FlxG.sound.list.add(music);
 		}
 
-		background.alpha = 0;
-
-		text = new FlxText(20, -55, 0, "Song Cleared!");
-		text.size = 34;
-		text.setBorderStyle(FlxTextBorderStyle.OUTLINE, FlxColor.BLACK, 4, 1);
-		text.color = FlxColor.WHITE;
-		text.scrollFactor.set();
-		add(text);
-
-		var score = PlayState.instance.songScore;
-		if (PlayState.isStoryMode)
-		{
-			score = PlayState.campaignScore;
-			text.text = "Week Cleared!";
-		}
-
-		/*var sicks = PlayState.isStoryMode ? PlayState.campaignSicks : PlayState.sicks;
-		var goods = PlayState.isStoryMode ? PlayState.campaignGoods : PlayState.goods;
-		var bads = PlayState.isStoryMode ? PlayState.campaignBads : PlayState.bads;
-		var shits = PlayState.isStoryMode ? PlayState.campaignShits : PlayState.shits;
-
-		comboText = new FlxText(20, -75, 0,
-			//'Judgements:\nSicks - ${sicks}\nGoods - ${goods}\nBads - ${bads}\n\nCombo Breaks: ${(PlayState.isStoryMode ? PlayState.campaignMisses : PlayState.misses)}\nHighest Combo: ${PlayState.highestCombo + 1}\nScore: ${PlayState.instance.songScore}\nAccuracy: ${HelperFunctions.truncateFloat(PlayState.instance.accuracy, 2)}%\n\n${Ratings.GenerateLetterRank(PlayState.instance.accuracy)}\nRate: ${PlayState.songMultiplier}x\n\n${!PlayState.loadRep ? "\nF1 - Replay song" : ""}
-			'Judgements:\nSicks - ${sicks}\nGoods - ${goods}\nBads - ${bads}\n\nCombo Breaks: ${(PlayState.isStoryMode ? PlayState.campaignMisses : PlayState.misses)}\nScore: ${PlayState.instance.songScore}\nAccuracy: ${PlayState.instance.accuracy}%\n\n${Ratings.GenerateLetterRank(PlayState.instance.accuracy)}\nRate: ${PlayState.songMultiplier}x\n\n${!PlayState.loadRep ? "\nF1 - Replay song" : ""}
-        ');
-		comboText.size = 28;
-		comboText.setBorderStyle(FlxTextBorderStyle.OUTLINE, FlxColor.BLACK, 4, 1);
-		comboText.color = FlxColor.WHITE;
-		comboText.scrollFactor.set();
-		add(comboText);
-
-		contText = new FlxText(FlxG.width - 475, FlxG.height + 50, 0, 'Press ${KeyBinds.gamepad ? 'A' : 'ENTER'} to continue.');
-		contText.size = 28;
-		contText.setBorderStyle(FlxTextBorderStyle.OUTLINE, FlxColor.BLACK, 4, 1);
-		contText.color = FlxColor.WHITE;
-		contText.scrollFactor.set();
-		add(contText);*/
-
-		// 统计判定数量
-		var perfects = 0;
-		var sicks = 0;
-		var goods = 0;
-		var bads = 0;
-		var shits = 0;
-		for (r in PlayState.instance.ratingsData) {
+	// 统计判定数量
+	var perfects = 0;
+	var sicks = 0;
+	var goods = 0;
+	var bads = 0;
+	var shits = 0;
+	for (r in PlayState.instance.ratingsData) {
     		switch (r.name) {
         		case "perfect": perfects = r.hits;
         		case "sick": sicks = r.hits;
@@ -128,20 +118,28 @@ class ResultsScreen extends FlxSubState
         		case "bad": bads = r.hits;
         		case "shit": shits = r.hits;
     		}
-		}
+	}
 
-		// 组合文本
-		/*comboText = new FlxText(20, -75, 0,
-    		//'Judgements:\nSicks - ${sicks}\nGoods - ${goods}\nBads - ${bads}\nShits - ${shits}\n\nCombo Breaks: ${PlayState.instance.songMisses}\nScore: ${PlayState.instance.songScore}\nAccuracy: ${Std.string(Math.floor(PlayState.instance.ratingPercent * 10000) / 100)}%\n\n${Rating.GenerateLetterRank(PlayState.instance.ratingPercent * 100)}\nRate: ${PlayState.songMultiplier}x\n\n${!PlayState.loadRep ? "\nF1 - Replay song" : ""}'
-    		'Judgements:\n${!ClientPrefs.data.rmPerfect ? 'Perfects - ${perfects}\n' : ""}Sicks - ${sicks}\nGoods - ${goods}\nBads - ${bads}\nShits - ${shits}\n\nCombo Breaks: ${PlayState.instance.songMisses}\nScore: ${PlayState.instance.songScore}\nAccuracy: ${Std.string(Math.floor(PlayState.instance.ratingPercent * 10000) / 100)}%\n\n\nRate: ${PlayState.instance.songSpeed} x'
-		);
-		comboText.size = 28;
-		comboText.setBorderStyle(FlxTextBorderStyle.OUTLINE, FlxColor.BLACK, 4, 1);
-		comboText.color = FlxColor.WHITE;
-		comboText.scrollFactor.set();
-		add(comboText);*/
+	// 创建标题文本（偏左上角）
+	text = createTextField(
+		Math.floor(20 * scale),
+		Math.floor(-80 * scale),
+		Math.floor(stageWidth - 300 * scale),
+		FlxColor.WHITE,
+		Math.floor(42 * scale)
+	);
+	text.text = "Song Cleared!";
+	overlaySprite.addChild(text);
 
-		var comboStr = 'Judgements:\n'
+	var score = PlayState.instance.songScore;
+	if (PlayState.isStoryMode)
+	{
+		score = PlayState.campaignScore;
+		text.text = "Week Cleared!";
+	}
+
+	// 组合文本
+	var comboStr = 'Judgements:\n'
     + (!ClientPrefs.data.rmPerfect ? 'Perfects - ${perfects}\n' : "")
     + 'Sicks - ${sicks}\n'
     + 'Goods - ${goods}\n'
@@ -150,125 +148,112 @@ class ResultsScreen extends FlxSubState
     + 'Combo Breaks: ${PlayState.instance.songMisses}\n'
     + 'Score: ${PlayState.instance.songScore}\n'
     + 'Accuracy: ${Std.string(Math.floor(PlayState.instance.ratingPercent * 10000) / 100)}%\n\n\n'
-    + 'Rate: ${PlayState.instance.songSpeed} x';
+    + 'Note Rate: ${PlayState.instance.songSpeed} x';
 
-comboText = new FlxText(20, -75, 0, comboStr);
-comboText.size = 28;
-comboText.setBorderStyle(FlxTextBorderStyle.OUTLINE, FlxColor.BLACK, 4, 1);
-comboText.color = FlxColor.WHITE;
-comboText.scrollFactor.set();
+	// 创建判定文本（偏左并垂直居中）
+	var comboTextY = (stageHeight - Math.floor(150 * scale)) / 2;
+	comboText = createTextField(
+		Math.floor(20 * scale),
+		Math.floor(-100 * scale),
+		Math.floor(stageWidth - 300 * scale),
+		FlxColor.WHITE,
+		Math.floor(32 * scale)
+	);
+	comboText.text = comboStr;
+	overlaySprite.addChild(comboText);
 
-// 为每个判定添加不同颜色
-var idx = 0;
-if (!ClientPrefs.data.rmPerfect) {
-    idx = comboStr.indexOf('Perfects');
-    comboText.addFormat(new flixel.text.FlxTextFormat(0xFFFFC0CB), idx, idx + ('Perfects - ${perfects}'.length)); // 金色
-}
-idx = comboStr.indexOf('Sicks');
-comboText.addFormat(new flixel.text.FlxTextFormat(0xFF87CEFA), idx, idx + ('Sicks - ${sicks}'.length)); // 绿色
-idx = comboStr.indexOf('Goods');
-comboText.addFormat(new flixel.text.FlxTextFormat(0xFF66CDAA), idx, idx + ('Goods - ${goods}'.length)); // 蓝色
-idx = comboStr.indexOf('Bads');
-comboText.addFormat(new flixel.text.FlxTextFormat(0xFFF4A460), idx, idx + ('Bads - ${bads}'.length)); // 黄色
-idx = comboStr.indexOf('Shits');
-comboText.addFormat(new flixel.text.FlxTextFormat(0xFFFF4500), idx, idx + ('Shits - ${shits}'.length)); // 红色
+	// 为每个判定添加不同颜色
+	var idx = 0;
+	if (!ClientPrefs.data.rmPerfect) {
+		idx = comboStr.indexOf('Perfects');
+		comboText.setTextFormat(new TextFormat("assets/fonts/vcr.ttf", Math.floor(32 * scale), 0xFFFFC0CB), idx, idx + ('Perfects - ${perfects}'.length));
+	}
+	idx = comboStr.indexOf('Sicks');
+	comboText.setTextFormat(new TextFormat("assets/fonts/vcr.ttf", Math.floor(32 * scale), 0xFF87CEFA), idx, idx + ('Sicks - ${sicks}'.length));
+	idx = comboStr.indexOf('Goods');
+	comboText.setTextFormat(new TextFormat("assets/fonts/vcr.ttf", Math.floor(32 * scale), 0xFF66CDAA), idx, idx + ('Goods - ${goods}'.length));
+	idx = comboStr.indexOf('Bads');
+	comboText.setTextFormat(new TextFormat("assets/fonts/vcr.ttf", Math.floor(32 * scale), 0xFFF4A460), idx, idx + ('Bads - ${bads}'.length));
+	idx = comboStr.indexOf('Shits');
+	comboText.setTextFormat(new TextFormat("assets/fonts/vcr.ttf", Math.floor(32 * scale), 0xFFFF4500), idx, idx + ('Shits - ${shits}'.length));
 
-add(comboText);
+	// contText（偏右下角）
+	contText = createTextField(
+		Math.floor(stageWidth - 520 * scale),
+		Math.floor(stageHeight + 80 * scale),
+		Math.floor(500 * scale),
+		FlxColor.WHITE,
+		Math.floor(32 * scale)
+	);
+	contText.text = #if mobile 'Touch Screen to continue.' #else 'Press \'ENTER\' to continue.'#end;
+	overlaySprite.addChild(contText);
 
-		// contText 简单写法
-		contText = new FlxText(FlxG.width - 475, FlxG.height + 50, 0, 'Press ENTER to continue.');
-		contText.size = 28;
-		contText.setBorderStyle(FlxTextBorderStyle.OUTLINE, FlxColor.BLACK, 4, 1);
-		contText.color = FlxColor.WHITE;
-		contText.scrollFactor.set();
-		add(contText);
-
-		anotherBackground = new FlxSprite(FlxG.width - 500, 45).makeGraphic(450, 240, FlxColor.BLACK);
-		anotherBackground.scrollFactor.set();
-		anotherBackground.alpha = 0;
-		add(anotherBackground);
-
-		graph = new HitGraph(FlxG.width - 500, 45, 495, 240);
-		graph.alpha = 0;
-
-		graphSprite = new OFLSprite(FlxG.width - 510, 45, 460, 240, graph);
-
-		graphSprite.scrollFactor.set();
-		graphSprite.alpha = 0;
-
-		add(graphSprite);
+	// 填充 HitGraph 数据（graph 已经添加到 overlaySprite 了）
+		if (PlayState.instance.hitHistory != null && PlayState.instance.hitHistory.length > 0)
+		{
+			for (hitData in PlayState.instance.hitHistory)
+			{
+				graph.addToHistory(hitData[0], hitData[1], hitData[2]);
+			}
+			graph.update();
+		}
 
 		/*var sicks = PlayState.sicks;
 		var goods = PlayState.goods;
-*/
+	*/
 		if (sicks == Math.POSITIVE_INFINITY)
 			sicks = 0;
 		if (goods == Math.POSITIVE_INFINITY)
 			goods = 0;
 
-		var mean:Float = 0;
-
-		/*for (i in 0...PlayState.rep.replay.songNotes.length)
-		{
-			// 0 = time
-			// 1 = length
-			// 2 = type
-			// 3 = diff
-			var obj = PlayState.rep.replay.songNotes[i];
-			// judgement
-			var obj2 = PlayState.rep.replay.songJudgements[i];
-
-			var obj3 = obj[0];
-
-			var diff = obj[3];
-			var judge = obj2;
-			if (diff != (166 * Math.floor((PlayState.rep.replay.sf / 60) * 1000) / 166))
-				mean += diff;
-			//if (obj[1] != -1)
-				//graph.addToHistory(diff / PlayState.songMultiplier, judge, obj3 / PlayState.songMultiplier);
-		}
-
-		if (sicks == Math.POSITIVE_INFINITY || sicks == Math.NaN)
-			sicks = 0;
-		if (goods == Math.POSITIVE_INFINITY || goods == Math.NaN)
-			goods = 0;
-
-		//graph.update();
-
-		mean = HelperFunctions.truncateFloat(mean / PlayState.rep.replay.songNotes.length, 2);*/
+		// 创建设置文本（偏左下角）
 		var averageMs:Float = 0;
 		//if (PlayState.instance.songHits > 0)
     	@:privateAccess
 		averageMs = PlayState.instance.allNotesMs / PlayState.instance.songHits;
 
-		settingsText = new FlxText(20, FlxG.height + 50, 0,
-    		'Avg: ${Math.round(averageMs * 100) / 100}ms (${!ClientPrefs.data.rmPerfect ? "PERFECT:" + ClientPrefs.data.perfectWindow + "ms," : ""}SICK:${ClientPrefs.data.sickWindow}ms,GOOD:${ClientPrefs.data.goodWindow}ms,BAD:${ClientPrefs.data.badWindow}ms)'
+		settingsText = createTextField(
+			Math.floor(20 * scale),
+			Math.floor(stageHeight + 60 * scale),
+			Math.floor(stageWidth - 300 * scale),
+			FlxColor.WHITE,
+			Math.floor(18 * scale)
 		);
-		settingsText.size = 16;
-		settingsText.setBorderStyle(FlxTextBorderStyle.OUTLINE, FlxColor.BLACK, 2, 1);
-		settingsText.color = FlxColor.WHITE;
-		settingsText.scrollFactor.set();
-		add(settingsText);
+		settingsText.text = 'Avg: ${Math.round(averageMs * 100) / 100}ms (${!ClientPrefs.data.rmPerfect ? "PERFECT:" + ClientPrefs.data.perfectWindow + "ms," : ""}SICK:${ClientPrefs.data.sickWindow}ms,GOOD:${ClientPrefs.data.goodWindow}ms,BAD:${ClientPrefs.data.badWindow}ms)';
+		overlaySprite.addChild(settingsText);
 
-		FlxTween.tween(background, {alpha: 0.5}, 0.5);
-		FlxTween.tween(text, {y: 20}, 0.5, {ease: FlxEase.expoInOut});
-		FlxTween.tween(comboText, {y: 145}, 0.5, {ease: FlxEase.expoInOut});
-		FlxTween.tween(contText, {y: FlxG.height - 45}, 0.5, {ease: FlxEase.expoInOut});
-		FlxTween.tween(settingsText, {y: FlxG.height - 35}, 0.5, {ease: FlxEase.expoInOut});
-		FlxTween.tween(anotherBackground, {alpha: 0.6}, 0.5, {
-			onUpdate: function(tween:FlxTween)
-			{
-				graph.alpha = FlxMath.lerp(0, 1, tween.percent);
-				graphSprite.alpha = FlxMath.lerp(0, 1, tween.percent);
-			}
-		});
+	/*var sicks = PlayState.sicks;
+		var goods = PlayState.goods;
+	*/
 
-		cameras = [FlxG.cameras.list[FlxG.cameras.list.length - 1]];
+	// 动画效果（需要手动实现 OpenFL 对象的动画）
+	FlxTween.tween(background, {alpha: 0.5}, 0.5);
+	// OpenFL 对象的动画
+	FlxTween.num(-80 * scale, 20 * scale, 0.5, {ease: FlxEase.expoInOut}, (val) -> text.y = val);
+	FlxTween.num(-100 * scale, comboTextY, 0.5, {ease: FlxEase.expoInOut}, (val) -> comboText.y = val);
+	FlxTween.num(stageHeight + 60 * scale, stageHeight - 60 * scale, 0.5, {ease: FlxEase.expoInOut}, (val) -> contText.y = val);
+	FlxTween.num(stageHeight + 60 * scale, stageHeight - 50 * scale, 0.5, {ease: FlxEase.expoInOut}, (val) -> settingsText.y = val);
+	FlxTween.num(0, 1.0, 0.5, {ease: FlxEase.expoInOut}, (val) -> graph.alpha = val);
 
-		super.create();
-	}
+	cameras = [FlxG.cameras.list[FlxG.cameras.list.length - 1]];
+
+	super.create();
+}
 
 	var frames = 0;
+
+	// 处理继续的逻辑
+	private function handleContinue():Void
+	{
+		trace('WENT BACK TO FREEPLAY??');
+		#if DISCORD_ALLOWED DiscordClient.resetClientID(); #end
+		PlayState.instance.canResync = false;
+		PlayState.changedDifficulty = false;
+		Mods.loadTopMod();
+		FlxG.sound.playMusic(Paths.music('freakyMenu'));
+		MusicBeatState.switchState(new FreeplayState());
+		close(); // 关闭substate
+	}
 
 	override function update(elapsed:Float)
 	{
@@ -326,25 +311,48 @@ add(comboText);
 			PlayState.instance.clean();
 		}*/
 
+		// 桌面端：ENTER键
 		if (FlxG.keys.justPressed.ENTER)
-    	{
-        	/*if (PlayState.isStoryMode)
-        	{
-            	FlxG.sound.playMusic(Paths.music('freakyMenu'));
-            	Conductor.set_bpm(102);
-            	FlxG.switchState(new StoryMenuState());
-        	}
-        	else*/
-        	{
-				trace('WENT BACK TO FREEPLAY??');
-				#if DISCORD_ALLOWED DiscordClient.resetClientID(); #end
-        		PlayState.instance.canResync = false;
-				PlayState.changedDifficulty = false;
-        		Mods.loadTopMod();
-        		FlxG.sound.playMusic(Paths.music('freakyMenu'));
-        		MusicBeatState.switchState(new FreeplayState());
-			}
-        	close(); // 关闭substate
-    	}
+		{
+			handleContinue();
+		}
+
+		// 移动端：触摸屏幕
+		#if !desktop
+		// 检测触摸或点击
+		if (FlxG.mouse.justPressed || FlxG.touches.justStarted().length > 0)
+		{
+			handleContinue();
+		}
+		#end
+	}
+
+	override function destroy()
+	{
+		// 从 OpenFL stage 移除 overlay
+		if (overlaySprite != null && FlxG.stage != null && FlxG.stage.contains(overlaySprite))
+		{
+			FlxG.stage.removeChild(overlaySprite);
+			overlaySprite = null;
+		}
+
+		super.destroy();
+	}
+
+	// 创建 OpenFL TextField 的辅助函数
+	private function createTextField(X:Float = 0, Y:Float = 0, Width:Float = 0, Color:FlxColor = FlxColor.WHITE, Size:Int = 12):TextField
+	{
+		var tf = new TextField();
+		tf.x = X;
+		tf.y = Y;
+		tf.width = Width;
+		tf.multiline = true;
+		tf.wordWrap = true;
+		tf.embedFonts = true;
+		tf.selectable = false;
+		tf.defaultTextFormat = new TextFormat("assets/fonts/vcr.ttf", Size, Color.to24Bit());
+		tf.alpha = Color.alphaFloat;
+		tf.autoSize = TextFieldAutoSize.LEFT;
+		return tf;
 	}
 }

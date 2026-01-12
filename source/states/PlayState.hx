@@ -92,6 +92,9 @@ class PlayState extends MusicBeatState
 	var msTimeTxtTween1:FlxTween;
 	var msTimeTxtTween2:FlxTween;
 	var scoreTxtTweenAngle:FlxTween;
+
+	// 存储打击数据供 HitGraph 使用 [diff, judge, time]
+	public var hitHistory:Array<Array<Dynamic>> = [];
 	var dancingLeft:Bool = false;
 	var icondancingLeft:Bool = false;
 	public var iconBopEnabled:Bool = true;
@@ -2765,6 +2768,16 @@ class PlayState extends MusicBeatState
 		var noteDiff:Float = note.strumTime - Conductor.songPosition + ClientPrefs.data.ratingOffset;
 		allNotesMs += noteDiff;
 		averageMs = allNotesMs/songHits;
+
+		// 存储打击数据供 HitGraph 使用
+		var daRating:Rating = Conductor.judgeNote(ratingsData, noteDiff / playbackRate);
+		if(!cpuControlled || ClientPrefs.data.botplayScore)
+		{
+			if(!note.ratingDisabled)
+			{
+				hitHistory.push([noteDiff, daRating.name, note.strumTime]);
+			}
+		}
 
 		vocals.volume = 1;
 
