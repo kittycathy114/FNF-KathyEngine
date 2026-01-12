@@ -16,6 +16,7 @@ import backend.ClientPrefs;
 class CustomFadeTransition extends FlxSubState {
     public static var finishCallback: Void -> Void;
     public static var isReloading: Bool = false; // 标记是否是刷新操作
+    public static var reloadingStateType:Class<flixel.FlxState> = null; // 存储要 reload 的 state 类型
     var isTransIn: Bool = false;
     var isReloadingTransition: Bool = false; // 记住这个转场是否是刷新操作
     var transBlack: FlxSprite;
@@ -26,6 +27,7 @@ class CustomFadeTransition extends FlxSubState {
     var loadAlpha: FlxSprite;
     var WaterMark: FlxText;
     var EventText: FlxText;
+    var StateNameText: FlxText; // 显示要 reload 的 state 名称
     var transBG: FlxSprite;
     static var mintRhythmImages:Array<String> = [];
     static var lastRandomIndex:Int = -1;
@@ -48,11 +50,16 @@ class CustomFadeTransition extends FlxSubState {
         this.duration = duration;
         this.isTransIn = isTransIn;
         this.isReloadingTransition = isReloading; // 保存当前是否是刷新操作
-        isReloading = false; // 立即重置标志，确保只影响当前转场
+        // 不要立即重置，延迟到 create() 中，确保转场创建完成后再重置
         super();
     }
     override function create() {
-        
+        // 保存状态后立即重置静态变量
+        var savedReloading = isReloading;
+        var savedReloadingStateType = reloadingStateType;
+        isReloading = false;
+        reloadingStateType = null;
+
         var cam: FlxCamera = new FlxCamera();
         cam.bgColor = 0x00;
         FlxG.cameras.add(cam, false);
@@ -342,6 +349,17 @@ class CustomFadeTransition extends FlxSubState {
             EventText.alpha = isTransIn ? 1 : 0;
             add(EventText);
 
+            // 显示要 reload 的 state 名称（只在 reload 操作时显示）
+            if (isReloadingTransition && savedReloadingStateType != null) {
+                var stateName:String = Type.getClassName(savedReloadingStateType);
+                StateNameText = new FlxText(FlxG.width - 750, FlxG.height - 105, FlxG.width - 600, stateName, 28);
+                StateNameText.scrollFactor.set();
+                StateNameText.setFormat(Assets.getFont("assets/fonts/arturito-slab.ttf").fontName, 28, FlxColor.YELLOW, RIGHT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+                StateNameText.antialiasing = ClientPrefs.data.antialiasing;
+                StateNameText.alpha = 1; // 初始显示（reload 时需要显示）
+                add(StateNameText);
+            }
+
             // 动画效果
             if (!isTransIn) {
                 FlxG.sound.play(Paths.sound('BA/UI_Loading'));
@@ -353,6 +371,9 @@ class CustomFadeTransition extends FlxSubState {
                     ease: FlxEase.quartOut
                 });
                 EventText.alpha = 1;
+                if (StateNameText != null) {
+                    StateNameText.alpha = 1; // 确保 StateNameText 也显示
+                }
             } else {
                 FlxG.sound.play(Paths.sound('BA/UI_Login'));
                 // 修改文本为Done!
@@ -360,6 +381,13 @@ class CustomFadeTransition extends FlxSubState {
                 EventText.alpha = 1;
                 // 设置文本淡出动画（比图片稍早一点完成）
                 FlxTween.tween(EventText, {alpha: 0}, duration * 0.7, {ease: FlxEase.linear});
+
+                // StateNameText 也淡出
+                if (StateNameText != null) {
+                    StateNameText.alpha = 1;
+                    FlxTween.tween(StateNameText, {alpha: 0}, duration * 0.7, {ease: FlxEase.linear});
+                }
+
                 // 飞出到下方 + 淡出
                 baLoadingPicTween = FlxTween.tween(baLoadingPics, {y: 100, alpha: 0}, duration, {
                     onComplete: function(twn:FlxTween) {

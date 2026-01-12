@@ -393,6 +393,7 @@ class Main extends Sprite
 
 				// 标记为刷新操作（CustomFadeTransition构造函数中会立即读取并重置）
 				backend.CustomFadeTransition.isReloading = true;
+				backend.CustomFadeTransition.reloadingStateType = currentStateType; // 保存要 reload 的 state 类型
 
 				// 检查是否是MusicBeatState，使用自定义转场
 				#if !macro
