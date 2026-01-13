@@ -1556,6 +1556,48 @@ class FunkinLua {
 			#end
 		});
 		//
+		
+		// Window operations
+		#if (desktop && !flash)
+		Lua_helper.add_callback(lua, "getWindowX", function() {
+			return FlxG.stage != null ? FlxG.stage.window.x : 0;
+		});
+		Lua_helper.add_callback(lua, "getWindowY", function() {
+			return FlxG.stage != null ? FlxG.stage.window.y : 0;
+		});
+		Lua_helper.add_callback(lua, "getScreenWidth", function() {
+			return openfl.Lib.application.window.display.bounds.width;
+		});
+		Lua_helper.add_callback(lua, "getScreenHeight", function() {
+			return openfl.Lib.application.window.display.bounds.height;
+		});
+		Lua_helper.add_callback(lua, "getWindowWidth", function() {
+			return FlxG.stage != null ? FlxG.stage.window.width : 1280;
+		});
+		Lua_helper.add_callback(lua, "getWindowHeight", function() {
+			return FlxG.stage != null ? FlxG.stage.window.height : 720;
+		});
+		Lua_helper.add_callback(lua, "setWindowPosition", function(x:Float, y:Float) {
+			if(FlxG.stage != null) {
+				FlxG.stage.window.x = Std.int(Math.max(0, x));
+				FlxG.stage.window.y = Std.int(Math.max(0, y));
+			}
+		});
+		Lua_helper.add_callback(lua, "setWindowTitle", function(title:String) {
+			if(FlxG.stage != null) {
+				FlxG.stage.window.title = title.trim() != "" ? title.trim() : 'Psych Engine: MintRhythm Extended';
+			}
+		});
+		/*#else
+		Lua_helper.add_callback(lua, "getWindowX", function() return 0);
+		Lua_helper.add_callback(lua, "getWindowY", function() return 0);
+		Lua_helper.add_callback(lua, "getScreenWidth", function() return 1280);
+		Lua_helper.add_callback(lua, "getScreenHeight", function() return 720);
+		Lua_helper.add_callback(lua, "getWindowWidth", function() return 1280);
+		Lua_helper.add_callback(lua, "getWindowHeight", function() return 720);
+		Lua_helper.add_callback(lua, "setWindowPosition", function(x:Float, y:Float) {});
+		Lua_helper.add_callback(lua, "setWindowTitle", function(title:String) {});
+		*/#end
 
 		Lua_helper.add_callback(lua, "debugPrint", function(text:Dynamic = '', color:String = 'WHITE') PlayState.instance.addTextToDebug(text, CoolUtil.colorFromString(color)));
 
