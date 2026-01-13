@@ -2,11 +2,14 @@ package ui;
 
 import openfl.display.Sprite;
 import openfl.display.Shape;
+import openfl.display.Bitmap;
+import openfl.display.BitmapData;
 import openfl.events.Event;
 import openfl.events.MouseEvent;
 import openfl.events.TouchEvent;
 import openfl.Lib;
 import openfl.filters.GlowFilter;
+import openfl.geom.Matrix;
 import flixel.FlxG;
 import haxe.ds.IntMap;
 
@@ -66,6 +69,15 @@ class MouseTrail extends Sprite
 	// 性能优化：缓存的发光滤镜
 	private var cachedGlowFilter:GlowFilter = null;
 
+	// 位图渲染优化
+	private var trailBitmap:Bitmap;
+	private var trailBitmapData:BitmapData;
+	private var clickBitmap:Bitmap;
+	private var clickBitmapData:BitmapData;
+	private var rippleBitmap:Bitmap;
+	private var rippleBitmapData:BitmapData;
+	private var renderMatrix:Matrix = new Matrix();
+
 	// 鼠标位置追踪
 	private var trailMouseX:Float = 0;
 	private var trailMouseY:Float = 0;
@@ -120,6 +132,33 @@ class MouseTrail extends Sprite
 
 		// 监听每帧更新
 		Lib.current.stage.addEventListener(Event.ENTER_FRAME, update);
+
+		// 初始化位图渲染
+		initBitmaps();
+	}
+
+	/**
+	 * 初始化位图用于高效渲染
+	 */
+	private function initBitmaps():Void
+	{
+		var stageWidth:Int = Std.int(Lib.current.stage.stageWidth);
+		var stageHeight:Int = Std.int(Lib.current.stage.stageHeight);
+
+		// 拖尾位图
+		trailBitmapData = new BitmapData(stageWidth, stageHeight, true, 0x00000000);
+		trailBitmap = new Bitmap(trailBitmapData);
+		addChild(trailBitmap);
+
+		// 点击效果位图
+		clickBitmapData = new BitmapData(stageWidth, stageHeight, true, 0x00000000);
+		clickBitmap = new Bitmap(clickBitmapData);
+		addChild(clickBitmap);
+
+		// 光圈效果位图
+		rippleBitmapData = new BitmapData(stageWidth, stageHeight, true, 0x00000000);
+		rippleBitmap = new Bitmap(rippleBitmapData);
+		addChild(rippleBitmap);
 	}
 
 	/**
@@ -128,6 +167,16 @@ class MouseTrail extends Sprite
 	private function onStageResize(e:Event):Void
 	{
 		calculateScreenScale();
+
+		// 重新创建位图以适应新尺寸
+		if (trailBitmapData != null)
+			trailBitmapData.dispose();
+		if (clickBitmapData != null)
+			clickBitmapData.dispose();
+		if (rippleBitmapData != null)
+			rippleBitmapData.dispose();
+
+		initBitmaps();
 	}
 
 	/**
@@ -387,11 +436,104 @@ class MouseTrail extends Sprite
 		// 更新光圈效果
 		if (rippleEffects.length > 0)
 			updateRippleEffects();
+
+		// 渲染到位图
+		renderToBitmaps();
 	}
 
 	/**
-	 * 创建发光滤镜（性能优化：缓存滤镜对象）
+	 * 渲染所有效果到位图（性能优化）
 	 */
+	private function renderToBitmaps():Void
+	{
+		// 清除位图
+		trailBitmapData.fillRect(trailBitmapData.rect, 0x00000000);
+		clickBitmapData.fillRect(clickBitmapData.rect, 0x00000000);
+		rippleBitmapData.fillRect(rippleBitmapData.rect, 0x00000000);
+
+		// 渲染拖尾粒子
+		for (particle in particles)
+		{
+			if (particle.alpha >= 0.05 && particle.size >= 1)
+			{
+				renderMatrix.identity();
+				renderMatrix.translate(particle.x - particle.size / 2, particle.y - particle.size / 2);
+				trailBitmapData.draw(createParticleShape(particle), renderMatrix);
+			}
+		}
+
+		// 渲染点击效果
+		for (effect in clickEffects)
+		{
+			if (effect.alpha >= 0.05 && effect.size >= 1)
+			{
+				renderMatrix.identity();
+				renderMatrix.translate(effect.x - effect.size / 2, effect.y - effect.size / 2);
+				clickBitmapData.draw(createClickShape(effect), renderMatrix);
+			}
+		}
+
+		// 渲染光圈效果
+		for (ripple in rippleEffects)
+		{
+			if (ripple.alpha >= 0.05 && ripple.radius >= 1)
+			{
+				renderMatrix.identity();
+				renderMatrix.translate(ripple.x - ripple.radius, ripple.y - ripple.radius);
+				rippleBitmapData.draw(createRippleShape(ripple), renderMatrix);
+			}
+		}
+
+		// 应用滤镜
+		var glow:GlowFilter = createGlowFilter();
+		if (glow != null)
+		{
+			trailBitmap.filters = [glow];
+			clickBitmap.filters = [glow];
+			rippleBitmap.filters = [glow];
+		}
+		else
+		{
+			trailBitmap.filters = [];
+			clickBitmap.filters = [];
+			rippleBitmap.filters = [];
+		}
+	}
+
+	/**
+	 * 创建粒子形状用于绘制到位图
+	 */
+	private function createParticleShape(particle:TrailParticle):Shape
+	{
+		var shape:Shape = new Shape();
+		shape.graphics.beginFill(particle.color, particle.alpha);
+		shape.graphics.drawCircle(particle.size / 2, particle.size / 2, particle.size / 2);
+		shape.graphics.endFill();
+		return shape;
+	}
+
+	/**
+	 * 创建点击效果形状
+	 */
+	private function createClickShape(effect:ClickEffect):Shape
+	{
+		var shape:Shape = new Shape();
+		shape.graphics.beginFill(effect.color, effect.alpha);
+		shape.graphics.drawCircle(effect.size / 2, effect.size / 2, effect.size / 2);
+		shape.graphics.endFill();
+		return shape;
+	}
+
+	/**
+	 * 创建光圈效果形状
+	 */
+	private function createRippleShape(ripple:RippleEffect):Shape
+	{
+		var shape:Shape = new Shape();
+		shape.graphics.lineStyle(rippleThickness, rippleColor, ripple.alpha);
+		shape.graphics.drawCircle(ripple.radius, ripple.radius, ripple.radius);
+		return shape;
+	}
 	private function createGlowFilter():GlowFilter
 	{
 		if (!glowEnabled)
@@ -429,11 +571,7 @@ class MouseTrail extends Sprite
 		// 限制粒子数量
 		while (particles.length >= trailLength)
 		{
-			var oldParticle:TrailParticle = particles.shift();
-			if (oldParticle != null)
-			{
-				removeChild(oldParticle.shape);
-			}
+			particles.shift();
 		}
 
 		// 根据 DPI 缩放、屏幕尺寸和用户设置调整粒子大小
@@ -448,24 +586,6 @@ class MouseTrail extends Sprite
 		particle.alpha = trailAlpha;
 		particle.color = trailColor;
 
-		// 创建形状
-		var shape:Shape = new Shape();
-		shape.graphics.beginFill(trailColor, trailAlpha);
-		shape.graphics.drawCircle(0, 0, scaledSize / 2);
-		shape.graphics.endFill();
-		// 直接设置位置，不使用局部坐标
-		shape.x = x;
-		shape.y = y;
-
-		// 应用发光效果
-		var glow:GlowFilter = createGlowFilter();
-		if (glow != null)
-		{
-			shape.filters = [glow];
-		}
-
-		particle.shape = shape;
-		addChild(particle.shape);
 		particles.push(particle);
 	}
 
@@ -483,19 +603,9 @@ class MouseTrail extends Sprite
 			particle.size *= trailDecay;
 			particle.alpha *= trailDecay;
 
-			// 性能优化：只在粒子可见时才更新图形
-			if (particle.alpha >= 0.05 && particle.size >= 1 && particle.shape != null)
-			{
-				particle.shape.graphics.clear();
-				particle.shape.graphics.beginFill(particle.color, particle.alpha);
-				particle.shape.graphics.drawCircle(0, 0, particle.size / 2);
-				particle.shape.graphics.endFill();
-			}
-
 			// 移除过小的粒子
 			if (particle.size < 1 || particle.alpha < 0.05)
 			{
-				removeChild(particle.shape);
 				particles.splice(i, 1);
 			}
 
@@ -511,11 +621,7 @@ class MouseTrail extends Sprite
 		// 性能优化：限制同时存在的点击效果数量
 		while (clickEffects.length >= maxClickEffects)
 		{
-			var oldEffect:ClickEffect = clickEffects.shift();
-			if (oldEffect != null && oldEffect.shape != null)
-			{
-				removeChild(oldEffect.shape);
-			}
+			clickEffects.shift();
 		}
 
 		// 根据 DPI 缩放、屏幕尺寸和用户设置调整效果大小
@@ -527,27 +633,6 @@ class MouseTrail extends Sprite
 		effect.alpha = clickEffectAlpha;
 		effect.color = clickEffectColor;
 
-		// 创建形状
-		var shape:Shape = new Shape();
-		shape.graphics.beginFill(clickEffectColor, clickEffectAlpha);
-		shape.graphics.drawCircle(0, 0, effect.size / 2);
-		shape.graphics.endFill();
-		shape.x = x;
-		shape.y = y;
-
-		// 性能优化：手机端禁用发光滤镜
-		#if mobile
-		// 手机端不使用发光滤镜
-		#else
-		var glow:GlowFilter = createGlowFilter();
-		if (glow != null)
-		{
-			shape.filters = [glow];
-		}
-		#end
-
-		effect.shape = shape;
-		addChild(shape);
 		clickEffects.push(effect);
 	}
 
@@ -565,19 +650,9 @@ class MouseTrail extends Sprite
 			effect.size *= clickEffectDecay;
 			effect.alpha *= clickEffectDecay;
 
-			// 性能优化：只在效果可见时才更新图形
-			if (effect.alpha >= 0.05 && effect.size >= 1 && effect.shape != null)
-			{
-				effect.shape.graphics.clear();
-				effect.shape.graphics.beginFill(clickEffectColor, effect.alpha);
-				effect.shape.graphics.drawCircle(0, 0, effect.size / 2);
-				effect.shape.graphics.endFill();
-			}
-
 			// 移除过小的效果
 			if (effect.size < 1 || effect.alpha < 0.05)
 			{
-				removeChild(effect.shape);
 				clickEffects.splice(i, 1);
 			}
 
@@ -593,11 +668,7 @@ class MouseTrail extends Sprite
 		// 性能优化：限制同时存在的光圈效果数量
 		while (rippleEffects.length >= maxRippleEffects)
 		{
-			var oldRipple:RippleEffect = rippleEffects.shift();
-			if (oldRipple != null && oldRipple.shape != null)
-			{
-				removeChild(oldRipple.shape);
-			}
+			rippleEffects.shift();
 		}
 
 		// 根据 DPI 缩放、屏幕尺寸和用户设置调整效果大小
@@ -608,26 +679,6 @@ class MouseTrail extends Sprite
 		ripple.radius = 10 * combinedScale;
 		ripple.alpha = 1.0;
 
-		// 创建形状
-		var shape:Shape = new Shape();
-		shape.graphics.lineStyle(rippleThickness * combinedScale, rippleColor, 1.0);
-		shape.graphics.drawCircle(0, 0, ripple.radius);
-		shape.x = x;
-		shape.y = y;
-
-		// 性能优化：手机端禁用发光滤镜
-		#if mobile
-		// 手机端不使用发光滤镜
-		#else
-		var glow:GlowFilter = createGlowFilter();
-		if (glow != null)
-		{
-			shape.filters = [glow];
-		}
-		#end
-
-		ripple.shape = shape;
-		addChild(shape);
 		rippleEffects.push(ripple);
 	}
 
@@ -648,18 +699,9 @@ class MouseTrail extends Sprite
 			// 衰减透明度
 			ripple.alpha -= rippleAlphaDecay;
 
-			// 性能优化：只在光圈可见时才更新图形
-			if (ripple.alpha > 0 && ripple.radius < rippleMaxSize * combinedScale && ripple.shape != null)
-			{
-				ripple.shape.graphics.clear();
-				ripple.shape.graphics.lineStyle(rippleThickness * combinedScale, rippleColor, ripple.alpha);
-				ripple.shape.graphics.drawCircle(0, 0, ripple.radius);
-			}
-
 			// 移除完全消失的光圈
 			if (ripple.radius >= rippleMaxSize * combinedScale || ripple.alpha <= 0)
 			{
-				removeChild(ripple.shape);
 				rippleEffects.splice(i, 1);
 			}
 
@@ -672,13 +714,6 @@ class MouseTrail extends Sprite
 	 */
 	public function clearTrail():Void
 	{
-		for (particle in particles)
-		{
-			if (particle.shape != null)
-			{
-				removeChild(particle.shape);
-			}
-		}
 		particles = [];
 	}
 
@@ -687,13 +722,6 @@ class MouseTrail extends Sprite
 	 */
 	public function clearClickEffects():Void
 	{
-		for (effect in clickEffects)
-		{
-			if (effect.shape != null)
-			{
-				removeChild(effect.shape);
-			}
-		}
 		clickEffects = [];
 	}
 
@@ -702,13 +730,6 @@ class MouseTrail extends Sprite
 	 */
 	public function clearRippleEffects():Void
 	{
-		for (ripple in rippleEffects)
-		{
-			if (ripple.shape != null)
-			{
-				removeChild(ripple.shape);
-			}
-		}
 		rippleEffects = [];
 	}
 
@@ -975,6 +996,28 @@ class MouseTrail extends Sprite
 		clearClickEffects();
 		clearRippleEffects();
 
+		// 清理位图
+		if (trailBitmap != null && trailBitmap.parent != null)
+			trailBitmap.parent.removeChild(trailBitmap);
+		if (clickBitmap != null && clickBitmap.parent != null)
+			clickBitmap.parent.removeChild(clickBitmap);
+		if (rippleBitmap != null && rippleBitmap.parent != null)
+			rippleBitmap.parent.removeChild(rippleBitmap);
+
+		if (trailBitmapData != null)
+			trailBitmapData.dispose();
+		if (clickBitmapData != null)
+			clickBitmapData.dispose();
+		if (rippleBitmapData != null)
+			rippleBitmapData.dispose();
+
+		trailBitmap = null;
+		trailBitmapData = null;
+		clickBitmap = null;
+		clickBitmapData = null;
+		rippleBitmap = null;
+		rippleBitmapData = null;
+
 		#if mobile
 		// 手机端：移除触摸事件监听器
 		Lib.current.stage.removeEventListener(TouchEvent.TOUCH_BEGIN, onTouchBegin);
@@ -1007,7 +1050,6 @@ class TrailParticle
 	public var size:Float;
 	public var alpha:Float;
 	public var color:Int;
-	public var shape:Shape;
 
 	public function new()
 	{
@@ -1016,7 +1058,6 @@ class TrailParticle
 		this.size = 28;
 		this.alpha = 1;
 		this.color = 0x00BFFF;
-		this.shape = null;
 	}
 }
 
@@ -1030,7 +1071,6 @@ class ClickEffect
 	public var size:Float;
 	public var alpha:Float;
 	public var color:Int;
-	public var shape:Shape;
 
 	public function new()
 	{
@@ -1039,7 +1079,6 @@ class ClickEffect
 		this.size = 40;
 		this.alpha = 1;
 		this.color = 0x00BFFF;
-		this.shape = null;
 	}
 }
 
@@ -1052,7 +1091,6 @@ class RippleEffect
 	public var y:Float;
 	public var radius:Float;
 	public var alpha:Float;
-	public var shape:Shape;
 
 	public function new()
 	{
@@ -1060,7 +1098,6 @@ class RippleEffect
 		this.y = 0;
 		this.radius = 10;
 		this.alpha = 1.0;
-		this.shape = null;
 	}
 }
 

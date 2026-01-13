@@ -72,6 +72,9 @@ class TouchPad extends MobileInputManager implements IMobileControls
 	public var onButtonDown:FlxTypedSignal<TouchButton->Void> = new FlxTypedSignal<TouchButton->Void>();
 	public var onButtonUp:FlxTypedSignal<TouchButton->Void> = new FlxTypedSignal<TouchButton->Void>();
 
+	// 性能优化：缓存按钮引用，减少 Reflect 使用
+	var _buttonCache:Map<String, TouchButton> = new Map<String, TouchButton>();
+
 	/**
 	 * Create a gamepad.
 	 *
@@ -82,6 +85,9 @@ class TouchPad extends MobileInputManager implements IMobileControls
 	{
 		super();
 
+		// 性能优化：初始化按钮缓存
+		initButtonCache();
+
 		if (DPad != "NONE")
 		{
 			if (!MobileData.dpadModes.exists(DPad))
@@ -89,10 +95,12 @@ class TouchPad extends MobileInputManager implements IMobileControls
 
 			for (buttonData in MobileData.dpadModes.get(DPad).buttons)
 			{
-				Reflect.setField(this, buttonData.button,
-					createButton(buttonData.x, buttonData.y, buttonData.graphic, CoolUtil.colorFromString(buttonData.color),
-						Reflect.getProperty(this, buttonData.button).IDs));
-				add(Reflect.field(this, buttonData.button));
+				var buttonName = buttonData.button;
+				var existingButton = _buttonCache.get(buttonName);
+				var ids = existingButton != null ? existingButton.IDs : [];
+				var newButton = createButton(buttonData.x, buttonData.y, buttonData.graphic, CoolUtil.colorFromString(buttonData.color), ids);
+				setButtonByCache(buttonName, newButton);
+				add(newButton);
 			}
 		}
 
@@ -103,10 +111,12 @@ class TouchPad extends MobileInputManager implements IMobileControls
 
 			for (buttonData in MobileData.actionModes.get(Action).buttons)
 			{
-				Reflect.setField(this, buttonData.button,
-					createButton(buttonData.x, buttonData.y, buttonData.graphic, CoolUtil.colorFromString(buttonData.color),
-						Reflect.getProperty(this, buttonData.button).IDs));
-				add(Reflect.field(this, buttonData.button));
+				var buttonName = buttonData.button;
+				var existingButton = _buttonCache.get(buttonName);
+				var ids = existingButton != null ? existingButton.IDs : [];
+				var newButton = createButton(buttonData.x, buttonData.y, buttonData.graphic, CoolUtil.colorFromString(buttonData.color), ids);
+				setButtonByCache(buttonName, newButton);
+				add(newButton);
 			}
 		}
 
@@ -114,10 +124,13 @@ class TouchPad extends MobileInputManager implements IMobileControls
 		{
 			case SINGLE:
 				add(buttonExtra = createButton(0, FlxG.height - 137, 's', 0xFF0066FF));
+				_buttonCache.set('buttonExtra', buttonExtra);
 				setExtrasPos();
 			case DOUBLE:
 				add(buttonExtra = createButton(0, FlxG.height - 137, 's', 0xFF0066FF));
 				add(buttonExtra2 = createButton(FlxG.width - 132, FlxG.height - 137, 'g', 0xA6FF00));
+				_buttonCache.set('buttonExtra', buttonExtra);
+				_buttonCache.set('buttonExtra2', buttonExtra2);
 				setExtrasPos();
 			case NONE: // nothing
 		}
@@ -135,6 +148,9 @@ class TouchPad extends MobileInputManager implements IMobileControls
 		onButtonUp.destroy();
 		onButtonDown.destroy();
 
+		// 性能优化：清理缓存
+		_buttonCache.clear();
+
 		for (fieldName in Reflect.fields(this))
 		{
 			var field = Reflect.field(this, fieldName);
@@ -143,20 +159,75 @@ class TouchPad extends MobileInputManager implements IMobileControls
 		}
 	}
 
+	/**
+	 * 性能优化：初始化按钮缓存，避免重复使用 Reflect
+	 */
+	private function initButtonCache():Void
+	{
+		// 缓存主要按钮引用
+		_buttonCache.set('buttonLeft', buttonLeft);
+		_buttonCache.set('buttonUp', buttonUp);
+		_buttonCache.set('buttonRight', buttonRight);
+		_buttonCache.set('buttonDown', buttonDown);
+		_buttonCache.set('buttonLeft2', buttonLeft2);
+		_buttonCache.set('buttonUp2', buttonUp2);
+		_buttonCache.set('buttonRight2', buttonRight2);
+		_buttonCache.set('buttonDown2', buttonDown2);
+		_buttonCache.set('buttonA', buttonA);
+		_buttonCache.set('buttonB', buttonB);
+		_buttonCache.set('buttonC', buttonC);
+		_buttonCache.set('buttonD', buttonD);
+		_buttonCache.set('buttonE', buttonE);
+		_buttonCache.set('buttonF', buttonF);
+		_buttonCache.set('buttonG', buttonG);
+		_buttonCache.set('buttonH', buttonH);
+		_buttonCache.set('buttonI', buttonI);
+		_buttonCache.set('buttonJ', buttonJ);
+		_buttonCache.set('buttonK', buttonK);
+		_buttonCache.set('buttonL', buttonL);
+		_buttonCache.set('buttonM', buttonM);
+		_buttonCache.set('buttonN', buttonN);
+		_buttonCache.set('buttonO', buttonO);
+		_buttonCache.set('buttonP', buttonP);
+		_buttonCache.set('buttonQ', buttonQ);
+		_buttonCache.set('buttonR', buttonR);
+		_buttonCache.set('buttonS', buttonS);
+		_buttonCache.set('buttonT', buttonT);
+		_buttonCache.set('buttonU', buttonU);
+		_buttonCache.set('buttonV', buttonV);
+		_buttonCache.set('buttonW', buttonW);
+		_buttonCache.set('buttonX', buttonX);
+		_buttonCache.set('buttonY', buttonY);
+		_buttonCache.set('buttonZ', buttonZ);
+		_buttonCache.set('buttonExtra', buttonExtra);
+		_buttonCache.set('buttonExtra2', buttonExtra2);
+	}
+
+	/**
+	 * 性能优化：通过缓存设置按钮，减少 Reflect 使用
+	 */
+	private function setButtonByCache(buttonName:String, button:TouchButton):Void
+	{
+		Reflect.setField(this, buttonName, button);
+		_buttonCache.set(buttonName, button);
+	}
+
 	public function setExtrasDefaultPos()
 	{
-		var int:Int = 0;
+		var extraButtons:Array<TouchButton> = [
+			buttonExtra,
+			buttonExtra2
+		];
 
 		if (MobileData.save.data.extraData == null)
 			MobileData.save.data.extraData = new Array();
 
-		for (button in Reflect.fields(this))
+		for (i in 0...extraButtons.length)
 		{
-			var field = Reflect.field(this, button);
-			if (button.toLowerCase().contains('extra') && Std.isOfType(field, TouchButton))
+			var button = extraButtons[i];
+			if (button != null)
 			{
-				MobileData.save.data.extraData[int] = FlxPoint.get(field.x, field.y);
-				++int;
+				MobileData.save.data.extraData[i] = FlxPoint.get(button.x, button.y);
 			}
 		}
 		MobileData.save.flush();
@@ -164,21 +235,24 @@ class TouchPad extends MobileInputManager implements IMobileControls
 
 	public function setExtrasPos()
 	{
-		var int:Int = 0;
+		var extraButtons:Array<TouchButton> = [
+			buttonExtra,
+			buttonExtra2
+		];
+
 		if (MobileData.save.data.extraData == null)
 			setExtrasDefaultPos();
 
-		for (button in Reflect.fields(this))
+		for (i in 0...extraButtons.length)
 		{
-			var field = Reflect.field(this, button);
-			if (button.toLowerCase().contains('extra') && Std.isOfType(field, TouchButton))
+			var button = extraButtons[i];
+			if (button != null)
 			{
-				if (MobileData.save.data.extraData.length > int)
+				if (MobileData.save.data.extraData.length <= i)
 					setExtrasDefaultPos();
-				var point = MobileData.save.data.extraData[int];
-				field.x = point.x;
-				field.y = point.y;
-				int++;
+				var point = MobileData.save.data.extraData[i];
+				button.x = point.x;
+				button.y = point.y;
 			}
 		}
 	}

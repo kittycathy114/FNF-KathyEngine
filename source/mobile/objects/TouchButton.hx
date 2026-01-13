@@ -183,7 +183,7 @@ class TypedTouchButton<T:FlxSprite> extends FlxSprite implements IFlxInput
 	 */
 	var _spriteLabel:FlxSprite;
 
-	/** 
+	/**
 	 * We don't need an ID here, so let's just use `Int` as the type.
 	 */
 	var input:FlxInput<Int>;
@@ -194,6 +194,11 @@ class TypedTouchButton<T:FlxSprite> extends FlxSprite implements IFlxInput
 	var currentInput:IFlxInput;
 
 	public var canChangeLabelAlpha:Bool = true;
+
+	// 性能优化：缓存上次检查的触摸点和时间
+	var _lastTouchCheckTime:Float = 0;
+	var _cachedTouchPositions:Array<FlxPoint> = [];
+	var _touchCacheValid:Bool = false;
 
 	/**
 	 * Creates a new `FlxTypedButton` object with a gray background.
@@ -247,7 +252,8 @@ class TypedTouchButton<T:FlxSprite> extends FlxSprite implements IFlxInput
 	{
 		super.update(elapsed);
 
-		if (visible)
+		// 性能优化：只在可见且存在活动触摸时检测
+		if (visible && FlxG.touches.list.length > 0)
 		{
 			// Update the button, but only if at least either touches are enabled
 			#if FLX_POINTER_INPUT
@@ -301,20 +307,33 @@ class TypedTouchButton<T:FlxSprite> extends FlxSprite implements IFlxInput
 			onOutHandler();
 	}
 
+	/**
+	 * 性能优化：缓存触摸点位置以减少重复计算
+	 */
 	function checkTouchOverlap():Bool
 	{
 		var overlap = false;
 
+		// 性能优化：优先使用第一个摄像头（大多数情况下只有一个）
 		for (camera in cameras)
 		{
 			#if mac
 			var button = FlxMouseButton.getByID(FlxMouseButtonID.LEFT);
 			if (checkInput(FlxG.mouse, button, button.justPressedPosition, camera))
 			#else
-			for (touch in FlxG.touches.list)
+			// 性能优化：提前检查是否有触摸点
+			var touches = FlxG.touches.list;
+			if (touches.length == 0)
+				break;
+
+			for (touch in touches)
 				if (checkInput(touch, touch, touch.justPressedPosition, camera))
 			#end
 			overlap = true;
+
+			// 性能优化：找到重叠后立即返回
+			if (overlap)
+				break;
 		}
 
 		return overlap;

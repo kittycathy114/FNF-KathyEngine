@@ -46,6 +46,8 @@ class OptionsState extends MusicBeatState
 	private var itemSpacing:Int = 72; // 减小垂直间距
 	private var startY:Float = 0;
 
+	private var hideSelectors:Bool = false; // 是否隐藏选择器
+
 	private var selectorLeftTargetX:Float = 0;
 	private var selectorLeftTargetY:Float = 0;
 	private var selectorRightTargetX:Float = 0;
@@ -214,9 +216,10 @@ class OptionsState extends MusicBeatState
 			return;
 		}
 
-		// 恢复选择器显示
-		selectorLeft.alpha = FlxMath.lerp(1, selectorLeft.alpha, Math.exp(-elapsed * 10));
-		selectorRight.alpha = FlxMath.lerp(1, selectorRight.alpha, Math.exp(-elapsed * 10));
+		// 根据hideSelectors标志控制选择器显示/隐藏
+		var targetAlpha:Float = hideSelectors ? 0 : 1;
+		selectorLeft.alpha = FlxMath.lerp(targetAlpha, selectorLeft.alpha, Math.exp(-elapsed * 10));
+		selectorRight.alpha = FlxMath.lerp(targetAlpha, selectorRight.alpha, Math.exp(-elapsed * 10));
 
 		// 始终显示鼠标指针
 		FlxG.mouse.visible = true;
@@ -224,10 +227,14 @@ class OptionsState extends MusicBeatState
 		// 仅在允许输入时处理按键
 		if (allowInput) {
 			if (!exiting) {
-				if (controls.UI_UP_P)
+				if (controls.UI_UP_P) {
 					changeSelection(-1);
-				if (controls.UI_DOWN_P)
+					hideSelectors = false; // 键盘输入恢复显示
+				}
+				if (controls.UI_DOWN_P) {
 					changeSelection(1);
+					hideSelectors = false; // 键盘输入恢复显示
+				}
 
 				if (touchPad.buttonC.justPressed || FlxG.keys.justPressed.CONTROL && controls.mobileC)
 				{
@@ -247,9 +254,26 @@ class OptionsState extends MusicBeatState
 					}
 					else MusicBeatState.switchState(new MainMenuState());
 				}
-				else if (controls.ACCEPT) openSelectedSubstate(options[curSelected]);
+				else if (controls.ACCEPT) {
+					openSelectedSubstate(options[curSelected]);
+					hideSelectors = false; // 键盘输入恢复显示
+				}
 			}
 		}
+
+		// --- 移动端虚拟按键检测 ---
+		#if mobile
+		// 检查虚拟按键是否被按下（除了C按钮，它有单独的功能）
+		if (touchPad != null) {
+			var anyButtonPressed = touchPad.buttonUP.pressed || touchPad.buttonDOWN.pressed ||
+			                       touchPad.buttonA.pressed || touchPad.buttonB.pressed;
+			if (anyButtonPressed) {
+				hideSelectors = true; // 虚拟按键按下时隐藏选择器
+			} else if (touchPad.buttonC.justReleased) {
+				// C按钮松开时不隐藏选择器（它有单独的功能）
+			}
+		}
+		#end
 
 		// --- 鼠标拖动与点击选项 ---
 		var mouse:FlxMouse = FlxG.mouse;
@@ -267,6 +291,7 @@ class OptionsState extends MusicBeatState
 			if (curSelected != mouseOverOption) {
 				changeSelection(mouseOverOption - curSelected);
 			}
+			hideSelectors = true; // 点击选项时隐藏选择器
 			// 双击检测
 			var now = FlxG.game.ticks / 1000.0;
 			if (lastClickIndex == mouseOverOption && (now - lastClickTime) < OptionsConfig.DOUBLE_CLICK_THRESHOLD) {

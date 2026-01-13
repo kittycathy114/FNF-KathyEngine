@@ -165,10 +165,26 @@ class BaseOptionsMenu extends MusicBeatSubstate
 			} else {
 				// 单击，BOOL类型切换
 				if (curOption != null && curOption.type == BOOL) {
-					FlxG.sound.play(Paths.sound('scrollMenu'));
-					curOption.setValue((curOption.getValue() == true) ? false : true);
-					curOption.change();
-					reloadCheckboxes();
+					// 检查鼠标是否点击在复选框区域内
+					var checkbox:CheckboxThingie = null;
+					for (cb in checkboxGroup) {
+						if (cb.ID == curSelected) {
+							checkbox = cb;
+							break;
+						}
+					}
+					
+					// 只有在复选框内点击才切换状态
+					if (checkbox != null && 
+						FlxG.mouse.x >= checkbox.x && 
+						FlxG.mouse.x <= checkbox.x + checkbox.width &&
+						FlxG.mouse.y >= checkbox.y && 
+						FlxG.mouse.y <= checkbox.y + checkbox.height) {
+						FlxG.sound.play(Paths.sound('scrollMenu'));
+						curOption.setValue((curOption.getValue() == true) ? false : true);
+						curOption.change();
+						reloadCheckboxes();
+					}
 				}
 			}
 			lastMouseClickTime = now;

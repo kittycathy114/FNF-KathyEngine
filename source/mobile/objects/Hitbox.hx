@@ -52,6 +52,12 @@ class Hitbox extends MobileInputManager implements IMobileControls
 
 	var storedButtonsIDs:Map<String, Array<MobileInputID>> = new Map<String, Array<MobileInputID>>();
 
+	// 性能优化：动画状态缓存
+	var _animatingButtons:Map<TouchButton, Bool> = new Map<TouchButton, Bool>();
+	var _targetAlphas:Map<TouchButton, Float> = new Map<TouchButton, Float>();
+	var _targetLabelAlphas:Map<TouchButton, Float> = new Map<TouchButton, Float>();
+	var _animationSpeed:Float = 0.1; // lerp 速度
+
 	/**
 	 * Create the zone.
 	 */
@@ -112,11 +118,52 @@ class Hitbox extends MobileInputManager implements IMobileControls
 		onButtonUp.destroy();
 		onButtonDown.destroy();
 
+		_animatingButtons.clear();
+		_targetAlphas.clear();
+		_targetLabelAlphas.clear();
+
 		for (fieldName in Reflect.fields(this))
 		{
 			var field = Reflect.field(this, fieldName);
 			if (Std.isOfType(field, TouchButton))
 				Reflect.setField(this, fieldName, FlxDestroyUtil.destroy(field));
+		}
+	}
+
+	/**
+	 * 性能优化：每帧更新动画，替代 FlxTween
+	 */
+	override public function update(elapsed:Float):Void
+	{
+		super.update(elapsed);
+
+		// 使用简单的 lerp 更新动画
+		for (button in _animatingButtons.keys())
+		{
+			if (!button.active || !button.exists)
+				continue;
+
+			if (_animatingButtons.get(button))
+			{
+				var targetAlpha = _targetAlphas.get(button);
+				var targetLabelAlpha = _targetLabelAlphas.get(button);
+
+				// 使用 lerp 平滑过渡
+				var lerpSpeed = _animationSpeed;
+				button.alpha = button.alpha + (targetAlpha - button.alpha) * lerpSpeed;
+
+				if (button.label != null)
+					button.label.alpha = button.label.alpha + (targetLabelAlpha - button.label.alpha) * lerpSpeed;
+
+				// 检查是否接近目标值，如果是则停止动画
+				if (Math.abs(button.alpha - targetAlpha) < 0.001)
+				{
+					button.alpha = targetAlpha;
+					if (button.label != null)
+						button.label.alpha = targetLabelAlpha;
+					_animatingButtons.set(button, false);
+				}
+			}
 		}
 	}
 
@@ -137,49 +184,27 @@ class Hitbox extends MobileInputManager implements IMobileControls
 
 		if (ClientPrefs.data.hitboxType != "Hidden")
 		{
-			var hintTween:FlxTween = null;
-			var hintLaneTween:FlxTween = null;
+			// 性能优化：初始化动画状态
+			_animatingButtons.set(hint, false);
+			_targetAlphas.set(hint, 0.00001);
+			_targetLabelAlphas.set(hint, ClientPrefs.data.controlsAlpha);
 
 			hint.onDown.callback = function()
 			{
 				onButtonDown.dispatch(hint);
-
-				if (hintTween != null)
-					hintTween.cancel();
-
-				if (hintLaneTween != null)
-					hintLaneTween.cancel();
-
-				hintTween = FlxTween.tween(hint, {alpha: ClientPrefs.data.controlsAlpha}, ClientPrefs.data.controlsAlpha / 100, {
-					ease: FlxEase.circInOut,
-					onComplete: (twn:FlxTween) -> hintTween = null
-				});
-
-				hintLaneTween = FlxTween.tween(hint.label, {alpha: 0.00001}, ClientPrefs.data.controlsAlpha / 10, {
-					ease: FlxEase.circInOut,
-					onComplete: (twn:FlxTween) -> hintTween = null
-				});
+				// 性能优化：设置目标 alpha 值，由 update 循环中的 lerp 处理
+				_targetAlphas.set(hint, ClientPrefs.data.controlsAlpha);
+				_targetLabelAlphas.set(hint, 0.00001);
+				_animatingButtons.set(hint, true);
 			}
 
 			hint.onOut.callback = hint.onUp.callback = function()
 			{
 				onButtonUp.dispatch(hint);
-
-				if (hintTween != null)
-					hintTween.cancel();
-
-				if (hintLaneTween != null)
-					hintLaneTween.cancel();
-
-				hintTween = FlxTween.tween(hint, {alpha: 0.00001}, ClientPrefs.data.controlsAlpha / 10, {
-					ease: FlxEase.circInOut,
-					onComplete: (twn:FlxTween) -> hintTween = null
-				});
-
-				hintLaneTween = FlxTween.tween(hint.label, {alpha: ClientPrefs.data.controlsAlpha}, ClientPrefs.data.controlsAlpha / 100, {
-					ease: FlxEase.circInOut,
-					onComplete: (twn:FlxTween) -> hintTween = null
-				});
+				// 性能优化：设置目标 alpha 值，由 update 循环中的 lerp 处理
+				_targetAlphas.set(hint, 0.00001);
+				_targetLabelAlphas.set(hint, ClientPrefs.data.controlsAlpha);
+				_animatingButtons.set(hint, true);
 			}
 		}
 		else
