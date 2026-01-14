@@ -52,6 +52,7 @@ class ResultsScreen extends FlxSubState
 	public var comboText:TextField;
 	public var contText:TextField;
 	public var settingsText:TextField;
+	public var replayText:TextField;
 
 	public var music:FlxSound;
 
@@ -59,6 +60,9 @@ class ResultsScreen extends FlxSubState
 
 	public var ranking:String;
 	public var accuracy:String;
+
+	public var canReplay:Bool = false;	// 是否可以回放
+	public var replayPressed:Bool = false;	// 是否按下了回放键
 
 	override function create()
 	{
@@ -185,8 +189,11 @@ class ResultsScreen extends FlxSubState
 		FlxColor.WHITE,
 		Math.floor(32 * scale)
 	);
-	contText.text = #if mobile 'Touch Screen to continue.' #else 'Press \'ENTER\' to continue.'#end;
+	contText.text = #if mobile 'Touch Screen to continue.' #else 'Press \'ENTER\' to continue or \'F8\' to recap.'#end;
 	overlaySprite.addChild(contText);
+
+	// 检查是否有回放数据
+	canReplay = PlayState.instance.replayData != null && PlayState.instance.replayData.length > 0;
 
 	// 填充 HitGraph 数据（graph 已经添加到 overlaySprite 了）
 		if (PlayState.instance.hitHistory != null && PlayState.instance.hitHistory.length > 0)
@@ -255,6 +262,25 @@ class ResultsScreen extends FlxSubState
 		close(); // 关闭substate
 	}
 
+	// 处理回放逻辑
+	private function handleReplay():Void
+	{
+		trace('STARTING REPLAY...');
+		
+		if (music != null)
+			music.fadeOut(0.3);
+
+		// 设置静态变量，传递回放数据到新的PlayState
+		PlayState.pendingReplayData = PlayState.instance.replayData.copy();
+		PlayState.shouldStartReplay = true;
+
+		// 关闭substate并重新加载PlayState
+		close();
+
+		// 切换到新的PlayState（会自动加载回放数据）
+		LoadingState.loadAndSwitchState(new PlayState());
+	}
+
 	override function update(elapsed:Float)
 	{
 		super.update(elapsed);
@@ -311,10 +337,15 @@ class ResultsScreen extends FlxSubState
 			PlayState.instance.clean();
 		}*/
 
-		// 桌面端：ENTER键
+		// 桌面端：ENTER键继续，R键回放
 		if (FlxG.keys.justPressed.ENTER)
 		{
 			handleContinue();
+		}
+		else if (FlxG.keys.justPressed.F8 && canReplay && !replayPressed)
+		{
+			replayPressed = true;
+			handleReplay();
 		}
 
 		// 移动端：触摸屏幕

@@ -79,6 +79,17 @@ import objects.Bar as Bar;
  * "function eventEarlyTrigger" - Used for making your event start a few MILLISECONDS earlier
  * "function triggerEvent" - Called when the song hits your event's timestamp, this is probably what you were looking for
 **/
+
+// 回放数据类型定义
+typedef ReplayData = {
+	time:Float,				// 按下时间（相对于歌曲开始）
+	key:Int,				// 按下的键（0-3）
+	noteTime:Null<Float>,	// 音符时间（如果是打击音符），null表示空按
+	late:Null<Float>,		// 延迟（ms），正数表示晚，负数表示早
+	judge:String,			// 判定结果（sick/good/bad/shit/miss/ghost/release）
+	releaseTime:Null<Float>	// 按键抬起的绝对时间，null表示未抬起
+}
+
 class PlayState extends MusicBeatState
 {
 	//杂七杂八的新特性
@@ -95,6 +106,20 @@ class PlayState extends MusicBeatState
 
 	// 存储打击数据供 HitGraph 使用 [diff, judge, time]
 	public var hitHistory:Array<Array<Dynamic>> = [];
+	
+	// 回放系统
+	public var replayData:Array<ReplayData> = [];	// 回放数据
+	public var isReplaying:Bool = false;			// 是否正在回放
+	public var currentReplayIndex:Int = 0;			// 当前回放索引
+	var replayHeldKeys:Array<Bool> = [false, false, false, false];	// 回放时按下的键状态（用于长按）
+	var keyPressIndices:Array<Int> = [-1, -1, -1, -1];	// 记录每个按键最后一次按下对应的replayData索引
+	var replayNoteDelays:Array<Array<{strumTime:Float, late:Float}>> = [[], [], [], []];	// 存储每个键对应的音符延迟
+	var currentNoteDelayOverride:Null<Float> = null;	// 当前音符的延迟覆盖值（replay模式使用）
+	
+	// 静态变量用于传递回放数据
+	public static var pendingReplayData:Array<ReplayData> = null;	// 待加载的回放数据
+	public static var shouldStartReplay:Bool = false;			// 是否应该启动回放
+	
 	var dancingLeft:Bool = false;
 	var icondancingLeft:Bool = false;
 	public var iconBopEnabled:Bool = true;
@@ -291,6 +316,7 @@ class PlayState extends MusicBeatState
 
 	public var botplaySine:Float = 0;
 	public var botplayTxt:FlxText;
+	public var replayTxt:FlxText;
 	public var watermarkText:FlxText;
 	public var ratingCounter:FlxText;
 
@@ -401,6 +427,39 @@ class PlayState extends MusicBeatState
 			LanguageBasic.reloadPhrases();
 		}
 		nextReloadAll = false;
+
+		// 检查是否有待加载的回放数据
+		if(shouldStartReplay && pendingReplayData != null)
+		{
+			isReplaying = true;
+			replayData = pendingReplayData;
+			currentReplayIndex = 0;
+			shouldStartReplay = false;
+			pendingReplayData = null;
+			// 重置按键状态
+			replayHeldKeys = [false, false, false, false];
+			keyPressIndices = [-1, -1, -1, -1];
+			// 初始化延迟存储数组
+			replayNoteDelays = [[], [], [], []];
+			// 预填充延迟数据，以便在 popUpScore 中快速查找
+			for(action in replayData)
+			{
+				if(action.noteTime != null && action.late != null && action.key >= 0 && action.key < 4)
+				{
+					// 存储延迟值 {strumTime:Float, late:Float}
+					replayNoteDelays[action.key].push({strumTime: action.noteTime, late: action.late});
+				}
+			}
+		}
+		else
+		{
+			isReplaying = false;
+			replayData = [];
+			currentReplayIndex = 0;
+			replayHeldKeys = [false, false, false, false];
+			keyPressIndices = [-1, -1, -1, -1];
+			replayNoteDelays = [[], [], [], []];
+		}
 
 		startCallback = startCountdown;
 		endCallback = endSong;
@@ -771,6 +830,14 @@ class PlayState extends MusicBeatState
 		botplayTxt.borderSize = ClientPrefs.data.botplayStyle == 'Kade' ? 2 : 1.25;
 		botplayTxt.visible = cpuControlled;
 		uiGroup.add(botplayTxt);
+
+		// 创建回放模式指示文本
+		replayTxt = new FlxText(400, ClientPrefs.data.botplayStyle == 'Kade' ? healthBar.y - 120 : healthBar.y - 90, FlxG.width - 800, "RECAP", 32);
+		replayTxt.setFormat(Paths.font("vcr.ttf"), 37, 0xFF00FF00, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		replayTxt.scrollFactor.set();
+		replayTxt.borderSize = 2;
+		replayTxt.visible = isReplaying;
+		uiGroup.add(replayTxt);
 		if(ClientPrefs.data.downScroll)
 			botplayTxt.y = ClientPrefs.data.botplayStyle == 'Kade' ? healthBar.y + 120 : healthBar.y + 70;
 
@@ -1963,6 +2030,122 @@ class PlayState extends MusicBeatState
 
 	override public function update(elapsed:Float)
 	{
+		// 回放模式下的自动按键逻辑
+		if(isReplaying && startedCountdown && !paused && !endingSong)
+		{
+			// 检查是否需要抬起按键
+			for (i in 0...replayData.length)
+			{
+				if(i < currentReplayIndex)
+				{
+					var action = replayData[i];
+					// 检查是否有releaseTime且已到时间
+					if(action.releaseTime != null && Conductor.songPosition >= action.releaseTime)
+					{
+						// 抬起按键
+						replayHeldKeys[action.key] = false;
+						action.releaseTime = null; // 标记为已处理
+						
+						// 播放static动画
+						var spr:StrumNote = playerStrums.members[action.key];
+						if(spr != null)
+						{
+							spr.playAnim('static');
+							spr.resetAnim = 0;
+						}
+					}
+				}
+				else
+				{
+					// 只检查到当前索引之前的动作
+					break;
+				}
+			}
+			
+			// 检查长按音符，保持按键按下状态
+			if(guitarHeroSustains)
+			{
+				var holdArray:Array<Bool> = [];
+				for (i in 0...keysArray.length)
+					holdArray.push(replayHeldKeys[i]);
+
+				if(notes.length > 0) {
+					for (n in notes) {
+						var canHit:Bool = (n != null && !strumsBlocked[n.noteData] && n.canBeHit
+							&& n.mustPress && !n.tooLate && !n.wasGoodHit && !n.blockHit);
+
+						if (canHit && n.isSustainNote) {
+							var released:Bool = !replayHeldKeys[n.noteData];
+							if (!released && n.parent != null && n.parent.wasGoodHit) {
+								// 持续按下长按音符
+								goodNoteHit(n);
+							}
+						}
+					}
+				}
+			}
+			
+			while(currentReplayIndex < replayData.length)
+			{
+				var replayAction = replayData[currentReplayIndex];
+				// 检查是否到了按下时间
+				if(Conductor.songPosition >= replayAction.time)
+				{
+					// 根据回放数据执行相应的按键
+					if(replayAction.judge == 'ghost')
+					{
+						// 空按 - 播放pressed动画
+						var spr:StrumNote = playerStrums.members[replayAction.key];
+						if(spr != null && strumsBlocked[replayAction.key] != true && spr.animation.curAnim.name != 'confirm')
+						{
+							spr.playAnim('pressed');
+							spr.resetAnim = 0;
+						}
+						noteMissPress(replayAction.key);
+					}
+					else if(replayAction.judge == 'miss')
+					{
+						// Miss，不需要按键
+					}
+					else
+					{
+						// 标记按键为按下状态
+						replayHeldKeys[replayAction.key] = true;
+						
+						// 播放pressed动画（会在goodNoteHit中被confirm覆盖）
+						var spr:StrumNote = playerStrums.members[replayAction.key];
+						if(spr != null && strumsBlocked[replayAction.key] != true)
+						{
+							spr.playAnim('pressed');
+							spr.resetAnim = 0;
+						}
+						
+						// 正常按键，找到对应的音符并打击
+						var targetNotes:Array<Note> = notes.members.filter(function(n:Note):Bool {
+							// 使用小容差（5ms）来匹配音符，避免浮点数精度问题
+							return n != null && n.mustPress && n.noteData == replayAction.key && !n.wasGoodHit
+								&& Math.abs(n.strumTime - replayAction.noteTime) < 5;
+						});
+						for(note in targetNotes)
+						{
+							// 设置延迟覆盖值，确保使用原始记录的延迟
+							if(replayAction.late != null)
+							{
+								currentNoteDelayOverride = replayAction.late;
+							}
+							goodNoteHit(note);
+						}
+					}
+					currentReplayIndex++;
+				}
+				else
+				{
+					// 还没到时间，跳出循环
+					break;
+				}
+			}
+		}
+		
 		if(!inCutscene && !paused && !freezeCamera) {
 			FlxG.camera.followLerp = 0.04 * cameraSpeed * playbackRate;
 			var idleAnim:Bool = (boyfriend.getAnimationName().startsWith('idle') || boyfriend.getAnimationName().startsWith('danceLeft') || boyfriend.getAnimationName().startsWith('danceRight'));
@@ -1992,6 +2175,16 @@ class PlayState extends MusicBeatState
 			botplaySine += 180 * elapsed;
 			botplayTxt.alpha = 1 - Math.sin((Math.PI * botplaySine) / 180);
 		} else botplayTxt.alpha = 1;
+
+		// 更新回放文本可见性
+		if(replayTxt != null) {
+			replayTxt.visible = isReplaying;
+			if(isReplaying && ClientPrefs.data.botplayStyle == 'Kade') {
+				replayTxt.y = healthBar.y + 120;
+			} else if(isReplaying) {
+				replayTxt.y = healthBar.y + 70;
+			}
+		}
 
 		if (controls.PAUSE #if android || FlxG.android.justReleased.BACK #end && startedCountdown && canPause)
 		{
@@ -2605,6 +2798,9 @@ class PlayState extends MusicBeatState
 	public var transitioning = false;
 	public function endSong()
 	{
+		// 重置回放按键状态
+		replayHeldKeys = [false, false, false, false];
+		
 		mobileControls.instance.visible = #if !android touchPad.visible = #end false;
 		//Should kill you if you tried to cheat
 		if(!startingSong)
@@ -2766,6 +2962,27 @@ class PlayState extends MusicBeatState
 	{
 		// 移除Math.abs()来允许显示负值
 		var noteDiff:Float = note.strumTime - Conductor.songPosition + ClientPrefs.data.ratingOffset;
+
+		// 在回放模式下，优先使用延迟覆盖值（最高优先级）
+		if(isReplaying && currentNoteDelayOverride != null)
+		{
+			noteDiff = currentNoteDelayOverride;
+			currentNoteDelayOverride = null; // 使用后清空
+		}
+		// 备用方案：从预填充的延迟数组中查找对应音符的记录
+		else if(isReplaying && note.noteData >= 0 && note.noteData < 4)
+		{
+			for(delayData in replayNoteDelays[note.noteData])
+			{
+				if(delayData.strumTime == note.strumTime)
+				{
+					// 找到匹配的记录，使用原始记录的延迟值
+					noteDiff = delayData.late;
+					break;
+				}
+			}
+		}
+
 		allNotesMs += noteDiff;
 		averageMs = allNotesMs/songHits;
 
@@ -2776,6 +2993,19 @@ class PlayState extends MusicBeatState
 			if(!note.ratingDisabled)
 			{
 				hitHistory.push([noteDiff, daRating.name, note.strumTime]);
+				
+				// 记录回放数据（仅在非回放模式下）
+				if(!isReplaying)
+				{
+					replayData.push({
+						time: Conductor.songPosition,
+						key: note.noteData,
+						noteTime: note.strumTime,
+						late: noteDiff,
+						judge: daRating.name,
+						releaseTime: null
+					});
+				}
 			}
 		}
 
@@ -3111,10 +3341,14 @@ class PlayState extends MusicBeatState
 
 	private function keyPressed(key:Int)
 	{
-		if(cpuControlled || paused || inCutscene || key < 0 || key >= playerStrums.length || !generatedMusic || endingSong || boyfriend.stunned) return;
+		if(cpuControlled || paused || inCutscene || key < 0 || key >= playerStrums.length || !generatedMusic || endingSong || boyfriend.stunned || isReplaying) return;
 
 		var ret:Dynamic = callOnScripts('onKeyPressPre', [key]);
 		if(ret == LuaUtils.Function_Stop) return;
+
+		// 记录按键按下的索引（用于后续记录抬起动作）
+		if(!isReplaying && key >= 0 && key < 4)
+			keyPressIndices[key] = replayData.length;
 
 		// more accurate hit time for the ratings?
 		//判定修改（？）
@@ -3191,10 +3425,21 @@ class PlayState extends MusicBeatState
 
 	private function keyReleased(key:Int)
 	{
-		if(cpuControlled || !startedCountdown || paused || key < 0 || key >= playerStrums.length) return;
+		if(cpuControlled || !startedCountdown || paused || key < 0 || key >= playerStrums.length || isReplaying) return;
 
 		var ret:Dynamic = callOnScripts('onKeyReleasePre', [key]);
 		if(ret == LuaUtils.Function_Stop) return;
+
+		// 记录按键抬起动作
+		if(!isReplaying && key >= 0 && key < 4 && keyPressIndices[key] >= 0)
+		{
+			// 更新对应按下记录的抬起时间
+			if(keyPressIndices[key] < replayData.length)
+			{
+				replayData[keyPressIndices[key]].releaseTime = Conductor.songPosition;
+			}
+			keyPressIndices[key] = -1;
+		}
 
 		var spr:StrumNote = playerStrums.members[key];
 		if(spr != null)
@@ -3249,11 +3494,21 @@ class PlayState extends MusicBeatState
 		var holdArray:Array<Bool> = [];
 		var pressArray:Array<Bool> = [];
 		var releaseArray:Array<Bool> = [];
-		for (key in keysArray)
+		for (i in 0...keysArray.length)
 		{
-			holdArray.push(controls.pressed(key));
-			pressArray.push(controls.justPressed(key));
-			releaseArray.push(controls.justReleased(key));
+			// 在回放模式下使用replayHeldKeys，否则使用controls.pressed
+			if(isReplaying)
+			{
+				holdArray.push(replayHeldKeys[i]);
+				pressArray.push(false); // 回放模式下不使用justPressed
+				releaseArray.push(false); // 回放模式下不使用justReleased
+			}
+			else
+			{
+				holdArray.push(controls.pressed(keysArray[i]));
+				pressArray.push(controls.justPressed(keysArray[i]));
+				releaseArray.push(controls.justReleased(keysArray[i]));
+			}
 		}
 
 		// TO DO: Find a better way to handle controller inputs, this should work for now
@@ -3297,6 +3552,19 @@ class PlayState extends MusicBeatState
 	}
 
 	function noteMiss(daNote:Note):Void { //You didn't hit the key and let it go offscreen, also used by Hurt Notes
+		// 记录回放数据（仅在非回放模式下）
+		if(!isReplaying && daNote.mustPress && !daNote.isSustainNote)
+		{
+			replayData.push({
+				time: Conductor.songPosition,
+				key: daNote.noteData,
+				noteTime: daNote.strumTime,
+				late: null,
+				judge: 'miss',
+				releaseTime: null
+			});
+		}
+		
 		//Dupe note remove
 		notes.forEachAlive(function(note:Note) {
 			if (daNote != note && daNote.mustPress && daNote.noteData == note.noteData && daNote.isSustainNote == note.isSustainNote && Math.abs(daNote.strumTime - note.strumTime) < 1)
@@ -3312,6 +3580,19 @@ class PlayState extends MusicBeatState
 	function noteMissPress(direction:Int = 1):Void //You pressed a key when there was no notes to press for this key
 	{
 		if(ClientPrefs.data.ghostTapping) return; //fuck it
+		
+		// 记录回放数据（仅在非回放模式下）
+		if(!isReplaying)
+		{
+			replayData.push({
+				time: Conductor.songPosition,
+				key: direction,
+				noteTime: null,
+				late: null,
+				judge: 'ghost',
+				releaseTime: null
+			});
+		}
 
 		noteMissCommon(direction);
 		FlxG.sound.play(Paths.soundRandom('missnote', 1, 3), FlxG.random.float(0.1, 0.2));

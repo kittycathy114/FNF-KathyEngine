@@ -106,8 +106,8 @@ class HitGraph extends Sprite
 		minValue = -maxWindow;
 		maxValue = maxWindow;
 
-		var early = createTextField(10, 10, FlxColor.WHITE, 12);
-		var late = createTextField(10, _height - 20, FlxColor.WHITE, 12);
+		var early = createTextField(10, 10, FlxColor.WHITE, 20);
+		var late = createTextField(10, _height - 20, FlxColor.WHITE, 20);
 
 		early.text = "Early (" + -maxWindow + "ms)";
 		late.text = "Late (" + maxWindow + "ms)";
