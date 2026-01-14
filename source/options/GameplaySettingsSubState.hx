@@ -158,7 +158,7 @@ class GameplaySettingsSubState extends BaseOptionsMenu
 			FLOAT);
 		option.scrollSpeed = 5;
 		option.minValue = 2;
-		option.maxValue = 10;
+		option.maxValue = 15;
 		option.changeValue = 0.1;
 		addOption(option);
 
