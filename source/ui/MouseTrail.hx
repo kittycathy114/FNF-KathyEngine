@@ -106,6 +106,10 @@ class MouseTrail extends Sprite
 	private var maxRippleEffects:Int = 4; // 桌面端最多4个光圈效果（与点击效果一致）
 	#end
 
+	// 高分屏性能优化配置
+	private var isHighDPI:Bool = false;
+	private var effectiveDPIScale:Float = 1.0; // 有效的 DPI 缩放（ capped at 1.5 for performance）
+
 	public function new()
 	{
 		super();
@@ -166,6 +170,8 @@ class MouseTrail extends Sprite
 	 */
 	private function onStageResize(e:Event):Void
 	{
+		// 重新计算 DPI 缩放和屏幕尺寸缩放
+		calculateDPIScale();
 		calculateScreenScale();
 
 		// 重新创建位图以适应新尺寸
@@ -209,6 +215,51 @@ class MouseTrail extends Sprite
 				dpiScale = 1.0;
 			else if (dpiScale > 3.0)
 				dpiScale = 3.0;
+
+			// 检测高分屏（DPI > 1.25）
+			// 常见高分屏：1.25, 1.5, 1.75, 2.0, 2.5, 3.0
+			isHighDPI = dpiScale > 1.25;
+
+			// 高分屏性能优化：限制有效的 DPI 缩放比例
+			// 在高分屏上，限制最大 DPI 缩放为 1.5，避免效果过大影响性能
+			// 注意：只用于效果大小计算，不影响实际 DPI 感知
+			if (isHighDPI)
+			{
+				effectiveDPIScale = Math.min(dpiScale, 1.5);
+			}
+			else
+			{
+				effectiveDPIScale = dpiScale;
+			}
+
+			// 根据是否为高分屏，调整性能优化参数
+			if (isHighDPI)
+			{
+				// 高分屏模式：更激进的性能优化
+				#if mobile
+				updateInterval = 3; // 手机端每3帧更新一次
+				#else
+				updateInterval = 2; // 桌面端每2帧更新一次
+				#end
+				maxClickEffects = 2; // 最多2个点击效果
+				maxRippleEffects = 2; // 最多2个光圈效果
+				glowEnabled = false; // 禁用发光效果以减少滤镜计算
+				glowAlpha = 0.4;
+				glowBlur = 10.0;
+				glowStrength = 2;
+			}
+			else
+			{
+				// 普通屏幕模式：标准性能参数
+				#if mobile
+				updateInterval = 2; // 手机端每2帧更新一次
+				#else
+				updateInterval = 1; // 桌面端每帧更新
+				#end
+				maxClickEffects = 4; // 桌面端最多4个点击效果
+				maxRippleEffects = 4; // 桌面端最多4个光圈效果
+				// 注意：不在这里重置 glowEnabled 等参数，因为它们可能在运行时被用户修改
+			}
 
 			// 计算基于屏幕尺寸的缩放因子
 			// 使用基准分辨率 1280x720 进行缩放
@@ -451,10 +502,14 @@ class MouseTrail extends Sprite
 		clickBitmapData.fillRect(clickBitmapData.rect, 0x00000000);
 		rippleBitmapData.fillRect(rippleBitmapData.rect, 0x00000000);
 
+		// 高分屏优化：提高透明度阈值，跳过更多微弱的效果
+		var minAlpha:Float = isHighDPI ? 0.15 : 0.05;
+		var minSize:Float = isHighDPI ? 2.0 : 1.0;
+
 		// 渲染拖尾粒子
 		for (particle in particles)
 		{
-			if (particle.alpha >= 0.05 && particle.size >= 1)
+			if (particle.alpha >= minAlpha && particle.size >= minSize)
 			{
 				renderMatrix.identity();
 				renderMatrix.translate(particle.x - particle.size / 2, particle.y - particle.size / 2);
@@ -465,7 +520,7 @@ class MouseTrail extends Sprite
 		// 渲染点击效果
 		for (effect in clickEffects)
 		{
-			if (effect.alpha >= 0.05 && effect.size >= 1)
+			if (effect.alpha >= minAlpha && effect.size >= minSize)
 			{
 				renderMatrix.identity();
 				renderMatrix.translate(effect.x - effect.size / 2, effect.y - effect.size / 2);
@@ -476,7 +531,7 @@ class MouseTrail extends Sprite
 		// 渲染光圈效果
 		for (ripple in rippleEffects)
 		{
-			if (ripple.alpha >= 0.05 && ripple.radius >= 1)
+			if (ripple.alpha >= minAlpha && ripple.radius >= minSize)
 			{
 				renderMatrix.identity();
 				renderMatrix.translate(ripple.x - ripple.radius, ripple.y - ripple.radius);
@@ -484,19 +539,29 @@ class MouseTrail extends Sprite
 			}
 		}
 
-		// 应用滤镜
-		var glow:GlowFilter = createGlowFilter();
-		if (glow != null)
-		{
-			trailBitmap.filters = [glow];
-			clickBitmap.filters = [glow];
-			rippleBitmap.filters = [glow];
-		}
-		else
+		// 高分屏优化：禁用滤镜以减少 GPU 计算
+		if (isHighDPI)
 		{
 			trailBitmap.filters = [];
 			clickBitmap.filters = [];
 			rippleBitmap.filters = [];
+		}
+		else
+		{
+			// 应用滤镜
+			var glow:GlowFilter = createGlowFilter();
+			if (glow != null)
+			{
+				trailBitmap.filters = [glow];
+				clickBitmap.filters = [glow];
+				rippleBitmap.filters = [glow];
+			}
+			else
+			{
+				trailBitmap.filters = [];
+				clickBitmap.filters = [];
+				rippleBitmap.filters = [];
+			}
 		}
 	}
 
@@ -575,8 +640,15 @@ class MouseTrail extends Sprite
 		}
 
 		// 根据 DPI 缩放、屏幕尺寸和用户设置调整粒子大小
-		var combinedScale:Float = dpiScale * screenScale * userScale;
+		// 高分屏优化：使用 effectiveDPIScale 限制最大缩放比例
+		var combinedScale:Float = effectiveDPIScale * screenScale * userScale;
 		var scaledSize:Float = trailSize * combinedScale;
+
+		// 高分屏额外优化：限制最大粒子大小，避免过大
+		if (isHighDPI)
+		{
+			scaledSize = Math.min(scaledSize, trailSize * 2.0);
+		}
 
 		// 创建新粒子
 		var particle:TrailParticle = new TrailParticle();
@@ -625,7 +697,8 @@ class MouseTrail extends Sprite
 		}
 
 		// 根据 DPI 缩放、屏幕尺寸和用户设置调整效果大小
-		var combinedScale:Float = dpiScale * screenScale * userScale;
+		// 高分屏优化：使用 effectiveDPIScale 限制最大缩放比例
+		var combinedScale:Float = effectiveDPIScale * screenScale * userScale;
 		var effect:ClickEffect = new ClickEffect();
 		effect.x = x;
 		effect.y = y;
@@ -672,7 +745,8 @@ class MouseTrail extends Sprite
 		}
 
 		// 根据 DPI 缩放、屏幕尺寸和用户设置调整效果大小
-		var combinedScale:Float = dpiScale * screenScale * userScale;
+		// 高分屏优化：使用 effectiveDPIScale 限制最大缩放比例
+		var combinedScale:Float = effectiveDPIScale * screenScale * userScale;
 		var ripple:RippleEffect = new RippleEffect();
 		ripple.x = x;
 		ripple.y = y;
@@ -687,7 +761,7 @@ class MouseTrail extends Sprite
 	 */
 	private function updateRippleEffects():Void
 	{
-		var combinedScale:Float = dpiScale * screenScale * userScale;
+		var combinedScale:Float = effectiveDPIScale * screenScale * userScale;
 		var i:Int = rippleEffects.length - 1;
 		while (i >= 0)
 		{
@@ -939,15 +1013,36 @@ class MouseTrail extends Sprite
 	public function setDPIScale(scale:Float):Void
 	{
 		dpiScale = Math.max(1.0, Math.min(3.0, scale));
+		// 重新计算有效的 DPI 缩放
+		effectiveDPIScale = isHighDPI ? Math.min(dpiScale, 1.5) : dpiScale;
 	}
 
 	/**
-	 * 获取当前 DPI 缩放比例
+	 * 获取当前 DPI 缩放比例（实际系统 DPI）
 	 * @return 当前 DPI 缩放比例
 	 */
 	public function getDPIScale():Float
 	{
 		return dpiScale;
+	}
+
+	/**
+	 * 获取有效的 DPI 缩放比例（用于效果大小计算）
+	 * 在高分屏上，此值会被限制为最大 1.5 以提升性能
+	 * @return 有效的 DPI 缩放比例
+	 */
+	public function getEffectiveDPIScale():Float
+	{
+		return effectiveDPIScale;
+	}
+
+	/**
+	 * 检测是否为高分屏（DPI > 1.25）
+	 * @return true 如果是高分屏
+	 */
+	public function checkHighDPI():Bool
+	{
+		return isHighDPI;
 	}
 
 	/**
@@ -972,11 +1067,12 @@ class MouseTrail extends Sprite
 
 	/**
 	 * 获取组合缩放因子（DPI × 屏幕尺寸 × 用户设置）
+	 * 注意：此方法使用 effectiveDPIScale（用于效果大小计算）
 	 * @return 组合缩放因子
 	 */
 	public function getCombinedScale():Float
 	{
-		return dpiScale * screenScale * userScale;
+		return effectiveDPIScale * screenScale * userScale;
 	}
 
 	/**
