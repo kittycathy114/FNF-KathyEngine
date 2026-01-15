@@ -151,8 +151,6 @@ import states.TitleState;
 	public var enableGameLog:Bool = false; // 启用游戏内日志显示（按F3切换）
 	public var mouseTrailSize:Float = 1.0; // 鼠标拖尾效果大小比例（1.0 = 100%）
 	public var mouseTrailEnabled:Bool = true; // 是否启用鼠标拖尾效果（PC和手机都有效）
-	public var enhancedBotplay:Bool = false;
-	public var enhancedBotplayTimer:Float = 40;
 
 }
 

@@ -371,24 +371,6 @@ class ExtraGameplaySettingSubState extends BaseOptionsMenu
 		};
 		addOption(option);
 
-		option = new Option('enhancedBotplay',
-			Language.get("enhanced_botplay_desc"),
-			'enhancedBotplay',
-			BOOL);
-		addOption(option);
-
-		option = new Option('enhancedBotplayTimer',
-			Language.get("enhanced_botplay_timer_desc"),
-			'enhancedBotplayTimer',
-			FLOAT);
-		option.displayFormat = '%v X';
-		option.scrollSpeed = 2;
-		option.minValue = 0;
-		option.maxValue = 166;
-		option.changeValue = 0.5;
-		option.decimals = 1;
-		addOption(option);
-
 		#if !mobile
 		option = new Option('Mods Import',
 			Language.get("mods_import_desc"),
