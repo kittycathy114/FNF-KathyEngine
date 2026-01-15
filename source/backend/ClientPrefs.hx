@@ -139,6 +139,7 @@ import states.TitleState;
 	public var showNPS:Bool = true; // Show NPS in the HUD
 	public var showResultScreen:Bool = true; // Show the result screen after finishing a song
 	public var comboSprDisplay:Bool = false; //据说这是官方废稿，我不确定
+	public var ratingFallStyle:String = "Legacy"; // 禁用Combo Stacking时的跳动风格：Legacy = 向下速度，MintRhythm = 向下移动一段距离
 	
 	public var backgroundVolume:Bool = true; // 是否启用后台降音
 	public var backgroundVolumeLevel:Float = 0.2; // 后台音量级别
@@ -150,6 +151,9 @@ import states.TitleState;
 	public var enableGameLog:Bool = false; // 启用游戏内日志显示（按F3切换）
 	public var mouseTrailSize:Float = 1.0; // 鼠标拖尾效果大小比例（1.0 = 100%）
 	public var mouseTrailEnabled:Bool = true; // 是否启用鼠标拖尾效果（PC和手机都有效）
+	public var enhancedBotplay:Bool = false;
+	public var enhancedBotplayTimer:Float = 40;
+
 }
 
 class ClientPrefs {

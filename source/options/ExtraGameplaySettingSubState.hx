@@ -45,24 +45,12 @@ class ExtraGameplaySettingSubState extends BaseOptionsMenu
 			Language.get("rating_bounce_desc"),
 			'ratbounce',
 			BOOL);
-		option.onChange = function() {
-			if (ClientPrefs.data.ratbounce && !ClientPrefs.data.comboStacking) {
-				ClientPrefs.data.ratbounce = false;
-				showError(Language.get("ratbounce_combo_error"));
-			}
-		};
 		addOption(option);
 
 		option = new Option('Extra-Rating Bounce',
 			Language.get("exrating_bounce_desc"),
 			'exratbounce',
 			BOOL);
-		option.onChange = function() {
-			if (ClientPrefs.data.exratbounce && !ClientPrefs.data.comboStacking) {
-				ClientPrefs.data.exratbounce = false;
-				showError(Language.get("exratbounce_combo_error"));
-			}
-		};
 		addOption(option);
 
 		option = new Option('Remove Perfect! Note Judgement',
@@ -123,6 +111,13 @@ class ExtraGameplaySettingSubState extends BaseOptionsMenu
 			Language.get("gameplay_combospr_desc"),
 			'comboSprDisplay',
 			BOOL);
+		addOption(option);
+
+		option = new Option('Rating Fall Style',
+			Language.get("rating_fall_style_desc"),
+			'ratingFallStyle',
+			STRING,
+			['Simple', 'Legacy', 'MintRhythm', 'MintRhythm(Legacy)']);
 		addOption(option);
 
 		option = new Option('Show Event Information',
@@ -374,6 +369,24 @@ class ExtraGameplaySettingSubState extends BaseOptionsMenu
 				parentState.refreshTexts();
 			}
 		};
+		addOption(option);
+
+		option = new Option('enhancedBotplay',
+			Language.get("enhanced_botplay_desc"),
+			'enhancedBotplay',
+			BOOL);
+		addOption(option);
+
+		option = new Option('enhancedBotplayTimer',
+			Language.get("enhanced_botplay_timer_desc"),
+			'enhancedBotplayTimer',
+			FLOAT);
+		option.displayFormat = '%v X';
+		option.scrollSpeed = 2;
+		option.minValue = 0;
+		option.maxValue = 166;
+		option.changeValue = 0.5;
+		option.decimals = 1;
 		addOption(option);
 
 		#if !mobile

@@ -823,7 +823,7 @@ class PlayState extends MusicBeatState
 		}
 		uiGroup.add(scoreTxt);
 
-		botplayTxt = new FlxText(400, ClientPrefs.data.botplayStyle == 'Kade' ? healthBar.y - 120 : healthBar.y - 90, FlxG.width - 800, ClientPrefs.data.botplayStyle == 'Kade' ? "BOTPLAY" : 'AUTOPLAY', 32);
+		botplayTxt = new FlxText(400, ClientPrefs.data.botplayStyle == 'Kade' ? healthBar.y - 120 : healthBar.y - 90, FlxG.width - 800, "BOTPLAY", 32);
 		//botplayTxt = new FlxText(400, healthBar.y - 90, FlxG.width - 800, LanguageBasic.getPhrase("Botplay").toUpperCase(), 32);
 		botplayTxt.setFormat(Paths.font("vcr.ttf"), ClientPrefs.data.botplayStyle == 'Kade' ? 37 : 32, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		botplayTxt.scrollFactor.set();
@@ -836,6 +836,7 @@ class PlayState extends MusicBeatState
 		replayTxt.setFormat(Paths.font("vcr.ttf"), 37, 0xFF00FF00, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		replayTxt.scrollFactor.set();
 		replayTxt.borderSize = 2;
+		replayTxt.color = FlxColor.fromRGB(boyfriend.healthColorArray[0], boyfriend.healthColorArray[1], boyfriend.healthColorArray[2]);
 		replayTxt.visible = isReplaying;
 		uiGroup.add(replayTxt);
 		if(ClientPrefs.data.downScroll)
@@ -2033,32 +2034,24 @@ class PlayState extends MusicBeatState
 		// 回放模式下的自动按键逻辑
 		if(isReplaying && startedCountdown && !paused && !endingSong)
 		{
-			// 检查是否需要抬起按键
-			for (i in 0...replayData.length)
+			// 检查是否需要抬起按键（检查当前索引及之前的所有动作）
+			for (i in 0...currentReplayIndex)
 			{
-				if(i < currentReplayIndex)
+				var action = replayData[i];
+				// 检查是否有releaseTime且已到时间（ghost操作需要至少50ms的延迟）
+				if(action.releaseTime != null && Conductor.songPosition >= action.releaseTime)
 				{
-					var action = replayData[i];
-					// 检查是否有releaseTime且已到时间
-					if(action.releaseTime != null && Conductor.songPosition >= action.releaseTime)
+					// 抬起按键
+					replayHeldKeys[action.key] = false;
+					action.releaseTime = null; // 标记为已处理
+
+					// 播放static动画
+					var spr:StrumNote = playerStrums.members[action.key];
+					if(spr != null)
 					{
-						// 抬起按键
-						replayHeldKeys[action.key] = false;
-						action.releaseTime = null; // 标记为已处理
-						
-						// 播放static动画
-						var spr:StrumNote = playerStrums.members[action.key];
-						if(spr != null)
-						{
-							spr.playAnim('static');
-							spr.resetAnim = 0;
-						}
+						spr.playAnim('static');
+						spr.resetAnim = 0;
 					}
-				}
-				else
-				{
-					// 只检查到当前索引之前的动作
-					break;
 				}
 			}
 			
@@ -2094,14 +2087,32 @@ class PlayState extends MusicBeatState
 					// 根据回放数据执行相应的按键
 					if(replayAction.judge == 'ghost')
 					{
+						// 标记按键为按下状态
+						replayHeldKeys[replayAction.key] = true;
+
 						// 空按 - 播放pressed动画
 						var spr:StrumNote = playerStrums.members[replayAction.key];
 						if(spr != null && strumsBlocked[replayAction.key] != true && spr.animation.curAnim.name != 'confirm')
 						{
 							spr.playAnim('pressed');
-							spr.resetAnim = 0;
+							spr.resetAnim = 0; // 不自动重置，由按键释放时重置
 						}
-						noteMissPress(replayAction.key);
+
+						// 根据当前的ghostTapping设置决定是否调用noteMissPress和onGhostTap
+						if(ClientPrefs.data.ghostTapping)
+						{
+							callOnScripts('onGhostTap', [replayAction.key]);
+						}
+						else
+						{
+							noteMissPress(replayAction.key);
+						}
+
+						// 调用onKeyPress回调（与正常模式保持一致）
+						callOnScripts('onKeyPress', [replayAction.key]);
+
+						// 更新keysPressed数组（与正常模式保持一致）
+						if(!keysPressed.contains(replayAction.key)) keysPressed.push(replayAction.key);
 					}
 					else if(replayAction.judge == 'miss')
 					{
@@ -3144,24 +3155,41 @@ class PlayState extends MusicBeatState
 			}
 			else
 			{
-				// 新版向下缓慢加速逻辑
-				var slowGravity:Int = FlxG.random.int(40, 100); // 随机重力值，实现不固定加速度
+				if (ClientPrefs.data.ratingFallStyle == "Legacy")
+				{
+					rating.acceleration.y = 550 * playbackRate * playbackRate;
+					rating.velocity.y -= FlxG.random.int(140, 175) * playbackRate;
 
-				//rating.acceleration.y = slowGravity * playbackRate * playbackRate;
-				//rating.velocity.y = 0; // 初始速度为0
-				rating.velocity.y = FlxG.random.int(30, 60);
+					theEXrating.acceleration.y = 550 * playbackRate * playbackRate;
+					theEXrating.velocity.y -= FlxG.random.int(140, 150) * playbackRate;
 
-				slowGravity = FlxG.random.int(60, 120); // 随机重力值，实现不固定加速度
+					comboSpr.acceleration.y = FlxG.random.int(200, 300) * playbackRate * playbackRate;
+					comboSpr.velocity.y -= FlxG.random.int(140, 160) * playbackRate;
+				}
+				else if (ClientPrefs.data.ratingFallStyle == "MintRhythm" || ClientPrefs.data.ratingFallStyle == "MintRhythm(Legacy)")
+				{
+					rating.velocity.y = 0;
+					theEXrating.velocity.y = 0;
+					comboSpr.velocity.y = 0;
+				}
+				else if (ClientPrefs.data.ratingFallStyle == "Leather")
+				{
+					rating.velocity.y = FlxG.random.int(30, 60);
+					theEXrating.velocity.y = FlxG.random.int(40, 80);
+					comboSpr.velocity.y = FlxG.random.int(30, 60);
+					//呃呃没改完
+				}
+				else
+				{
+					rating.acceleration.y = 550 * playbackRate * playbackRate;
+					rating.velocity.y -= FlxG.random.int(140, 175) * playbackRate;
 
-				//theEXrating.acceleration.y = slowGravity * playbackRate * playbackRate;
-				//theEXrating.velocity.y = 0;
-				theEXrating.velocity.y = FlxG.random.int(40, 80);
+					theEXrating.acceleration.y = 550 * playbackRate * playbackRate;
+					theEXrating.velocity.y -= FlxG.random.int(140, 150) * playbackRate;
 
-				slowGravity = FlxG.random.int(40, 100); // 随机重力值，实现不固定加速度
-
-				//comboSpr.acceleration.y = slowGravity * playbackRate * playbackRate;
-				//comboSpr.velocity.y = 0;
-				comboSpr.velocity.y = FlxG.random.int(30, 60);
+					comboSpr.acceleration.y = FlxG.random.int(200, 300) * playbackRate * playbackRate;
+					comboSpr.velocity.y -= FlxG.random.int(140, 160) * playbackRate;
+				}
 			}
 
 			if (!PlayState.isPixelStage)
@@ -3185,22 +3213,68 @@ class PlayState extends MusicBeatState
 				comboSpr.alpha = ratingAlpha;
 			}
 
-			if (ClientPrefs.data.exratingDisplay) comboGroup.add(theEXrating);
-			comboGroup.add(rating);
-
-			if (ClientPrefs.data.ratbounce == true && !PlayState.isPixelStage) 
+			if (ClientPrefs.data.ratingFallStyle == "MintRhythm(Legacy)")
 			{
-				rating.scale.set(0.85, 0.8);
-				FlxTween.tween(rating.scale, {x: 0.7, y: 0.7}, 0.35, {ease: FlxEase.quartOut});
+				comboGroup.add(rating);
+				if (ClientPrefs.data.exratingDisplay)	comboGroup.add(theEXrating);
 			}
-			
-			if(ClientPrefs.data.exratbounce == true && ClientPrefs.data.exratingDisplay)
-            {
-				theEXrating.angle = (Math.random() * 10) * (Math.random() > .5 ? 1 : -1);
-                theEXrating.scale.set(0.85, 0.85);
-				FlxTween.tween(theEXrating, {angle: 0}, 0.4, {ease: FlxEase.backOut});
-				FlxTween.tween(theEXrating.scale, {x: 0.7, y: 0.7}, 0.4, {ease: FlxEase.quartOut});
-            }
+			else
+			{
+				if (ClientPrefs.data.exratingDisplay)	comboGroup.add(theEXrating);
+					comboGroup.add(rating);
+			}
+		
+
+			if (ClientPrefs.data.comboStacking)
+			{
+				if (ClientPrefs.data.ratbounce == true && !PlayState.isPixelStage)
+				{
+					rating.scale.set(0.85, 0.8);
+					FlxTween.tween(rating.scale, {x: 0.7, y: 0.7}, 0.35, {ease: FlxEase.quartOut});
+				}
+
+				if(ClientPrefs.data.exratbounce == true && ClientPrefs.data.exratingDisplay)
+				{
+					theEXrating.angle = (Math.random() * 10) * (Math.random() > .5 ? 1 : -1);
+					theEXrating.scale.set(0.85, 0.85);
+					FlxTween.tween(theEXrating, {angle: 0}, 0.4, {ease: FlxEase.backOut});
+					FlxTween.tween(theEXrating.scale, {x: 0.7, y: 0.7}, 0.4, {ease: FlxEase.quartOut});
+				}
+			}
+			else
+			{
+				// Combo Stacking禁用时，统一切换符号
+				if (ClientPrefs.data.ratbounce == true && !PlayState.isPixelStage && ClientPrefs.data.ratingFallStyle != "MintRhythm(Legacy)")
+				{
+					rating.angle = (Math.random() * 7) * (Math.random() > .5 ? 1 : -1);
+				}
+
+				if(ClientPrefs.data.exratbounce == true && ClientPrefs.data.exratingDisplay && ClientPrefs.data.ratingFallStyle != "MintRhythm(Legacy)")
+				{
+					theEXrating.angle = (Math.random() * 7) * (Math.random() > .5 ? 1 : -1);
+				}
+
+				if ((ClientPrefs.data.ratingFallStyle == "MintRhythm" || ClientPrefs.data.ratingFallStyle == "MintRhythm(Legacy)"))
+				{
+					if (ClientPrefs.data.ratingFallStyle == "MintRhythm(Legacy)")
+					{
+						rating.angle = -4.5;
+						rating.x -= 100;
+						theEXrating.x = rating.x + ((rating.width / 2.1));
+						theEXrating.y = rating.y - 50;
+						theEXrating.alpha = (rating.alpha / 1.2);
+						theEXrating.angle = 2;
+						// theEXrating.x += ClientPrefs.data.comboOffset[0] - 30;
+						// theEXrating.y -= ClientPrefs.data.comboOffset[1] - 130;
+					}
+					
+					FlxTween.tween(rating, {y: rating.y + FlxG.random.int(12, 18)}, 0.2, {ease: FlxEase.quintOut});
+					FlxTween.tween(theEXrating, {y: theEXrating.y + FlxG.random.int(15, 20)}, 0.2, {ease: FlxEase.quintOut});
+					FlxTween.tween(comboSpr, {y: comboSpr.y + FlxG.random.int(12, 18)}, 0.2, {ease: FlxEase.quintOut});
+
+				}
+
+			}
 	
 			comboSpr.updateHitbox();
 			rating.updateHitbox();
@@ -3231,20 +3305,27 @@ class PlayState extends MusicBeatState
 					// 原版向上跳跃逻辑
 					numScore.acceleration.y = FlxG.random.int(200, 300) * playbackRate * playbackRate;
 					numScore.velocity.y -= FlxG.random.int(140, 160) * playbackRate;
+					numScore.velocity.x = FlxG.random.float(-5, 5) * playbackRate;
 				}
 				else
 				{
-					var slowGravity:Int = FlxG.random.int(60, 100); // 随机重力值
-					// 新版向下缓慢加速逻辑
-					//numScore.acceleration.y = slowGravity * playbackRate * playbackRate;
-					//numScore.velocity.y = 0; // 初始速度为0
-					numScore.velocity.y = FlxG.random.int(30, 60);
-
+					if (ClientPrefs.data.ratingFallStyle == "Legacy")
+					{
+						numScore.velocity.y = FlxG.random.int(30, 60);
+						numScore.velocity.x = FlxG.random.float(-5, 5) * playbackRate;
+					}
+					else if (ClientPrefs.data.ratingFallStyle == "MintRhythm" || ClientPrefs.data.ratingFallStyle == "MintRhythm(Legacy)")
+					{
+						numScore.velocity.y = 0;
+						numScore.velocity.x = 0;
+						FlxTween.tween(numScore, {y: numScore.y + FlxG.random.int(12, 18)}, 0.2, {ease: FlxEase.quintOut});
+					}
+					else 
+					{
+						numScore.velocity.y = FlxG.random.int(20, 40);
+						numScore.velocity.x = FlxG.random.float(-5, 5) * playbackRate;
+					}
 				}
-				
-				//numScore.acceleration.y = FlxG.random.int(200, 300) * playbackRate * playbackRate;
-				//numScore.velocity.y -= FlxG.random.int(140, 160) * playbackRate;
-				numScore.velocity.x = FlxG.random.float(-5, 5) * playbackRate;
 				numScore.visible = !ClientPrefs.data.hideHud;
 				numScore.antialiasing = antialias;
 
@@ -3252,12 +3333,20 @@ class PlayState extends MusicBeatState
 				if (showComboNum)
 					comboGroup.add(numScore);
 
+				// 根据不同的跳动风格设置渐隐延迟
+				var numScoreFadeDelay:Float = Conductor.crochet * 0.002 / playbackRate;
+				if (!ClientPrefs.data.comboStacking && (ClientPrefs.data.ratingFallStyle == "MintRhythm" || ClientPrefs.data.ratingFallStyle == "MintRhythm(Legacy)"))
+				{
+					// MintRhythm模式下，跳动完成后才开始渐隐
+					numScoreFadeDelay += 0.2;
+				}
+
 				FlxTween.tween(numScore, {alpha: 0}, 0.2 / playbackRate, {
 					onComplete: function(tween:FlxTween)
 					{
 						numScore.destroy();
 					},
-					startDelay: Conductor.crochet * 0.002 / playbackRate
+					startDelay: numScoreFadeDelay
 				});
 
 				daLoop++;
@@ -3265,13 +3354,27 @@ class PlayState extends MusicBeatState
 					xThing = numScore.x;
 			}
 			comboSpr.x = xThing + 50;
+
+			// 根据不同的跳动风格设置渐隐延迟
+			var ratingFadeDelay:Float = Conductor.crochet * 0.001 / playbackRate;
+			var exRatingFadeDelay:Float = Conductor.crochet * 0.0008 / playbackRate;
+			var comboFadeDelay:Float = Conductor.crochet * 0.0015 / playbackRate;
+
+			if (!ClientPrefs.data.comboStacking && (ClientPrefs.data.ratingFallStyle == "MintRhythm" || ClientPrefs.data.ratingFallStyle == "MintRhythm(Legacy)"))
+			{
+				// MintRhythm模式下，跳动完成后才开始渐隐
+				ratingFadeDelay += 0.2;
+				exRatingFadeDelay += 0.2;
+				comboFadeDelay += 0.2;
+			}
+
 			FlxTween.tween(rating, {alpha: 0}, 0.2 / playbackRate, {
 				onComplete: function(tween:FlxTween)
 				{
 					FlxTween.cancelTweensOf(rating);
 					rating.destroy();
 				},
-				startDelay: Conductor.crochet * 0.001 / playbackRate
+				startDelay: ratingFadeDelay
 			});
 			FlxTween.tween(theEXrating, {alpha: 0}, 0.2 / playbackRate, {
 				onComplete: function(tween:FlxTween)
@@ -3279,7 +3382,7 @@ class PlayState extends MusicBeatState
 					FlxTween.cancelTweensOf(theEXrating);
 					theEXrating.destroy();
 				},
-				startDelay: Conductor.crochet * 0.0008 / playbackRate
+				startDelay: exRatingFadeDelay
 			});
 
 			FlxTween.tween(comboSpr, {alpha: 0}, 0.2 / playbackRate, {
@@ -3288,7 +3391,7 @@ class PlayState extends MusicBeatState
 					FlxTween.cancelTweensOf(comboSpr);
 					comboSpr.destroy();
 				},
-				startDelay: Conductor.crochet * 0.0015 / playbackRate
+				startDelay: comboFadeDelay
 			});
 		}
 	}
@@ -3346,10 +3449,6 @@ class PlayState extends MusicBeatState
 		var ret:Dynamic = callOnScripts('onKeyPressPre', [key]);
 		if(ret == LuaUtils.Function_Stop) return;
 
-		// 记录按键按下的索引（用于后续记录抬起动作）
-		if(!isReplaying && key >= 0 && key < 4)
-			keyPressIndices[key] = replayData.length;
-
 		// more accurate hit time for the ratings?
 		//判定修改（？）
 		//var lastTime:Float = Conductor.songPosition;
@@ -3361,6 +3460,13 @@ class PlayState extends MusicBeatState
 			return canHit && !n.isSustainNote && n.noteData == key;
 		});
 		plrInputNotes.sort(sortHitNotes);
+
+		// 记录按键按下的索引（用于后续记录抬起动作）- 在判断是否有音符之后设置，以确保索引正确
+		if(!isReplaying && key >= 0 && key < 4)
+		{
+			// 先记录索引
+			keyPressIndices[key] = replayData.length;
+		}
 
 		if (plrInputNotes.length != 0) { // slightly faster than doing `> 0` lol
 			var funnyNote:Note = plrInputNotes[0]; // front note
@@ -3384,9 +3490,25 @@ class PlayState extends MusicBeatState
 		else
 		{
 			if (ClientPrefs.data.ghostTapping)
+			{
+				// ghostTapping开启时，也需要记录回放数据
+				if(!isReplaying)
+				{
+					replayData.push({
+						time: Conductor.songPosition,
+						key: key,
+						noteTime: null,
+						late: null,
+						judge: 'ghost',
+						releaseTime: null
+					});
+				}
 				callOnScripts('onGhostTap', [key]);
+			}
 			else
+			{
 				noteMissPress(key);
+			}
 		}
 
 		// Needed for the  "Just the Two of Us" achievement.
@@ -3401,7 +3523,7 @@ class PlayState extends MusicBeatState
 		if(strumsBlocked[key] != true && spr != null && spr.animation.curAnim.name != 'confirm')
 		{
 			spr.playAnim('pressed');
-			spr.resetAnim = 0;
+			spr.resetAnim = 0; // 不自动重置，由按键释放时重置
 		}
 		callOnScripts('onKeyPress', [key]);
 	}
@@ -3580,19 +3702,6 @@ class PlayState extends MusicBeatState
 	function noteMissPress(direction:Int = 1):Void //You pressed a key when there was no notes to press for this key
 	{
 		if(ClientPrefs.data.ghostTapping) return; //fuck it
-		
-		// 记录回放数据（仅在非回放模式下）
-		if(!isReplaying)
-		{
-			replayData.push({
-				time: Conductor.songPosition,
-				key: direction,
-				noteTime: null,
-				late: null,
-				judge: 'ghost',
-				releaseTime: null
-			});
-		}
 
 		noteMissCommon(direction);
 		FlxG.sound.play(Paths.soundRandom('missnote', 1, 3), FlxG.random.float(0.1, 0.2));

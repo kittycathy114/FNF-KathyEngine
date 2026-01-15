@@ -166,12 +166,6 @@ class VisualsSettingsSubState extends BaseOptionsMenu
 			Language.get("combostacking_desc"),
 			'comboStacking',
 			BOOL);
-		option.onChange = function() {
-			if (!ClientPrefs.data.comboStacking) {
-				if (ClientPrefs.data.exratbounce) ClientPrefs.data.exratbounce = false;
-				if (ClientPrefs.data.ratbounce) ClientPrefs.data.ratbounce = false;
-			}
-		};
 		addOption(option);
 
 		super();
