@@ -17,6 +17,8 @@ import psychlua.HScript.HScriptInfos;
 import mobile.backend.MobileScaleMode;
 import openfl.events.KeyboardEvent;
 import lime.system.System as LimeSystem;
+import Sys;
+import backend.Paths;
 #if (linux || mac)
 import lime.graphics.Image;
 #end
@@ -29,6 +31,7 @@ import flixel.tweens.FlxEase;
 import backend.ClientPrefs;
 import openfl.ui.Keyboard;
 import ui.MouseTrail;
+import hxwindowmode.WindowColorMode;
 
 // NATIVE API STUFF, YOU CAN IGNORE THIS AND SCROLL //
 #if (linux && !debug)
@@ -210,6 +213,9 @@ class Main extends Sprite
 
 		Language.load();
 
+		// Sets the window to dark mode. (returns true if it was successful)
+		WindowColorMode.setDarkMode();
+
 		#if (linux || mac) // fix the app icon not showing up on the Linux Panel / Mac Dock
 		var icon = Image.fromFile("icon.png");
 		Lib.current.stage.window.setIcon(icon);
@@ -279,7 +285,104 @@ class Main extends Sprite
 		// 添加应用激活/停用事件监听
 		Lib.current.stage.addEventListener(Event.DEACTIVATE, onAppDeactivate);
 		Lib.current.stage.addEventListener(Event.ACTIVATE, onAppActivate);
+
+	#if (cpp && windows && !mobile)
+	// 延迟初始化窗口关闭回调，确保窗口完全创建后再设置
+	haxe.Timer.delay(function()
+		{
+			backend.Native.setCloseCallback();
+			// 启动关闭检查定时器
+			startCloseCheckTimer();
+		}, 100); // 延迟 100ms，更快启用关闭拦截
+	#end
 	}
+
+	/**
+	 * 渐隐关闭应用（仅Windows桌面端）
+	 */
+	#if (cpp && windows && !mobile)
+	private static var isExiting:Bool = false;
+	private static var closeCheckTimer:haxe.Timer = null;
+
+	private static function checkCloseRequest():Void
+	{
+		if (backend.Native.isClosingRequested())
+		{
+			// 重置标志
+			backend.Native.resetClosingRequested();
+
+			// 停止定时器
+			if (closeCheckTimer != null)
+			{
+				closeCheckTimer.stop();
+				closeCheckTimer = null;
+			}
+
+			// 执行关闭流程
+			startFadeOutAndExit();
+
+			return; // 停止检查
+		}
+	}
+
+	// 启动关闭请求检查（使用较慢的定时器减少性能影响）
+	private static function startCloseCheckTimer():Void
+	{
+		if (closeCheckTimer != null) return; // 已经在运行
+
+		closeCheckTimer = new haxe.Timer(100); // 每 100ms 检查一次（每秒 10 次）
+		closeCheckTimer.run = checkCloseRequest;
+	}
+
+	// 停止关闭请求检查
+	private static function stopCloseCheckTimer():Void
+	{
+		if (closeCheckTimer != null)
+		{
+			closeCheckTimer.stop();
+			closeCheckTimer = null;
+		}
+	}
+
+	private static function startFadeOutAndExit():Void
+	{
+		// 防止重复执行
+		if (isExiting) return;
+		isExiting = true;
+
+		// 停止关闭检查定时器（性能优化）
+		stopCloseCheckTimer();
+
+		// 立即静音音乐（无延迟）
+		if (FlxG.sound.music != null)
+		{
+			FlxG.sound.music.volume = 0;
+		}
+
+		// 立即播放关闭音效（无延迟）
+		FlxG.sound.play(Paths.sound('BA/UI_BattleComplete'), 0.75, false);
+
+		// 短暂延迟后开始渐隐（让音效开始播放）
+		haxe.Timer.delay(function()
+		{
+			// 执行渐隐动画，持续500ms
+			backend.Native.fadeOutWindow(500);
+
+			// 延迟退出
+			haxe.Timer.delay(function()
+			{
+				// 关闭 Discord（如果已初始化）
+				#if DISCORD_ALLOWED
+				if (DiscordClient.isInitialized)
+					DiscordClient.shutdown();
+				#end
+
+				// 退出应用
+				LimeSystem.exit(0);
+			}, 550); // 550ms = 500ms 渐隐 + 50ms 缓冲
+		}, 20); // 20ms 延迟，极快响应
+	}
+	#end
 
 	/**
 	 * 初始化鼠标拖尾效果
@@ -379,6 +482,20 @@ class Main extends Sprite
 		{
 			gameLogVar.toggleVisibility();
 		}
+
+		/*#if (cpp && windows && !mobile)
+		// 拦截 ESC 键，执行渐隐关闭
+		if (event.keyCode == Keyboard.ESCAPE)
+		{
+			// 阻止默认的 ESC 行为
+			event.preventDefault();
+			event.stopPropagation();
+			event.stopImmediatePropagation();
+
+			// 执行渐隐关闭
+			startFadeOutAndExit();
+		}
+		#end*/
 
 		// F5键刷新当前state（使用CustomFadeTransition无缝切换）
 		if (event.keyCode == Keyboard.F5 && FlxG.state != null)

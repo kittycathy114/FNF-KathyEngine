@@ -45,6 +45,19 @@ BOOL CALLBACK findByPID(HWND handle, LPARAM lParam) {
 }
 
 HWND curHandle = 0;
+WNDPROC originalWndProc = NULL;
+bool isClosingRequested = false;
+bool isCallbackInitialized = false;
+
+LRESULT CALLBACK CustomWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+	// 只在初始化完成后才拦截关闭消息
+	if (isCallbackInitialized && uMsg == WM_CLOSE) {
+		isClosingRequested = true;
+		return 0; // 阻止默认的关闭行为
+	}
+	return CallWindowProc(originalWndProc, hWnd, uMsg, wParam, lParam);
+}
+
 void getHandle() {
 	if (curHandle == (HWND)0) {
 		HandleData data;
@@ -52,6 +65,59 @@ void getHandle() {
 		EnumWindows(findByPID, (LPARAM)&data);
 		curHandle = data.handle;
 	}
+}
+
+void initCloseCallback() {
+	if (isCallbackInitialized) return;
+
+	if (curHandle == (HWND)0) {
+		getHandle();
+	}
+
+	if (curHandle != (HWND)0 && originalWndProc == NULL) {
+		originalWndProc = (WNDPROC)SetWindowLongPtr(curHandle, GWLP_WNDPROC, (LONG_PTR)CustomWndProc);
+		if (originalWndProc != NULL) {
+			isCallbackInitialized = true;
+		}
+	}
+}
+
+bool cpp_isClosingRequested() {
+	return isClosingRequested;
+}
+
+void cpp_resetClosingRequested() {
+	isClosingRequested = false;
+}
+
+void setWindowAlpha(BYTE alpha) {
+	if (curHandle != (HWND)0) {
+		DWORD exStyle = GetWindowLong(curHandle, GWL_EXSTYLE);
+		if (!(exStyle & WS_EX_LAYERED)) {
+			SetWindowLong(curHandle, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
+		}
+		SetLayeredWindowAttributes(curHandle, 0, alpha, LWA_ALPHA);
+	}
+}
+
+bool cpp_fadeOutWindow(int durationMs) {
+	if (curHandle == (HWND)0) return false;
+
+	DWORD exStyle = GetWindowLong(curHandle, GWL_EXSTYLE);
+	if (!(exStyle & WS_EX_LAYERED)) {
+		SetWindowLong(curHandle, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
+	}
+
+	int steps = 20;
+	int stepDuration = durationMs / steps;
+
+	for (int i = steps; i >= 0; i--) {
+		BYTE alpha = (BYTE)(255 * i / steps);
+		SetLayeredWindowAttributes(curHandle, 0, alpha, LWA_ALPHA);
+		Sleep(stepDuration);
+	}
+
+	return true;
 }
 ')
 #end
@@ -110,6 +176,79 @@ class Native
 				FillRect(curHDC, &curRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
 				ReleaseDC(curHandle, curHDC);
 			}
+		');
+		#end
+	}
+
+	/**
+	 * 设置窗口透明度（仅Windows平台）
+	 * @param alpha 透明度值 (0-255，0=完全透明，255=完全不透明)
+	 */
+	public static function setWindowAlpha(alpha:Int):Void
+	{
+		#if (cpp && windows)
+		untyped __cpp__('
+			setWindowAlpha({0});
+		', alpha);
+		#end
+	}
+
+	/**
+	 * 渐隐关闭窗口（仅Windows平台）
+	 * @param durationMs 渐隐持续时间（毫秒），默认500ms
+	 * @return 是否成功启动渐隐动画
+	 */
+	public static function fadeOutWindow(?durationMs:Int = 500):Bool
+	{
+		#if (cpp && windows)
+		var result:Bool = false;
+		untyped __cpp__('
+			result = cpp_fadeOutWindow({0});
+		', durationMs);
+		return result;
+		#else
+		return false;
+		#end
+	}
+
+	/**
+	 * 设置窗口关闭回调（仅Windows平台）
+	 * 拦截 WM_CLOSE 消息，阻止默认关闭行为
+	 */
+	public static function setCloseCallback():Void
+	{
+		#if (cpp && windows)
+		untyped __cpp__('
+			initCloseCallback();
+		');
+		#end
+	}
+
+	/**
+	 * 检查是否有关闭请求（仅Windows平台）
+	 * @return 是否有未处理的关闭请求
+	 */
+	public static function isClosingRequested():Bool
+	{
+		#if (cpp && windows)
+		var result:Bool = false;
+		untyped __cpp__('
+			result = cpp_isClosingRequested();
+		');
+		return result;
+		#else
+		return false;
+		#end
+	}
+
+	/**
+	 * 重置关闭请求标志（仅Windows平台）
+	 */
+	public static function resetClosingRequested():Void
+	{
+		#if (cpp && windows)
+		untyped __cpp__('
+			cpp_resetClosingRequested();
 		');
 		#end
 	}
