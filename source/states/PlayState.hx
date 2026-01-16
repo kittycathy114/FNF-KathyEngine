@@ -3213,17 +3213,9 @@ class PlayState extends MusicBeatState
 				comboSpr.alpha = ratingAlpha;
 			}
 
-			if (ClientPrefs.data.ratingFallStyle == "MintRhythm(Legacy)")
-			{
-				comboGroup.add(rating);
-				if (ClientPrefs.data.exratingDisplay)	comboGroup.add(theEXrating);
-			}
-			else
-			{
-				if (ClientPrefs.data.exratingDisplay)	comboGroup.add(theEXrating);
-					comboGroup.add(rating);
-			}
-		
+			if (ClientPrefs.data.exratingDisplay)	comboGroup.add(theEXrating);
+			
+			comboGroup.add(rating);	
 
 			if (ClientPrefs.data.comboStacking)
 			{
@@ -3258,14 +3250,18 @@ class PlayState extends MusicBeatState
 				{
 					if (ClientPrefs.data.ratingFallStyle == "MintRhythm(Legacy)")
 					{
-						rating.angle = -4.5;
-						rating.x -= 100;
-						theEXrating.x = rating.x + ((rating.width / 2.1));
-						theEXrating.y = rating.y - 50;
-						theEXrating.alpha = (rating.alpha / 1.2);
+						rating.angle = -8;
+						rating.x -= 150;
+						if (!PlayState.isPixelStage)
+							rating.setGraphicSize(Std.int(rating.width * 0.65));
+						else
+						{
+							rating.setGraphicSize(Std.int(rating.width * daPixelZoom * 0.65));
+						}
+
+						theEXrating.x = rating.x + (rating.width / 2.5);
+						theEXrating.y = rating.y - 75;
 						theEXrating.angle = 2;
-						// theEXrating.x += ClientPrefs.data.comboOffset[0] - 30;
-						// theEXrating.y -= ClientPrefs.data.comboOffset[1] - 130;
 					}
 					
 					FlxTween.tween(rating, {y: rating.y + FlxG.random.int(12, 18)}, 0.2, {ease: FlxEase.quintOut});
@@ -3841,7 +3837,7 @@ class PlayState extends MusicBeatState
 	public function goodNoteHit(note:Note):Void
 	{
 		if(note.wasGoodHit) return;
-		if(/*cpuControlled && */note.ignoreNote) return;
+		if(cpuControlled && note.ignoreNote) return;
 
 		var isSus:Bool = note.isSustainNote; //GET OUT OF MY HEAD, GET OUT OF MY HEAD, GET OUT OF MY HEAD
 		var leData:Int = Math.round(Math.abs(note.noteData));

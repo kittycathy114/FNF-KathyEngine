@@ -337,8 +337,6 @@
     "bot_addscore_desc": "若启用，当BOT命中音符时也会加分\n（不计入最终成绩）",
     "use_system_cursor_desc": "启用后，游戏将使用系统默认的鼠标指针",
     "nps_desc": "在HUD中显示每秒音符数（NPS）",
-    "enhanced_botplay_desc": "启用后，BOT将模拟玩家的输入",
-    "enhanced_botplay_timer_desc": "调整拟真BOT的最高输入延迟（毫秒）",
 
     "mods_import_desc": "（实验性功能）\n若启用，可以通过拖放模组ZIP文件的方式来导入模组",
     "hud_zoomstyle_desc": "调整HUD元素的缩放效果",
