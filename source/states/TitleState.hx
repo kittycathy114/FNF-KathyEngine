@@ -83,6 +83,13 @@ class TitleState extends MusicBeatState
 			if(FlxG.save.data != null && FlxG.save.data.fullscreen)
 			{
 				FlxG.fullscreen = FlxG.save.data.fullscreen;
+				// 修复全屏分辨率
+				#if (cpp && windows)
+				haxe.Timer.delay(function()
+				{
+					backend.Native.fixFullscreenResolution();
+				}, 100);
+				#end
 				//trace('LOADED FULLSCREEN SETTING!!');
 			}
 			persistentUpdate = true;

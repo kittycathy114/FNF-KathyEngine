@@ -150,6 +150,9 @@ class Native
 	}
 
 	private static var fixedScaling:Bool = false;
+	private static var originalWidth:Int = 0;
+	private static var originalHeight:Int = 0;
+
 	public static function fixScaling():Void
 	{
 		if (fixedScaling) return;
@@ -160,8 +163,10 @@ class Native
 		if (display != null)
 		{
 			final dpiScale:Float = display.dpi / 96;
-			@:privateAccess Application.current.window.width = Std.int(Main.game.width * dpiScale);
-			@:privateAccess Application.current.window.height = Std.int(Main.game.height * dpiScale);
+			originalWidth = Std.int(Main.game.width * dpiScale);
+			originalHeight = Std.int(Main.game.height * dpiScale);
+			@:privateAccess Application.current.window.width = originalWidth;
+			@:privateAccess Application.current.window.height = originalHeight;
 
 			Application.current.window.x = Std.int((Application.current.window.display.bounds.width - Application.current.window.width) / 2);
 			Application.current.window.y = Std.int((Application.current.window.display.bounds.height - Application.current.window.height) / 2);
@@ -177,6 +182,45 @@ class Native
 				ReleaseDC(curHandle, curHDC);
 			}
 		');
+		#end
+	}
+
+	/**
+	 * 修复全屏时的分辨率问题
+	 * 在全屏模式下使用显示器原生分辨率，而不是游戏逻辑分辨率
+	 */
+	public static function fixFullscreenResolution():Void
+	{
+		#if (cpp && windows)
+		final display:Null<Display> = System.getDisplay(0);
+		if (display != null && Application.current.window != null)
+		{
+			if (FlxG.fullscreen)
+			{
+				// 全屏模式：使用显示器原生分辨率
+				@:privateAccess Application.current.window.width = Std.int(display.bounds.width);
+				@:privateAccess Application.current.window.height = Std.int(display.bounds.height);
+			}
+			else
+			{
+				// 窗口模式：恢复原来的尺寸
+				if (originalWidth > 0 && originalHeight > 0)
+				{
+					@:privateAccess Application.current.window.width = originalWidth;
+					@:privateAccess Application.current.window.height = originalHeight;
+				}
+				else
+				{
+					final dpiScale:Float = display.dpi / 96;
+					@:privateAccess Application.current.window.width = Std.int(Main.game.width * dpiScale);
+					@:privateAccess Application.current.window.height = Std.int(Main.game.height * dpiScale);
+				}
+
+				// 居中窗口
+				Application.current.window.x = Std.int((display.bounds.width - Application.current.window.width) / 2);
+				Application.current.window.y = Std.int((display.bounds.height - Application.current.window.height) / 2);
+			}
+		}
 		#end
 	}
 

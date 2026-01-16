@@ -475,7 +475,16 @@ class Main extends Sprite
 	function onKeyPress(event:KeyboardEvent)
 	{
 		if (Controls.instance.justReleased('fullscreen'))
+		{
 			FlxG.fullscreen = !FlxG.fullscreen;
+			// 切换全屏后修复分辨率
+			#if (cpp && windows)
+			haxe.Timer.delay(function()
+			{
+				backend.Native.fixFullscreenResolution();
+			}, 50);
+			#end
+		}
 
 		// F3键切换日志显示
 		if (event.keyCode == Keyboard.F3 && gameLogVar != null)
