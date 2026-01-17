@@ -53,8 +53,10 @@ class Main extends Sprite
 	public static var fpsVar:FPSCounter;
 	public static var gameLogVar:GameLogDisplay;
 
-	// 鼠标拖尾效果实例
+	// 鼠标拖尾效果实例（仅在移动端启用）
+	#if mobile
 	private static var mouseTrail:MouseTrail;
+	#end
 
 	public static final platform:String = #if mobile "Phones" #else "PCs" #end;
 
@@ -385,10 +387,11 @@ class Main extends Sprite
 	#end
 
 	/**
-	 * 初始化鼠标拖尾效果
+	 * 初始化鼠标拖尾效果（仅在移动端启用）
 	 */
 	private function initMouseTrail():Void
 	{
+		#if mobile
 		mouseTrail = new MouseTrail();
 
 		// 配置拖尾参数（可根据需要调整）
@@ -411,6 +414,7 @@ class Main extends Sprite
 		{
 			mouseTrail.setInitPosition(Lib.current.stage.mouseX, Lib.current.stage.mouseY);
 		}
+		#end
 	}
 
 	// 应用进入后台时调用
@@ -547,6 +551,7 @@ class Main extends Sprite
 
 	// ==================== 鼠标拖尾公共API ====================
 
+#if mobile
 	/**
 	 * 显示/隐藏鼠标拖尾
 	 * @param visible 是否显示拖尾
@@ -729,7 +734,7 @@ class Main extends Sprite
 	}
 
 	/**
-	 * 设置拖尾效果大小比例（用户设置）
+	 * 设置拖尾效果大小比例
 	 * @param scale 大小比例 (0.5 = 50%, 1.0 = 100%, 2.0 = 200%)
 	 */
 	public static function setMouseTrailSize(scale:Float):Void
@@ -890,4 +895,5 @@ class Main extends Sprite
 			mouseTrail.recalculateScreenScale();
 		}
 	}
+#end
 }

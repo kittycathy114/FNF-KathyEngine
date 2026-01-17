@@ -176,29 +176,31 @@ class ExtraGameplaySettingSubState extends BaseOptionsMenu
 		};
 		addOption(option);
 
-		option = new Option('Mouse Trail Size',
-			'Adjust the size of mouse trail effects',
-			'mouseTrailSize',
-			FLOAT);
-		option.displayFormat = '%v X';
-		option.scrollSpeed = 1.5;
-		option.minValue = 0.5;
-		option.maxValue = 5.0;
-		option.changeValue = 0.05;
-		option.decimals = 2;
-		option.onChange = function() {
-			Main.setMouseTrailSize(ClientPrefs.data.mouseTrailSize);
-		};
-		addOption(option);
+#if mobile
+	option = new Option('Mouse Trail Size',
+		'Adjust the size of mouse trail effects',
+		'mouseTrailSize',
+		FLOAT);
+	option.displayFormat = '%v X';
+	option.scrollSpeed = 1.5;
+	option.minValue = 0.5;
+	option.maxValue = 5.0;
+	option.changeValue = 0.05;
+	option.decimals = 2;
+	option.onChange = function() {
+		Main.setMouseTrailSize(ClientPrefs.data.mouseTrailSize);
+	};
+	addOption(option);
 
-		option = new Option('Mouse Trail Enabled',
-			'Enable mouse trail effects (both PC and Mobile)',
-			'mouseTrailEnabled',
-			BOOL);
-		option.onChange = function() {
-			Main.setMouseTrailVisible(ClientPrefs.data.mouseTrailEnabled);
-		};
-		addOption(option);
+	option = new Option('Mouse Trail Enabled',
+		'Enable mouse trail effects (both PC and Mobile)',
+		'mouseTrailEnabled',
+		BOOL);
+	option.onChange = function() {
+		Main.setMouseTrailVisible(ClientPrefs.data.mouseTrailEnabled);
+	};
+	addOption(option);
+	#end
 
 	// PERCENT 类型设置
 		option = new Option('Ratings Opacity',

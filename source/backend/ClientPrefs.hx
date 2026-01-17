@@ -286,11 +286,13 @@ class ClientPrefs {
 		if(Main.gameLogVar != null)
 			Main.gameLogVar.setEnabled(data.enableGameLog);
 
-		// 应用鼠标拖尾大小设置
+		// 应用鼠标拖尾大小设置（仅在移动端）
+		#if mobile
 		Main.setMouseTrailSize(data.mouseTrailSize);
 
 		// 应用鼠标拖尾启用状态
 		Main.setMouseTrailVisible(data.mouseTrailEnabled);
+		#end
 
 		#if (!html5 && !switch)
 		FlxG.autoPause = ClientPrefs.data.autoPause;
