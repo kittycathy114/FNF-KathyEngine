@@ -98,6 +98,7 @@ import states.TitleState;
 	public var rainbowfpscounter:Bool = false;
 	public var exgameversion:Bool = true;
 	public var exratingDisplay:Bool = true;
+	public var showHaxelibs:Bool = true;
 	public var rmPerfect:Bool = false;	
 	public var ratbounce:Bool = true;
 	public var scoretxtstyle:String = 'MintRhythm';

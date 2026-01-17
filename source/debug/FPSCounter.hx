@@ -8,6 +8,7 @@ import openfl.text.TextFormat;
 import lime.system.System as LimeSystem;
 import states.MainMenuState;
 import debug.GameVersion;
+import debug.HaxelibInfo;
 import openfl.display.Sprite;
 import flixel.FlxState;
 import openfl.utils.Assets;
@@ -123,7 +124,11 @@ class FPSCounter extends Sprite
 			allText += 'Psych v${MainMenuState.psychEngineVersion}\n';
 			allText += 'MR v${MainMenuState.mrExtendVersion}\n';
 			allText += 'Commit: ${GameVersion.getGitCommitCount()} (${GameVersion.getGitCommitHash()})\n';
-			allText += 'Build: ${GameVersion.getBuildTime()}';
+			allText += 'Build: ${GameVersion.getBuildTime()}\n';
+			if (ClientPrefs.data.showHaxelibs) {
+				allText += '\n';
+				allText += 'Libs:\n${HaxelibInfo.getHaxelibInfo()}\n';
+			}
 
 			if (ClientPrefs.data.showRunningOS)
 			{

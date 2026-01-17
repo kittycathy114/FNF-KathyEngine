@@ -28,6 +28,17 @@ class ExtraGameplaySettingSubState extends BaseOptionsMenu
 		};
 		addOption(option);
 
+		option = new Option('Show Haxelibs Info',
+			'Display haxelib libraries and versions in FPS counter',
+			'showHaxelibs',
+			BOOL);
+		option.onChange = function() {
+			if(Main.fpsVar != null) {
+				Main.fpsVar.updateText();
+			}
+		};
+		addOption(option);
+
 		/*Psych Engine v1.0.4已经有这个了，故隐藏此项
 		option = new Option('Focus Game',
 			Language.get("focus_game_desc"),
