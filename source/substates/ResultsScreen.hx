@@ -16,6 +16,7 @@ import backend.Mods;
 import backend.Song;
 import backend.Rating;
 import backend.ClientPrefs;
+import backend.Difficulty;
 
 import openfl.geom.Matrix;
 import openfl.display.BitmapData;
@@ -368,7 +369,7 @@ class ResultsScreen extends FlxSubState
 				}
 				var saveName:String = Paths.formatToSongPath(PlayState.SONG.song) + '-' + Std.string(Date.now().getTime()) + '.replay.json';
 				var savePath:String = replayFolder + '/' + saveName;
-				var outObj:Dynamic = { meta: { song: PlayState.SONG.song, chartPath: chartPath, chartMTime: statMTime }, replay: PlayState.instance.replayData };
+				var outObj:Dynamic = { meta: { song: PlayState.SONG.song, chartPath: chartPath, chartMTime: statMTime, difficulty: Difficulty.getString(PlayState.storyDifficulty, false) }, replay: PlayState.instance.replayData };
 				File.saveContent(savePath, haxe.Json.stringify(outObj));
 				// show middle-screen prompt
 				var cx:Float = FlxG.width / 2;

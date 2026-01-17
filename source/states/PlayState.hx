@@ -844,6 +844,8 @@ class PlayState extends MusicBeatState
 		replayTxt = new FlxText(400, ClientPrefs.data.botplayStyle == 'Kade' ? healthBar.y - 120 : healthBar.y - 90, FlxG.width - 800, "RECAP", 32);
 		replayTxt.setFormat(Paths.font("vcr.ttf"), 37, 0xFF00FF00, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		replayTxt.scrollFactor.set();
+		replayTxt.screenCenter();
+		replayTxt.y -= 100;
 		replayTxt.borderSize = 2;
 		replayTxt.color = FlxColor.fromRGB(boyfriend.healthColorArray[0], boyfriend.healthColorArray[1], boyfriend.healthColorArray[2]);
 		replayTxt.visible = isReplaying;
@@ -2060,7 +2062,6 @@ class PlayState extends MusicBeatState
 						{
 							spr.playAnim('static');
 							spr.resetAnim = 0;
-							spr.alpha = 1;
 						}
 					}
 					else
@@ -2121,7 +2122,6 @@ class PlayState extends MusicBeatState
 							{
 								spr.playAnim('pressed');
 								spr.resetAnim = 0; // 不自动重置，由按键释放时重置
-								spr.alpha = 0.5;
 							}
 
 							// 根据当前的ghostTapping设置决定是否调用noteMissPress和onGhostTap
@@ -2229,11 +2229,6 @@ class PlayState extends MusicBeatState
 		// 更新回放文本可见性
 		if(replayTxt != null) {
 			replayTxt.visible = isReplaying;
-			if(isReplaying && ClientPrefs.data.botplayStyle == 'Kade') {
-				replayTxt.y = healthBar.y + 120;
-			} else if(isReplaying) {
-				replayTxt.y = healthBar.y + 70;
-			}
 		}
 
 		if (controls.PAUSE #if android || FlxG.android.justReleased.BACK #end && startedCountdown && canPause)

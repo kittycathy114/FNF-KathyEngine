@@ -202,21 +202,8 @@ class FreeplayState extends MusicBeatState
 		changeSelection();
 		updateTexts();
 
-		// 检查是否存在已保存的回放文件，若存在则在底部文本添加提示
-		#if FEATURE_FILESYSTEM
-		var moddirCheck:String = (Mods.currentModDirectory != null && Mods.currentModDirectory.length > 0) ? Mods.currentModDirectory : 'global';
-		var replayFolderCheck:String = Paths.mods(moddirCheck + '/replay');
-		if (FileSystem.exists(replayFolderCheck))
-		{
-			var files:Array<String> = FileSystem.readDirectory(replayFolderCheck);
-			if (files != null && files.length > 0)
-			{
-				var replayFiles:Array<String> = files.filter(f -> f.endsWith('.replay.json'));
-				var replayCount:Int = replayFiles.length;
-				bottomText.text = bottomString + ' | ${replayCount} replay(s) found - Press F7 to watch latest replay.';
-			}
-		}
-		#end
+		// 妫€鏌ユ槸鍚﹀瓨鍦ㄥ凡淇濆瓨鐨勫洖鏀炬枃浠讹紝鑻ュ瓨鍦ㄥ垯鍦ㄥ簳閮ㄦ枃鏈坊鍔犳彁绀?
+		updateReplayBottomText();
 
 		addTouchPad('LEFT_FULL', 'A_B_C_X_Y_Z');
 		super.create();
@@ -496,7 +483,7 @@ class FreeplayState extends MusicBeatState
 			FlxG.sound.play(Paths.sound('scrollMenu'));
 		}
 
-		// 回放加载入口：F7 加载最近保存的回放（若存在）
+		// 鍥炴斁鍔犺浇鍏ュ彛锛欶7 鍔犺浇鏈€杩戜繚瀛樼殑鍥炴斁锛堣嫢瀛樺湪锛?
 		#if FEATURE_FILESYSTEM
 		var moddirLoad:String = (Mods.currentModDirectory != null && Mods.currentModDirectory.length > 0) ? Mods.currentModDirectory : 'global';
 		var replayFolderLoad:String = Paths.mods(moddirLoad + '/replay');
@@ -505,60 +492,103 @@ class FreeplayState extends MusicBeatState
 			var filesLoad:Array<String> = FileSystem.readDirectory(replayFolderLoad);
 			if (filesLoad != null && filesLoad.length > 0)
 			{
-				// 找到最新的回放文件
+				// 鑾峰彇褰撳墠閫変腑鐨勬瓕鏇插悕绉帮紙鏍煎紡鍖栧悗锛?
+				var currentSongName:String = Paths.formatToSongPath(songs[curSelected].songName);
+				
+				// 鑾峰彇褰撳墠閫変腑鐨勯毦搴﹀悕绉?
+				var currentDifficultyName:String = Difficulty.getString(curDifficulty, false);
+				
+				// 鎵惧埌涓庡綋鍓嶆瓕鏇插拰闅惧害鍖归厤鐨勬渶鏂板洖鏀炬枃浠?
 				var latest:String = null;
 				var latestM:Float = -1;
+				var savedSongName:String = null;
 				for (f in filesLoad)
 				{
+					if (!f.endsWith('.replay.json')) continue;
+					
 					var p = replayFolderLoad + '/' + f;
-					var s = FileSystem.stat(p);
-					var m:Float = 0;
-					if (s != null && Reflect.hasField(s, 'mtime'))
-					{
-						var mt = Reflect.field(s, 'mtime');
-						if (Std.isOfType(mt, Date)) m = mt.getTime(); else m = Std.parseFloat(Std.string(mt));
-					}
-					if (m > latestM) { latestM = m; latest = p; }
-				}
-				if (latest != null && FlxG.keys.justPressed.F7 && !player.playingMusic)
-				{
 					try
 					{
-						var content:String = File.getContent(latest);
+						var content:String = File.getContent(p);
 						var obj:Dynamic = Json.parse(content);
-						var replayArr = Reflect.field(obj, 'replay');
 						var meta:Dynamic = Reflect.field(obj, 'meta');
-						var chartPath:Dynamic = (meta != null && Reflect.hasField(meta, 'chartPath')) ? Reflect.field(meta, 'chartPath') : null;
-						var savedM:Dynamic = (meta != null && Reflect.hasField(meta, 'chartMTime')) ? Reflect.field(meta, 'chartMTime') : null;
-						var warn:Bool = false;
-						if (chartPath != null && FileSystem.exists(chartPath))
+						if (meta != null && Reflect.hasField(meta, 'song'))
 						{
-							var s2 = FileSystem.stat(chartPath);
-							var curM = (s2 != null && Reflect.hasField(s2, 'mtime')) ? Reflect.field(s2, 'mtime') : null;
-							if (savedM != null && curM != null && Std.string(savedM) != Std.string(curM)) warn = true;
+							var replaySongName:String = Reflect.field(meta, 'song');
+							var chartPath:Dynamic = (meta != null && Reflect.hasField(meta, 'chartPath')) ? Reflect.field(meta, 'chartPath') : null;
+							var replayDifficulty:String = getDifficultyFromChartPath(chartPath);
+							
+							// 妫€鏌ユ瓕鏇插悕绉板拰闅惧害鏄惁閮藉尮閰?
+							if (Paths.formatToSongPath(replaySongName) == currentSongName && replayDifficulty == currentDifficultyName)
+							{
+								var s = FileSystem.stat(p);
+								var m:Float = 0;
+								if (s != null && Reflect.hasField(s, 'mtime'))
+								{
+									var mt = Reflect.field(s, 'mtime');
+									if (Std.isOfType(mt, Date)) m = mt.getTime(); else m = Std.parseFloat(Std.string(mt));
+								}
+								if (m > latestM) { latestM = m; latest = p; savedSongName = replaySongName; }
+							}
 						}
-						else warn = true;
-						if (warn)
-						{
-							missingText.text = 'Warning: chart file changed since save. Playback may desync.';
-							missingText.screenCenter(Y);
-							missingText.visible = true;
-							missingTextBG.visible = true;
-						}
-						// 设置待加载回放并加载歌曲
-						PlayState.pendingReplayData = replayArr;
-						PlayState.shouldStartReplay = true;
-						var songLowercase:String = Paths.formatToSongPath(songs[curSelected].songName);
-						var poop:String = Highscore.formatSong(songLowercase, curDifficulty);
-						Song.loadFromJson(poop, songLowercase);
-						PlayState.isStoryMode = false;
-						PlayState.storyDifficulty = curDifficulty;
-						LoadingState.prepareToSong();
-						LoadingState.loadAndSwitchState(new PlayState());
 					}
 					catch(e:Dynamic)
 					{
-						trace('Failed to load replay: ' + e);
+						trace('Failed to read replay file ${f}: ' + e);
+					}
+				}
+				
+				if (FlxG.keys.justPressed.F7 && !player.playingMusic)
+				{
+					if (latest != null)
+					{
+						// 鍔犺浇鍥炴斁
+						try
+						{
+							var content:String = File.getContent(latest);
+							var obj:Dynamic = Json.parse(content);
+							var replayArr = Reflect.field(obj, 'replay');
+							var meta:Dynamic = Reflect.field(obj, 'meta');
+							var chartPath:Dynamic = (meta != null && Reflect.hasField(meta, 'chartPath')) ? Reflect.field(meta, 'chartPath') : null;
+							var savedM:Dynamic = (meta != null && Reflect.hasField(meta, 'chartMTime')) ? Reflect.field(meta, 'chartMTime') : null;
+							var warn:Bool = false;
+							if (chartPath != null && FileSystem.exists(chartPath))
+							{
+								var s2 = FileSystem.stat(chartPath);
+								var curM = (s2 != null && Reflect.hasField(s2, 'mtime')) ? Reflect.field(s2, 'mtime') : null;
+								if (savedM != null && curM != null && Std.string(savedM) != Std.string(curM)) warn = true;
+							}
+							else warn = true;
+							if (warn)
+							{
+								missingText.text = 'Warning: chart file changed since save. Playback may desync.';
+								missingText.screenCenter(Y);
+								missingText.visible = true;
+								missingTextBG.visible = true;
+							}
+							// 璁剧疆寰呭姞杞藉洖鏀惧苟鍔犺浇姝屾洸
+							PlayState.pendingReplayData = replayArr;
+							PlayState.shouldStartReplay = true;
+							var songLowercase:String = Paths.formatToSongPath(songs[curSelected].songName);
+							var poop:String = Highscore.formatSong(songLowercase, curDifficulty);
+							Song.loadFromJson(poop, songLowercase);
+							PlayState.isStoryMode = false;
+							PlayState.storyDifficulty = curDifficulty;
+							LoadingState.prepareToSong();
+							LoadingState.loadAndSwitchState(new PlayState());
+						}
+						catch(e:Dynamic)
+						{
+							trace('Failed to load replay: ' + e);
+						}
+					}
+					else
+					{
+						// 鏄剧ず鎻愮ず锛氬綋鍓嶆瓕鏇插拰闅惧害娌℃湁鍥炴斁
+						missingText.text = 'No replay found for "${songs[curSelected].songName}" (${currentDifficultyName}).';
+						missingText.screenCenter(Y);
+						missingText.visible = true;
+						missingTextBG.visible = true;
 					}
 				}
 			}
@@ -662,10 +692,124 @@ class FreeplayState extends MusicBeatState
 
 		changeDiff();
 		_updateSongLastDifficulty();
+		updateReplayBottomText();
 	}
 
 	inline private function _updateSongLastDifficulty()
 		songs[curSelected].lastDifficulty = Difficulty.getString(curDifficulty, false);
+
+	/**
+	 * 浠庡浘琛ㄨ矾寰勬彁鍙栭毦搴﹀悕绉帮紝濡傛灉meta涓寘鍚玠ifficulty瀛楁鍒欎紭鍏堜娇鐢ㄣ€?
+	 * @param chartPath 鍥捐〃鏂囦欢璺緞锛堜緥濡?".../song-hard.json"锛?
+	 * @param meta 鍙€夌殑meta瀵硅薄锛屽彲鑳藉寘鍚玠ifficulty瀛楁
+	 * @return 闅惧害鍚嶇О瀛楃涓诧紝濡傛灉鏃犳硶纭畾鍒欒繑鍥為粯璁ら毦搴︼紙Normal锛?
+	 */
+	private function getDifficultyFromChartPath(chartPath:String, ?meta:Dynamic):Null<String>
+	{
+		if (meta != null && Reflect.hasField(meta, 'difficulty'))
+			return Reflect.field(meta, 'difficulty');
+		if (chartPath == null) return Difficulty.getDefault();
+		// 鑾峰彇鏂囦欢鍚嶏紙涓嶅惈鐩綍锛?
+		var lastSep = chartPath.lastIndexOf('/');
+		if (lastSep == -1) lastSep = chartPath.lastIndexOf('\\');
+		var fileName:String = (lastSep >= 0) ? chartPath.substr(lastSep + 1) : chartPath;
+		// 绉婚櫎 .json 鎵╁睍鍚?
+		if (fileName.endsWith('.json'))
+			fileName = fileName.substr(0, fileName.length - 5);
+		// 妫€鏌ユ槸鍚︽湁闅惧害鍚庣紑锛堟牸寮忎负 "姝屾洸鍚?闅惧害"锛?
+		var lastDash = fileName.lastIndexOf('-');
+		if (lastDash == -1)
+		{
+			// 娌℃湁杩炲瓧绗︼紝鍙兘鏄粯璁ら毦搴︼紙渚嬪 "song.json"锛?
+			return Difficulty.getDefault();
+		}
+		var potentialDiff:String = fileName.substr(lastDash + 1);
+		// 妫€鏌ユ槸鍚﹀湪闅惧害鍒楄〃涓?
+		for (diff in Difficulty.list)
+		{
+			if (Paths.formatToSongPath(diff) == Paths.formatToSongPath(potentialDiff))
+				return diff;
+		}
+		// 涓嶅湪鍒楄〃涓紝鍙兘鏄瓕鏇插悕鏈韩鍖呭惈杩炲瓧绗︼紝杩斿洖榛樿闅惧害
+		return Difficulty.getDefault();
+	}
+
+
+
+	private function updateReplayBottomText():Void
+	{
+		#if FEATURE_FILESYSTEM
+		var moddirCheck:String = (Mods.currentModDirectory != null && Mods.currentModDirectory.length > 0) ? Mods.currentModDirectory : 'global';
+		var replayFolderCheck:String = Paths.mods(moddirCheck + '/replay');
+		if (FileSystem.exists(replayFolderCheck))
+		{
+			var files:Array<String> = FileSystem.readDirectory(replayFolderCheck);
+			if (files != null && files.length > 0)
+			{
+				// 鑾峰彇褰撳墠閫変腑鐨勬瓕鏇插悕绉帮紙鏍煎紡鍖栧悗锛夊拰闅惧害鍚嶇О
+				var currentSongName:String = Paths.formatToSongPath(songs[curSelected].songName);
+				var currentDifficultyName:String = Difficulty.getString(curDifficulty, false);
+				var matchedReplayCount:Int = 0;
+				
+				for (f in files)
+				{
+					if (!f.endsWith('.replay.json')) continue;
+					
+					var p = replayFolderCheck + '/' + f;
+					try
+					{
+						var content:String = File.getContent(p);
+						var obj:Dynamic = Json.parse(content);
+						var meta:Dynamic = Reflect.field(obj, 'meta');
+						if (meta != null && Reflect.hasField(meta, 'song'))
+						{
+							var replaySongName:String = Reflect.field(meta, 'song');
+							var chartPath:Dynamic = (meta != null && Reflect.hasField(meta, 'chartPath')) ? Reflect.field(meta, 'chartPath') : null;
+							var replayDifficulty:String = getDifficultyFromChartPath(chartPath);
+							
+							// 妫€鏌ユ瓕鏇插悕绉板拰闅惧害鏄惁閮藉尮閰?
+							if (Paths.formatToSongPath(replaySongName) == currentSongName && replayDifficulty == currentDifficultyName)
+							{
+								matchedReplayCount++;
+							}
+						}
+					}
+					catch(e:Dynamic)
+					{
+						trace('Failed to read replay file ${f}: ' + e);
+					}
+				}
+				
+				if (matchedReplayCount > 0)
+				{
+					bottomText.text = bottomString + ' | ${matchedReplayCount} replay(s) found for this song (${currentDifficultyName}) - Press F7 to watch latest replay.';
+				}
+				else
+				{
+					// 娌℃湁褰撳墠姝屾洸鍜岄毦搴﹀尮閰嶇殑鍥炴斁锛屼絾浠嶇劧鏄剧ず鎬诲洖鏀炬暟閲忥紙渚涘弬鑰冿級
+					var totalReplayFiles:Array<String> = files.filter(f -> f.endsWith('.replay.json'));
+					var totalReplayCount:Int = totalReplayFiles.length;
+					if (totalReplayCount > 0)
+					{
+						bottomText.text = bottomString + ' | ${totalReplayCount} replay(s) in mod (not for this song/difficulty).';
+					}
+					else
+					{
+						bottomText.text = bottomString;
+					}
+				}
+			}
+			else
+			{
+				bottomText.text = bottomString;
+			}
+		}
+		else
+		{
+			bottomText.text = bottomString;
+		}
+		#end
+	}
 
 	private function positionHighscore()
 	{
