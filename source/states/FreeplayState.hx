@@ -17,6 +17,11 @@ import flixel.util.FlxDestroyUtil;
 import openfl.utils.Assets;
 
 import haxe.Json;
+#if FEATURE_FILESYSTEM
+import sys.FileSystem;
+import sys.io.File;
+import backend.Mods;
+#end
 
 class FreeplayState extends MusicBeatState
 {
@@ -197,8 +202,25 @@ class FreeplayState extends MusicBeatState
 		changeSelection();
 		updateTexts();
 
+		// 检查是否存在已保存的回放文件，若存在则在底部文本添加提示
+		#if FEATURE_FILESYSTEM
+		var moddirCheck:String = (Mods.currentModDirectory != null && Mods.currentModDirectory.length > 0) ? Mods.currentModDirectory : 'global';
+		var replayFolderCheck:String = Paths.mods(moddirCheck + '/replay');
+		if (FileSystem.exists(replayFolderCheck))
+		{
+			var files:Array<String> = FileSystem.readDirectory(replayFolderCheck);
+			if (files != null && files.length > 0)
+			{
+				var replayFiles:Array<String> = files.filter(f -> f.endsWith('.replay.json'));
+				var replayCount:Int = replayFiles.length;
+				bottomText.text = bottomString + ' | ${replayCount} replay(s) found - Press F7 to watch latest replay.';
+			}
+		}
+		#end
+
 		addTouchPad('LEFT_FULL', 'A_B_C_X_Y_Z');
 		super.create();
+
 	}
 
 	override function closeSubState()
@@ -473,6 +495,75 @@ class FreeplayState extends MusicBeatState
 			removeTouchPad();
 			FlxG.sound.play(Paths.sound('scrollMenu'));
 		}
+
+		// 回放加载入口：F7 加载最近保存的回放（若存在）
+		#if FEATURE_FILESYSTEM
+		var moddirLoad:String = (Mods.currentModDirectory != null && Mods.currentModDirectory.length > 0) ? Mods.currentModDirectory : 'global';
+		var replayFolderLoad:String = Paths.mods(moddirLoad + '/replay');
+		if (FileSystem.exists(replayFolderLoad))
+		{
+			var filesLoad:Array<String> = FileSystem.readDirectory(replayFolderLoad);
+			if (filesLoad != null && filesLoad.length > 0)
+			{
+				// 找到最新的回放文件
+				var latest:String = null;
+				var latestM:Float = -1;
+				for (f in filesLoad)
+				{
+					var p = replayFolderLoad + '/' + f;
+					var s = FileSystem.stat(p);
+					var m:Float = 0;
+					if (s != null && Reflect.hasField(s, 'mtime'))
+					{
+						var mt = Reflect.field(s, 'mtime');
+						if (Std.isOfType(mt, Date)) m = mt.getTime(); else m = Std.parseFloat(Std.string(mt));
+					}
+					if (m > latestM) { latestM = m; latest = p; }
+				}
+				if (latest != null && FlxG.keys.justPressed.F7 && !player.playingMusic)
+				{
+					try
+					{
+						var content:String = File.getContent(latest);
+						var obj:Dynamic = Json.parse(content);
+						var replayArr = Reflect.field(obj, 'replay');
+						var meta:Dynamic = Reflect.field(obj, 'meta');
+						var chartPath:Dynamic = (meta != null && Reflect.hasField(meta, 'chartPath')) ? Reflect.field(meta, 'chartPath') : null;
+						var savedM:Dynamic = (meta != null && Reflect.hasField(meta, 'chartMTime')) ? Reflect.field(meta, 'chartMTime') : null;
+						var warn:Bool = false;
+						if (chartPath != null && FileSystem.exists(chartPath))
+						{
+							var s2 = FileSystem.stat(chartPath);
+							var curM = (s2 != null && Reflect.hasField(s2, 'mtime')) ? Reflect.field(s2, 'mtime') : null;
+							if (savedM != null && curM != null && Std.string(savedM) != Std.string(curM)) warn = true;
+						}
+						else warn = true;
+						if (warn)
+						{
+							missingText.text = 'Warning: chart file changed since save. Playback may desync.';
+							missingText.screenCenter(Y);
+							missingText.visible = true;
+							missingTextBG.visible = true;
+						}
+						// 设置待加载回放并加载歌曲
+						PlayState.pendingReplayData = replayArr;
+						PlayState.shouldStartReplay = true;
+						var songLowercase:String = Paths.formatToSongPath(songs[curSelected].songName);
+						var poop:String = Highscore.formatSong(songLowercase, curDifficulty);
+						Song.loadFromJson(poop, songLowercase);
+						PlayState.isStoryMode = false;
+						PlayState.storyDifficulty = curDifficulty;
+						LoadingState.prepareToSong();
+						LoadingState.loadAndSwitchState(new PlayState());
+					}
+					catch(e:Dynamic)
+					{
+						trace('Failed to load replay: ' + e);
+					}
+				}
+			}
+		}
+		#end
 
 		updateTexts(elapsed);
 		super.update(elapsed);

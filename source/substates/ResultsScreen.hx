@@ -12,6 +12,8 @@ import sys.io.File;
 import states.StoryMenuState;
 import states.FreeplayState;
 import states.PlayState;
+import backend.Mods;
+import backend.Song;
 import backend.Rating;
 import backend.ClientPrefs;
 
@@ -34,6 +36,7 @@ import flixel.tweens.FlxTween;
 import flixel.util.FlxColor;
 import lime.app.Application;
 import flixel.math.FlxMath;
+import flixel.util.FlxTimer;
 
 import backend.HitGraph;
 
@@ -63,6 +66,7 @@ class ResultsScreen extends FlxSubState
 
 	public var canReplay:Bool = false;	// 是否可以回放
 	public var replayPressed:Bool = false;	// 是否按下了回放键
+	public var savePressed:Bool = false; // 是否按下保存回放键（防抖）
 
 	override function create()
 	{
@@ -346,6 +350,39 @@ class ResultsScreen extends FlxSubState
 		{
 			replayPressed = true;
 			handleReplay();
+		}
+		else if (FlxG.keys.justPressed.F9 && PlayState.instance != null && PlayState.instance.replayData != null && PlayState.instance.replayData.length > 0 && !savePressed)
+		{
+			savePressed = true;
+			#if FEATURE_FILESYSTEM
+			try
+			{
+				var moddir:String = (Mods.currentModDirectory != null && Mods.currentModDirectory.length > 0) ? Mods.currentModDirectory : 'global';
+				var replayFolder:String = Paths.mods(moddir + '/replay');
+				if (!FileSystem.exists(replayFolder)) FileSystem.createDirectory(replayFolder);
+				var chartPath:String = Song.chartPath != null ? Song.chartPath : (PlayState.SONG != null ? PlayState.SONG.song : '');
+				var statMTime:Dynamic = null;
+				if (chartPath != null && FileSystem.exists(chartPath)) {
+					var s = FileSystem.stat(chartPath);
+					if (s != null && Reflect.hasField(s, 'mtime')) statMTime = Reflect.field(s, 'mtime');
+				}
+				var saveName:String = Paths.formatToSongPath(PlayState.SONG.song) + '-' + Std.string(Date.now().getTime()) + '.replay.json';
+				var savePath:String = replayFolder + '/' + saveName;
+				var outObj:Dynamic = { meta: { song: PlayState.SONG.song, chartPath: chartPath, chartMTime: statMTime }, replay: PlayState.instance.replayData };
+				File.saveContent(savePath, haxe.Json.stringify(outObj));
+				// show middle-screen prompt
+				var cx:Float = FlxG.width / 2;
+				var cy:Float = FlxG.height / 2;
+				var center:TextField = createTextField(Math.floor(cx - 300), Math.floor(cy - 24), Math.floor(600), FlxColor.WHITE, 24);
+				center.text = 'Replay saved to mods/' + moddir + '/replay/' + saveName;
+				overlaySprite.addChild(center);
+			new FlxTimer().start(2, function(tw:FlxTimer) { if (overlaySprite.contains(center)) overlaySprite.removeChild(center); });
+			}
+			catch(e:Dynamic)
+			{
+				trace('Failed to save replay: ' + e);
+			}
+			#end
 		}
 
 		// 移动端：触摸屏幕

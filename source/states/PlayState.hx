@@ -115,6 +115,10 @@ class PlayState extends MusicBeatState
 	var keyPressIndices:Array<Int> = [-1, -1, -1, -1];	// 记录每个按键最后一次按下对应的replayData索引
 	var replayNoteDelays:Array<Array<{strumTime:Float, late:Float}>> = [[], [], [], []];	// 存储每个键对应的音符延迟
 	var currentNoteDelayOverride:Null<Float> = null;	// 当前音符的延迟覆盖值（replay模式使用）
+	// 非音符按键支持（将按键code + NON_NOTE_KEY_OFFSET 存入 replayData.key）
+	public static inline var NON_NOTE_KEY_OFFSET:Int = 1000;
+	var nonNoteKeyPressIndices:Map<Int, Int> = new Map<Int, Int>();
+	var replayHeldNonNoteKeys:Map<Int, Bool> = new Map<Int, Bool>();
 	
 	// 静态变量用于传递回放数据
 	public static var pendingReplayData:Array<ReplayData> = null;	// 待加载的回放数据
@@ -441,6 +445,9 @@ class PlayState extends MusicBeatState
 			keyPressIndices = [-1, -1, -1, -1];
 			// 初始化延迟存储数组
 			replayNoteDelays = [[], [], [], []];
+			// 初始化非音符回放状态
+			replayHeldNonNoteKeys = new Map<Int, Bool>();
+			nonNoteKeyPressIndices = new Map<Int, Int>();
 			// 预填充延迟数据，以便在 popUpScore 中快速查找
 			for(action in replayData)
 			{
@@ -459,6 +466,8 @@ class PlayState extends MusicBeatState
 			replayHeldKeys = [false, false, false, false];
 			keyPressIndices = [-1, -1, -1, -1];
 			replayNoteDelays = [[], [], [], []];
+			replayHeldNonNoteKeys = new Map<Int, Bool>();
+			nonNoteKeyPressIndices = new Map<Int, Int>();
 		}
 
 		startCallback = startCountdown;
@@ -2041,17 +2050,31 @@ class PlayState extends MusicBeatState
 				// 检查是否有releaseTime且已到时间（ghost操作需要至少50ms的延迟）
 				if(action.releaseTime != null && Conductor.songPosition >= action.releaseTime)
 				{
-					// 抬起按键
-					replayHeldKeys[action.key] = false;
-					action.releaseTime = null; // 标记为已处理
-
-					// 播放static动画
-					var spr:StrumNote = playerStrums.members[action.key];
-					if(spr != null)
+					// 如果是音符按键
+					if(action.key < NON_NOTE_KEY_OFFSET)
 					{
-						spr.playAnim('static');
-						spr.resetAnim = 0;
+						replayHeldKeys[action.key] = false;
+						// 播放static动画
+						var spr:StrumNote = playerStrums.members[action.key];
+						if(spr != null)
+						{
+							spr.playAnim('static');
+							spr.resetAnim = 0;
+							spr.alpha = 1;
+						}
 					}
+					else
+					{
+						// 非音符按键抬起：向舞台派发合成 KEY_UP 事件并标记为已处理
+						var actualKey:Int = action.key - NON_NOTE_KEY_OFFSET;
+						replayHeldNonNoteKeys.set(action.key, false);
+						if(FlxG.stage != null)
+						{
+							var ev:KeyboardEvent = new KeyboardEvent(KeyboardEvent.KEY_UP, false, false, 0, actualKey);
+							FlxG.stage.dispatchEvent(ev);
+						}
+					}
+					action.releaseTime = null; // 标记为已处理
 				}
 			}
 			
@@ -2085,67 +2108,83 @@ class PlayState extends MusicBeatState
 				if(Conductor.songPosition >= replayAction.time)
 				{
 					// 根据回放数据执行相应的按键
-					if(replayAction.judge == 'ghost')
+					if(replayAction.key < NON_NOTE_KEY_OFFSET)
 					{
-						// 标记按键为按下状态
-						replayHeldKeys[replayAction.key] = true;
-
-						// 空按 - 播放pressed动画
-						var spr:StrumNote = playerStrums.members[replayAction.key];
-						if(spr != null && strumsBlocked[replayAction.key] != true && spr.animation.curAnim.name != 'confirm')
+						if(replayAction.judge == 'ghost')
 						{
-							spr.playAnim('pressed');
-							spr.resetAnim = 0; // 不自动重置，由按键释放时重置
+							// 标记按键为按下状态
+							replayHeldKeys[replayAction.key] = true;
+
+							// 空按 - 播放pressed动画
+							var spr:StrumNote = playerStrums.members[replayAction.key];
+							if(spr != null && strumsBlocked[replayAction.key] != true && spr.animation.curAnim.name != 'confirm')
+							{
+								spr.playAnim('pressed');
+								spr.resetAnim = 0; // 不自动重置，由按键释放时重置
+								spr.alpha = 0.5;
+							}
+
+							// 根据当前的ghostTapping设置决定是否调用noteMissPress和onGhostTap
+							if(ClientPrefs.data.ghostTapping)
+							{
+								callOnScripts('onGhostTap', [replayAction.key]);
+							}
+							else
+							{
+								noteMissPress(replayAction.key);
+							}
+
+							// 调用onKeyPress回调（与正常模式保持一致）
+							callOnScripts('onKeyPress', [replayAction.key]);
+
+							// 更新keysPressed数组（与正常模式保持一致）
+							if(!keysPressed.contains(replayAction.key)) keysPressed.push(replayAction.key);
 						}
-
-						// 根据当前的ghostTapping设置决定是否调用noteMissPress和onGhostTap
-						if(ClientPrefs.data.ghostTapping)
+						else if(replayAction.judge == 'miss')
 						{
-							callOnScripts('onGhostTap', [replayAction.key]);
+							// Miss，不需要按键
 						}
 						else
 						{
-							noteMissPress(replayAction.key);
+							// 标记按键为按下状态
+							replayHeldKeys[replayAction.key] = true;
+						
+							// 播放pressed动画（会在goodNoteHit中被confirm覆盖）
+							var spr:StrumNote = playerStrums.members[replayAction.key];
+							if(spr != null && strumsBlocked[replayAction.key] != true)
+							{
+								spr.playAnim('pressed');
+								spr.resetAnim = 0;
+							}
+						
+							// 正常按键，找到对应的音符并打击
+							var targetNotes:Array<Note> = notes.members.filter(function(n:Note):Bool {
+								// 使用小容差（5ms）来匹配音符，避免浮点数精度问题
+								return n != null && n.mustPress && n.noteData == replayAction.key && !n.wasGoodHit
+									&& Math.abs(n.strumTime - replayAction.noteTime) < 5;
+							});
+							for(note in targetNotes)
+							{
+								// 设置延迟覆盖值，确保使用原始记录的延迟
+								if(replayAction.late != null)
+								{
+									currentNoteDelayOverride = replayAction.late;
+								}
+								goodNoteHit(note);
+							}
 						}
-
-						// 调用onKeyPress回调（与正常模式保持一致）
-						callOnScripts('onKeyPress', [replayAction.key]);
-
-						// 更新keysPressed数组（与正常模式保持一致）
-						if(!keysPressed.contains(replayAction.key)) keysPressed.push(replayAction.key);
-					}
-					else if(replayAction.judge == 'miss')
-					{
-						// Miss，不需要按键
 					}
 					else
 					{
-						// 标记按键为按下状态
-						replayHeldKeys[replayAction.key] = true;
-						
-						// 播放pressed动画（会在goodNoteHit中被confirm覆盖）
-						var spr:StrumNote = playerStrums.members[replayAction.key];
-						if(spr != null && strumsBlocked[replayAction.key] != true)
+						// 非音符按键按下：向舞台派发合成 KEY_DOWN 事件
+						var actualKey:Int = replayAction.key - NON_NOTE_KEY_OFFSET;
+						replayHeldNonNoteKeys.set(replayAction.key, true);
+						if(FlxG.stage != null)
 						{
-							spr.playAnim('pressed');
-							spr.resetAnim = 0;
+							var dev:KeyboardEvent = new KeyboardEvent(KeyboardEvent.KEY_DOWN, false, false, 0, actualKey);
+							FlxG.stage.dispatchEvent(dev);
 						}
-						
-						// 正常按键，找到对应的音符并打击
-						var targetNotes:Array<Note> = notes.members.filter(function(n:Note):Bool {
-							// 使用小容差（5ms）来匹配音符，避免浮点数精度问题
-							return n != null && n.mustPress && n.noteData == replayAction.key && !n.wasGoodHit
-								&& Math.abs(n.strumTime - replayAction.noteTime) < 5;
-						});
-						for(note in targetNotes)
-						{
-							// 设置延迟覆盖值，确保使用原始记录的延迟
-							if(replayAction.late != null)
-							{
-								currentNoteDelayOverride = replayAction.late;
-							}
-							goodNoteHit(note);
-						}
+						if(!keysPressed.contains(actualKey)) keysPressed.push(actualKey);
 					}
 					currentReplayIndex++;
 				}
@@ -3434,7 +3473,33 @@ class PlayState extends MusicBeatState
 			@:privateAccess if (!FlxG.keys._keyListMap.exists(eventKey)) return;
 			#end
 
-			if(FlxG.keys.checkStatus(eventKey, JUST_PRESSED)) keyPressed(key);
+			if(FlxG.keys.checkStatus(eventKey, JUST_PRESSED) || (Reflect.hasField(event, "replay") && Reflect.field(event, "replay") == true))
+			{
+				if(key != -1)
+					keyPressed(key);
+				else
+				{
+					// 非音符键：记录（如果未被列为忽略的主要功能键）
+					if(shouldRecordKey(eventKey))
+					{
+						if(!isReplaying)
+						{
+							replayData.push({
+								time: Conductor.songPosition,
+								key: NON_NOTE_KEY_OFFSET + eventKey,
+								noteTime: null,
+								late: null,
+								judge: 'raw',
+								releaseTime: null
+							});
+							nonNoteKeyPressIndices.set(eventKey, replayData.length - 1);
+							replayHeldNonNoteKeys.set(NON_NOTE_KEY_OFFSET + eventKey, true);
+						}
+						// 调用脚本回调（可选，脚本可监听）
+						callOnScripts('onRawKeyPress', [eventKey]);
+					}
+				}
+			}
 		}
 	}
 
@@ -3538,7 +3603,24 @@ class PlayState extends MusicBeatState
 	{
 		var eventKey:FlxKey = event.keyCode;
 		var key:Int = getKeyFromEvent(keysArray, eventKey);
-		if(!controls.controllerMode && key > -1) keyReleased(key);
+		if(!controls.controllerMode)
+		{
+			if(key > -1) keyReleased(key);
+			else
+			{
+				// 非音符键抬起：更新回放数据并触发脚本回调
+				if(shouldRecordKey(eventKey))
+				{
+					var idx:Int = nonNoteKeyPressIndices.exists(eventKey) ? nonNoteKeyPressIndices.get(eventKey) : -1;
+					if(!isReplaying && idx >= 0 && idx < replayData.length)
+					{
+						replayData[idx].releaseTime = Conductor.songPosition;
+						nonNoteKeyPressIndices.remove(eventKey);
+					}
+					callOnScripts('onRawKeyRelease', [eventKey]);
+				}
+			}
+		}
 	}
 
 	private function keyReleased(key:Int)
@@ -3581,6 +3663,15 @@ class PlayState extends MusicBeatState
 			}
 		}
 		return -1;
+	}
+
+	// 判断是否应该记录该按键为回放（排除主要功能键）
+	private function shouldRecordKey(eventKey:FlxKey):Bool
+	{
+		// 过滤掉 ESC 与 ENTER（用户要求）
+		if(eventKey == FlxKey.ESCAPE || eventKey == FlxKey.ENTER) return false;
+		// 只要不是 ESC/ENTER 并且不是映射到箭头（getKeyFromEvent 已处理），就记录
+		return true;
 	}
 
 	private function onButtonPress(button:TouchButton):Void
