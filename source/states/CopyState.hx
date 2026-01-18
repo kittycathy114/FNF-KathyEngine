@@ -66,7 +66,8 @@ class CopyState extends MusicBeatState
 			return;
 		}
 
-		CoolUtil.showPopUp("Seems like you have some missing files that are necessary to run the game\nPress OK to begin the copy process", LanguageBasic.getPhrase('mobile_notice', 'Notice!'));
+		CoolUtil.showPopUp("Seems like you have some missing files that are necessary to run the game\nPress OK to begin the copy process",
+			LanguageBasic.getPhrase('mobile_notice', 'Notice!'));
 
 		shouldCopy = true;
 
@@ -112,17 +113,18 @@ class CopyState extends MusicBeatState
 				if (failedFiles.length > 0)
 				{
 					CoolUtil.showPopUp(failedFiles.join('\n'), 'Failed To Copy ${failedFiles.length} File.');
-					final folder:String = #if android StorageUtil.getExternalStorageDirectory() + #else Sys.getCwd() + #end 'logs/';
+					final folder:String = #if android StorageUtil.getExternalStorageDirectory() + #else Sys.getCwd() + #end
+					'logs/';
 					if (!FileSystem.exists(folder))
 						FileSystem.createDirectory(folder);
 					File.saveContent(folder + Date.now().toString().replace(' ', '-').replace(':', "'") + '-CopyState' + '.txt', failedFilesStack.join('\n'));
 				}
-				
+
 				FlxG.sound.play(Paths.sound('confirmMenu')).onComplete = () ->
 				{
 					MusicBeatState.switchState(new TitleState());
 				};
-		
+
 				canUpdate = false;
 			}
 
@@ -157,9 +159,9 @@ class CopyState extends MusicBeatState
 							path = StorageUtil.getExternalStorageDirectory() + file;
 						else
 						#end
-							path = file;
+						path = file;
 						File.saveBytes(path, getFileBytes(getFile(file)));
-					}		
+					}
 				}
 				else
 				{
@@ -247,7 +249,7 @@ class CopyState extends MusicBeatState
 			if (filesToRemove.contains(file))
 				continue;
 
-			if(file.endsWith(IGNORE_FOLDER_FILE_NAME) && !directoriesToIgnore.contains(Path.directory(file)))
+			if (file.endsWith(IGNORE_FOLDER_FILE_NAME) && !directoriesToIgnore.contains(Path.directory(file)))
 				directoriesToIgnore.push(Path.directory(file));
 
 			if (directoriesToIgnore.length > 0)

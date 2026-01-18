@@ -185,10 +185,8 @@ class Main extends Sprite
 		#end
 		// addChild(new FlxGame(game.width, game.height, #if COPYSTATE_ALLOWED !CopyState.checkExistingFiles() ? CopyState : #end game.initialState, game.framerate, game.framerate, game.skipSplash, game.startFullscreen));
 
-	var game:FlxGame = new FlxGame(game.width, game.height,
-		#if COPYSTATE_ALLOWED !CopyState.checkExistingFiles() ? CopyState : #end game.initialState,
-		#if (flixel < "5.0.0") game.zoom, #end game.framerate, game.framerate,
-		game.skipSplash, game.startFullscreen);
+		var game:FlxGame = new FlxGame(game.width, game.height, #if COPYSTATE_ALLOWED !CopyState.checkExistingFiles() ? CopyState : #end game.initialState,
+			#if (flixel < "5.0.0") game.zoom, #end game.framerate, game.framerate, game.skipSplash, game.startFullscreen);
 		// #if BASE_GAME_FILES
 		// @:privateAccess
 		// game._customSoundTray = backend.FunkinSoundTray;
@@ -288,15 +286,15 @@ class Main extends Sprite
 		Lib.current.stage.addEventListener(Event.DEACTIVATE, onAppDeactivate);
 		Lib.current.stage.addEventListener(Event.ACTIVATE, onAppActivate);
 
-	#if (cpp && windows && !mobile)
-	// 延迟初始化窗口关闭回调，确保窗口完全创建后再设置
-	haxe.Timer.delay(function()
+		#if (cpp && windows && !mobile)
+		// 延迟初始化窗口关闭回调，确保窗口完全创建后再设置
+		haxe.Timer.delay(function()
 		{
 			backend.Native.setCloseCallback();
 			// 启动关闭检查定时器
 			startCloseCheckTimer();
 		}, 100); // 延迟 100ms，更快启用关闭拦截
-	#end
+		#end
 	}
 
 	/**
@@ -330,7 +328,8 @@ class Main extends Sprite
 	// 启动关闭请求检查（使用较慢的定时器减少性能影响）
 	private static function startCloseCheckTimer():Void
 	{
-		if (closeCheckTimer != null) return; // 已经在运行
+		if (closeCheckTimer != null)
+			return; // 已经在运行
 
 		closeCheckTimer = new haxe.Timer(100); // 每 100ms 检查一次（每秒 10 次）
 		closeCheckTimer.run = checkCloseRequest;
@@ -349,7 +348,8 @@ class Main extends Sprite
 	private static function startFadeOutAndExit():Void
 	{
 		// 防止重复执行
-		if (isExiting) return;
+		if (isExiting)
+			return;
 		isExiting = true;
 
 		// 停止关闭检查定时器（性能优化）
@@ -395,11 +395,11 @@ class Main extends Sprite
 		mouseTrail = new MouseTrail();
 
 		// 配置拖尾参数（可根据需要调整）
-		mouseTrail.trailLength = 8;       // 拖尾粒子数量（PC和手机统一8个）
-		mouseTrail.trailSize = 12;        // 粒子大小
-		mouseTrail.trailDecay = 0.9;      // 衰减系数
+		mouseTrail.trailLength = 8; // 拖尾粒子数量（PC和手机统一8个）
+		mouseTrail.trailSize = 12; // 粒子大小
+		mouseTrail.trailDecay = 0.9; // 衰减系数
 		mouseTrail.trailColor = 0xFFFFFF; // 白色拖尾
-		mouseTrail.trailAlpha = 0.6;      // 初始透明度
+		mouseTrail.trailAlpha = 0.6; // 初始透明度
 
 		// 添加到舞台顶层，在游戏和FPS之上但在UI之下
 		// 这样拖尾不会被游戏内容遮挡，也不会遮挡UI
@@ -497,18 +497,18 @@ class Main extends Sprite
 		}
 
 		/*#if (cpp && windows && !mobile)
-		// 拦截 ESC 键，执行渐隐关闭
-		if (event.keyCode == Keyboard.ESCAPE)
-		{
-			// 阻止默认的 ESC 行为
-			event.preventDefault();
-			event.stopPropagation();
-			event.stopImmediatePropagation();
+			// 拦截 ESC 键，执行渐隐关闭
+			if (event.keyCode == Keyboard.ESCAPE)
+			{
+				// 阻止默认的 ESC 行为
+				event.preventDefault();
+				event.stopPropagation();
+				event.stopImmediatePropagation();
 
-			// 执行渐隐关闭
-			startFadeOutAndExit();
-		}
-		#end*/
+				// 执行渐隐关闭
+				startFadeOutAndExit();
+			}
+			#end */
 
 		// F5键刷新当前state（使用CustomFadeTransition无缝切换）
 		if (event.keyCode == Keyboard.F5 && FlxG.state != null)
@@ -551,7 +551,7 @@ class Main extends Sprite
 
 	// ==================== 鼠标拖尾公共API ====================
 
-#if mobile
+	#if mobile
 	/**
 	 * 显示/隐藏鼠标拖尾
 	 * @param visible 是否显示拖尾
@@ -895,5 +895,5 @@ class Main extends Sprite
 			mouseTrail.recalculateScreenScale();
 		}
 	}
-#end
+	#end
 }

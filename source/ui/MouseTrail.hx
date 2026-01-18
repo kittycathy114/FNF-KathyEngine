@@ -25,16 +25,16 @@ class MouseTrail extends Sprite
 	private var rippleEffects:Array<RippleEffect> = [];
 
 	// 拖尾配置
-	public var trailLength:Int = 10;        // 拖尾粒子数量（降低以提升性能）
-	public var trailSize:Float = 28;        // 粒子初始大小
-	public var trailDecay:Float = 0.96;     // 粒子衰减系数 - 稍微加快衰减以减少活跃粒子
-	public var trailColor:Int = 0x00BFFF;   // 拖尾颜色（深天蓝色）
-	public var trailAlpha:Float = 0.8;      // 初始透明度
+	public var trailLength:Int = 10; // 拖尾粒子数量（降低以提升性能）
+	public var trailSize:Float = 28; // 粒子初始大小
+	public var trailDecay:Float = 0.96; // 粒子衰减系数 - 稍微加快衰减以减少活跃粒子
+	public var trailColor:Int = 0x00BFFF; // 拖尾颜色（深天蓝色）
+	public var trailAlpha:Float = 0.8; // 初始透明度
 
 	// 点击效果配置
-	public var clickEffectEnabled:Bool = true;    // 是否启用点击效果
+	public var clickEffectEnabled:Bool = true; // 是否启用点击效果
 	public var mobileOnlyClickEffect:Bool = false; // 只在手机端显示点击效果（默认false，所有平台都显示）
-	public var clickEffectSize:Float = 40;  // 点击效果初始大小
+	public var clickEffectSize:Float = 40; // 点击效果初始大小
 	public var clickEffectAlpha:Float = 1.0; // 点击效果初始透明度
 	#if mobile
 	public var clickEffectDecay:Float = 0.85; // 点击效果衰减速度（手机端更快消失）
@@ -44,27 +44,27 @@ class MouseTrail extends Sprite
 	public var clickEffectColor:Int = 0x00BFFF; // 点击效果颜色（与拖尾一致）
 
 	// 光圈效果配置
-	public var rippleEnabled:Bool = true;    // 是否启用光圈效果
-	public var rippleMaxSize:Float = 100;   // 光圈最大扩散半径
+	public var rippleEnabled:Bool = true; // 是否启用光圈效果
+	public var rippleMaxSize:Float = 100; // 光圈最大扩散半径
 	#if mobile
-	public var rippleSpeed:Float = 2.0;     // 光圈扩散速度（手机端更慢）
+	public var rippleSpeed:Float = 2.0; // 光圈扩散速度（手机端更慢）
 	public var rippleAlphaDecay:Float = 0.08; // 光圈透明度衰减速度（手机端更快）
 	#else
-	public var rippleSpeed:Float = 3.0;     // 光圈扩散速度
+	public var rippleSpeed:Float = 3.0; // 光圈扩散速度
 	public var rippleAlphaDecay:Float = 0.04; // 光圈透明度衰减速度
 	#end
-	public var rippleThickness:Float = 3.0;   // 光圈线条粗细
-	public var rippleColor:Int = 0x00BFFF;  // 光圈颜色
+	public var rippleThickness:Float = 3.0; // 光圈线条粗细
+	public var rippleColor:Int = 0x00BFFF; // 光圈颜色
 
 	// 发光效果配置
-	public var glowEnabled:Bool = true;    // 是否启用发光效果
-	public var glowColor:Int = 0x00BFFF;  // 发光颜色
-	public var glowAlpha:Float = 0.8;     // 发光透明度（降低以减少渲染开销）
-	public var glowBlur:Float = 30.0;     // 发光模糊度（降低以提升性能）
-	public var glowStrength:Float = 5;   // 发光强度（降低以提升性能）
+	public var glowEnabled:Bool = true; // 是否启用发光效果
+	public var glowColor:Int = 0x00BFFF; // 发光颜色
+	public var glowAlpha:Float = 0.8; // 发光透明度（降低以减少渲染开销）
+	public var glowBlur:Float = 30.0; // 发光模糊度（降低以提升性能）
+	public var glowStrength:Float = 5; // 发光强度（降低以提升性能）
 
 	// 全局开关
-	public var enabled:Bool = true;         // 是否完全启用拖尾效果（由设置控制）
+	public var enabled:Bool = true; // 是否完全启用拖尾效果（由设置控制）
 
 	// 性能优化：缓存的发光滤镜
 	private var cachedGlowFilter:GlowFilter = null;
@@ -92,8 +92,8 @@ class MouseTrail extends Sprite
 	// 多触控支持：触摸点跟踪
 	#if mobile
 	private var activeTouches:IntMap<TouchPoint> = new IntMap<TouchPoint>(); // 跟踪所有活动触摸点
-	#end
 
+	#end
 	// 性能优化：更新计数器
 	private var updateFrameCount:Int = 0;
 	#if mobile
@@ -104,8 +104,8 @@ class MouseTrail extends Sprite
 	private var updateInterval:Int = 1; // 桌面端每帧更新
 	private var maxClickEffects:Int = 4; // 桌面端最多4个点击效果
 	private var maxRippleEffects:Int = 4; // 桌面端最多4个光圈效果（与点击效果一致）
-	#end
 
+	#end
 	// 高分屏性能优化配置
 	private var isHighDPI:Bool = false;
 	private var effectiveDPIScale:Float = 1.0; // 有效的 DPI 缩放（ capped at 1.5 for performance）
@@ -411,8 +411,7 @@ class MouseTrail extends Sprite
 			touchPoint.y = e.stageY;
 
 			// 检测是否移动了足够距离
-			var moved:Bool = (Math.abs(touchPoint.x - touchPoint.lastX) > 0.5 ||
-			                Math.abs(touchPoint.y - touchPoint.lastY) > 0.5);
+			var moved:Bool = (Math.abs(touchPoint.x - touchPoint.lastX) > 0.5 || Math.abs(touchPoint.y - touchPoint.lastY) > 0.5);
 
 			if (moved)
 			{
@@ -599,6 +598,7 @@ class MouseTrail extends Sprite
 		shape.graphics.drawCircle(ripple.radius, ripple.radius, ripple.radius);
 		return shape;
 	}
+
 	private function createGlowFilter():GlowFilter
 	{
 		if (!glowEnabled)
@@ -1202,11 +1202,11 @@ class RippleEffect
  */
 class TouchPoint
 {
-	public var touchId:Int;      // 触摸点 ID
-	public var x:Float;         // X 坐标
-	public var y:Float;         // Y 坐标
-	public var lastX:Float;      // 上一次 X 坐标
-	public var lastY:Float;      // 上一次 Y 坐标
+	public var touchId:Int; // 触摸点 ID
+	public var x:Float; // X 坐标
+	public var y:Float; // Y 坐标
+	public var lastX:Float; // 上一次 X 坐标
+	public var lastY:Float; // 上一次 Y 坐标
 
 	public function new(touchId:Int)
 	{
@@ -1217,4 +1217,3 @@ class TouchPoint
 		this.lastY = -1;
 	}
 }
-
