@@ -9,6 +9,7 @@ import flixel.util.FlxStringUtil;
 import states.StoryMenuState;
 import states.FreeplayState;
 import options.OptionsState;
+import StringTools;
 
 class PauseSubState extends MusicBeatSubstate
 {
@@ -108,23 +109,30 @@ class PauseSubState extends MusicBeatSubstate
 		var blueballedTxt:FlxText = new FlxText(20, 15 + 160, 0, 'RETRIED: ${PlayState.deathCounter}', 32);
 		blueballedTxt.scrollFactor.set();
 		blueballedTxt.setFormat(Paths.font('vcr.ttf'), 32);
-		if (PlayState.SONG.specialInst != null) blueballedTxt.y += 32;
-		if (PlayState.SONG.specialVocal != null) blueballedTxt.y += 32;
+		if (PlayState.SONG.specialInst != null && PlayState.SONG.specialInst.trim().length > 0) blueballedTxt.y += 32;
+		if (PlayState.SONG.specialVocal != null && PlayState.SONG.specialVocal.trim().length > 0) blueballedTxt.y += 32;
 		blueballedTxt.updateHitbox();
 		add(blueballedTxt);
 
-		var sprcialInstText:FlxText = new FlxText(20, 15 + 160, 0, 'Special Inst: ${PlayState.SONG.specialInst}', 32);
-		sprcialInstText.scrollFactor.set();
-		sprcialInstText.setFormat(Paths.font('vcr.ttf'), 32);
-		sprcialInstText.updateHitbox();
-		add(sprcialInstText);
-
-		var specialVocalText:FlxText = new FlxText(20, 15 + 160, 0, 'Special Vocal: ${PlayState.SONG.specialVocal}', 32);
-		specialVocalText.scrollFactor.set();
-		specialVocalText.setFormat(Paths.font('vcr.ttf'), 32);
-		specialVocalText.updateHitbox();
-		if (PlayState.SONG.specialInst != null) specialVocalText.y += 32;
-		add(specialVocalText);
+		var sprcialInstText:FlxText = null;
+		var specialVocalText:FlxText = null;
+		
+		if (PlayState.SONG.specialInst != null && PlayState.SONG.specialInst.trim().length > 0) {
+			sprcialInstText = new FlxText(20, 15 + 160, 0, 'Special Inst: ${PlayState.SONG.specialInst}', 32);
+			sprcialInstText.scrollFactor.set();
+			sprcialInstText.setFormat(Paths.font('vcr.ttf'), 32);
+			sprcialInstText.updateHitbox();
+			add(sprcialInstText);
+		}
+		
+		if (PlayState.SONG.specialVocal != null && PlayState.SONG.specialVocal.trim().length > 0) {
+			specialVocalText = new FlxText(20, 15 + 160, 0, 'Special Vocal: ${PlayState.SONG.specialVocal}', 32);
+			specialVocalText.scrollFactor.set();
+			specialVocalText.setFormat(Paths.font('vcr.ttf'), 32);
+			specialVocalText.updateHitbox();
+			if (sprcialInstText != null) specialVocalText.y += 32;
+			add(specialVocalText);
+		}
 
 		practiceText = new FlxText(20, 15 + 197, 0, LanguageBasic.getPhrase("Practice Mode").toUpperCase(), 32);
 		practiceText.scrollFactor.set();
@@ -150,8 +158,8 @@ class PauseSubState extends MusicBeatSubstate
 		bpmText.alpha = 0;
 		speedText.alpha = 0;
 		formatText.alpha = 0;
-		sprcialInstText.alpha = 0;
-		specialVocalText.alpha = 0;
+		if (sprcialInstText != null) sprcialInstText.alpha = 0;
+		if (specialVocalText != null) specialVocalText.alpha = 0;
 
 		levelInfo.x = FlxG.width - (levelInfo.width + 20);
 		levelDifficulty.x = FlxG.width - (levelDifficulty.width + 20);
@@ -159,8 +167,8 @@ class PauseSubState extends MusicBeatSubstate
 		speedText.x = FlxG.width - (speedText.width + 20);
 		formatText.x = FlxG.width - (formatText.width + 20);
 		blueballedTxt.x = FlxG.width - (blueballedTxt.width + 20);
-		specialVocalText.x = FlxG.width - (specialVocalText.width + 20);
-		sprcialInstText.x = FlxG.width - (sprcialInstText.width + 20);
+		if (specialVocalText != null) specialVocalText.x = FlxG.width - (specialVocalText.width + 20);
+		if (sprcialInstText != null) sprcialInstText.x = FlxG.width - (sprcialInstText.width + 20);
 
 		FlxTween.tween(bg, {alpha: 0.6}, 0.3, {ease: FlxEase.quartInOut});
 		FlxTween.tween(levelInfo, {alpha: 1, y: 20}, 0.3, {ease: FlxEase.quartInOut, startDelay: 0.1});
@@ -168,8 +176,8 @@ class PauseSubState extends MusicBeatSubstate
 		FlxTween.tween(bpmText, {alpha: 1, y: bpmText.y + 5}, 0.3, {ease: FlxEase.quartInOut, startDelay: 0.3});
 		FlxTween.tween(speedText, {alpha: 1, y: speedText.y + 5}, 0.3, {ease: FlxEase.quartInOut, startDelay: 0.4}); 
 		FlxTween.tween(formatText, {alpha: 1, y: formatText.y + 5}, 0.3, {ease: FlxEase.quartInOut, startDelay: 0.5});
-		if (PlayState.SONG.specialInst != null) FlxTween.tween(sprcialInstText, {alpha: 1, y: sprcialInstText.y + 5}, 0.3, {ease: FlxEase.quartInOut, startDelay: 0.6});
-		if (PlayState.SONG.specialVocal != null) FlxTween.tween(specialVocalText, {alpha: 1, y: specialVocalText.y + 5}, 0.3, {ease: FlxEase.quartInOut, startDelay: 0.7});
+		if (sprcialInstText != null) FlxTween.tween(sprcialInstText, {alpha: 1, y: sprcialInstText.y + 5}, 0.3, {ease: FlxEase.quartInOut, startDelay: 0.6});
+		if (specialVocalText != null) FlxTween.tween(specialVocalText, {alpha: 1, y: specialVocalText.y + 5}, 0.3, {ease: FlxEase.quartInOut, startDelay: 0.7});
 		FlxTween.tween(blueballedTxt, {alpha: 1, y: blueballedTxt.y + 5}, 0.3, {ease: FlxEase.quartInOut, startDelay: 0.8});
 
 		grpMenuShit = new FlxTypedGroup<Alphabet>();

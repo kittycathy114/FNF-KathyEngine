@@ -1733,10 +1733,10 @@ class PlayState extends MusicBeatState
 		{
 			if (songData.needsVoices)
 			{
-				var playerVocals = Paths.voices(songData.song, (boyfriend.vocalsFile == null || boyfriend.vocalsFile.length < 1) ? 'Player' : boyfriend.vocalsFile);
-				vocals.loadEmbedded(playerVocals != null ? playerVocals : Paths.voices(songData.song));
+				var playerVocals = Paths.voices(songData.song, (boyfriend.vocalsFile == null || boyfriend.vocalsFile.length < 1) ? 'Player' : boyfriend.vocalsFile, songData.specialVocal);
+				vocals.loadEmbedded(playerVocals != null ? playerVocals : Paths.voices(songData.song, null, songData.specialVocal));
 				
-				var oppVocals = Paths.voices(songData.song, (dad.vocalsFile == null || dad.vocalsFile.length < 1) ? 'Opponent' : dad.vocalsFile);
+				var oppVocals = Paths.voices(songData.song, (dad.vocalsFile == null || dad.vocalsFile.length < 1) ? 'Opponent' : dad.vocalsFile, songData.specialVocal);
 				if(oppVocals != null && oppVocals.length > 0) opponentVocals.loadEmbedded(oppVocals);
 			}
 		}
@@ -1752,7 +1752,7 @@ class PlayState extends MusicBeatState
 		inst = new FlxSound();
 		try
 		{
-			inst.loadEmbedded(Paths.inst(songData.song));
+			inst.loadEmbedded(Paths.inst(songData.song, songData.specialInst));
 		}
 		catch (e:Dynamic) {}
 		FlxG.sound.list.add(inst);

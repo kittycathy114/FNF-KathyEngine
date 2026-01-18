@@ -367,8 +367,8 @@ class FreeplayState extends MusicBeatState
 					try
 					{
 						var playerVocals:String = getVocalFromCharacter(PlayState.SONG.player1);
-						var loadedVocals = Paths.voices(PlayState.SONG.song, (playerVocals != null && playerVocals.length > 0) ? playerVocals : 'Player');
-						if(loadedVocals == null) loadedVocals = Paths.voices(PlayState.SONG.song);
+						var loadedVocals = Paths.voices(PlayState.SONG.song, (playerVocals != null && playerVocals.length > 0) ? playerVocals : 'Player', PlayState.SONG.specialVocal);
+						if(loadedVocals == null) loadedVocals = Paths.voices(PlayState.SONG.song, null, PlayState.SONG.specialVocal);
 						
 						if(loadedVocals != null && loadedVocals.length > 0)
 						{
@@ -391,7 +391,7 @@ class FreeplayState extends MusicBeatState
 					{
 						//trace('please work...');
 						var oppVocals:String = getVocalFromCharacter(PlayState.SONG.player2);
-						var loadedVocals = Paths.voices(PlayState.SONG.song, (oppVocals != null && oppVocals.length > 0) ? oppVocals : 'Opponent');
+						var loadedVocals = Paths.voices(PlayState.SONG.song, (oppVocals != null && oppVocals.length > 0) ? oppVocals : 'Opponent', PlayState.SONG.specialVocal);
 						
 						if(loadedVocals != null && loadedVocals.length > 0)
 						{
@@ -412,7 +412,7 @@ class FreeplayState extends MusicBeatState
 					}
 				}
 
-				FlxG.sound.playMusic(Paths.inst(PlayState.SONG.song), 0.8);
+				FlxG.sound.playMusic(Paths.inst(PlayState.SONG.song, PlayState.SONG.specialInst), 0.8);
 				FlxG.sound.music.pause();
 				instPlaying = curSelected;
 
