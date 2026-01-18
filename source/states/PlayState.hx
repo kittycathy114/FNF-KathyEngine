@@ -123,6 +123,10 @@ class PlayState extends MusicBeatState
 	// 静态变量用于传递回放数据
 	public static var pendingReplayData:Array<ReplayData> = null;	// 待加载的回放数据
 	public static var shouldStartReplay:Bool = false;			// 是否应该启动回放
+	public static var replayJudgmentSettings:Dynamic = null;	// 回放中的判定设置
+	
+	// 存储原始判定设置以便恢复
+	var originalJudgmentSettings:Dynamic = null;
 	
 	var dancingLeft:Bool = false;
 	var icondancingLeft:Bool = false;
@@ -457,6 +461,42 @@ class PlayState extends MusicBeatState
 					replayNoteDelays[action.key].push({strumTime: action.noteTime, late: action.late});
 				}
 			}
+			
+			// 应用回放中的判定设置
+			if (replayJudgmentSettings != null) {
+				// 保存原始判定设置
+				originalJudgmentSettings = {
+					rmPerfect: ClientPrefs.data.rmPerfect,
+					perfectWindow: ClientPrefs.data.perfectWindow,
+					sickWindow: ClientPrefs.data.sickWindow,
+					goodWindow: ClientPrefs.data.goodWindow,
+					badWindow: ClientPrefs.data.badWindow,
+					safeFrames: ClientPrefs.data.safeFrames,
+					ratingOffset: ClientPrefs.data.ratingOffset,
+					hitsoundVolume: ClientPrefs.data.hitsoundVolume
+				};
+				
+				// 覆盖 ClientPrefs.data 中的判定相关字段
+				if (Reflect.hasField(replayJudgmentSettings, 'rmPerfect')) ClientPrefs.data.rmPerfect = replayJudgmentSettings.rmPerfect;
+				if (Reflect.hasField(replayJudgmentSettings, 'perfectWindow')) ClientPrefs.data.perfectWindow = replayJudgmentSettings.perfectWindow;
+				if (Reflect.hasField(replayJudgmentSettings, 'sickWindow')) ClientPrefs.data.sickWindow = replayJudgmentSettings.sickWindow;
+				if (Reflect.hasField(replayJudgmentSettings, 'goodWindow')) ClientPrefs.data.goodWindow = replayJudgmentSettings.goodWindow;
+				if (Reflect.hasField(replayJudgmentSettings, 'badWindow')) ClientPrefs.data.badWindow = replayJudgmentSettings.badWindow;
+				if (Reflect.hasField(replayJudgmentSettings, 'safeFrames')) ClientPrefs.data.safeFrames = replayJudgmentSettings.safeFrames;
+				if (Reflect.hasField(replayJudgmentSettings, 'ratingOffset')) ClientPrefs.data.ratingOffset = replayJudgmentSettings.ratingOffset;
+				if (Reflect.hasField(replayJudgmentSettings, 'hitsoundVolume')) ClientPrefs.data.hitsoundVolume = replayJudgmentSettings.hitsoundVolume;
+				
+				// 重新初始化 ratingsData 以确保与当前 rmPerfect 设置一致
+				ratingsData = Rating.loadDefault();
+				
+				// 更新 ratingsData 中的 hitWindow
+				for (rating in ratingsData) {
+					var windowField:String = rating.name + 'Window';
+					if (Reflect.hasField(replayJudgmentSettings, windowField)) {
+						rating.hitWindow = Reflect.field(replayJudgmentSettings, windowField);
+					}
+				}
+			}
 		}
 		else
 		{
@@ -468,6 +508,8 @@ class PlayState extends MusicBeatState
 			replayNoteDelays = [[], [], [], []];
 			replayHeldNonNoteKeys = new Map<Int, Bool>();
 			nonNoteKeyPressIndices = new Map<Int, Int>();
+			// 重置回放判定设置
+			replayJudgmentSettings = null;
 		}
 
 		startCallback = startCountdown;
@@ -841,7 +883,7 @@ class PlayState extends MusicBeatState
 		uiGroup.add(botplayTxt);
 
 		// 创建回放模式指示文本
-		replayTxt = new FlxText(400, ClientPrefs.data.botplayStyle == 'Kade' ? healthBar.y - 120 : healthBar.y - 90, FlxG.width - 800, "RECAP", 32);
+		replayTxt = new FlxText(400, ClientPrefs.data.botplayStyle == 'Kade' ? healthBar.y - 120 : healthBar.y - 90, FlxG.width - 800, "REPLAY", 32);
 		replayTxt.setFormat(Paths.font("vcr.ttf"), 37, 0xFF00FF00, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		replayTxt.scrollFactor.set();
 		replayTxt.screenCenter();
@@ -850,6 +892,7 @@ class PlayState extends MusicBeatState
 		replayTxt.color = FlxColor.fromRGB(boyfriend.healthColorArray[0], boyfriend.healthColorArray[1], boyfriend.healthColorArray[2]);
 		replayTxt.visible = isReplaying;
 		uiGroup.add(replayTxt);
+
 		if(ClientPrefs.data.downScroll)
 			botplayTxt.y = ClientPrefs.data.botplayStyle == 'Kade' ? healthBar.y + 120 : healthBar.y + 70;
 
@@ -3292,8 +3335,8 @@ class PlayState extends MusicBeatState
 						{
 							rating.setGraphicSize(Std.int(rating.width * daPixelZoom * 0.65));
 						}
-
-						theEXrating.x = rating.x + (rating.width / 2.5);
+						theEXrating.alpha = rating.alpha;
+						theEXrating.x = rating.x + (rating.width / 2.1);
 						theEXrating.y = rating.y - 75;
 						theEXrating.angle = 2;
 					}
@@ -4096,6 +4139,30 @@ class PlayState extends MusicBeatState
 		instance = null;
 		shutdownThread = true;
 		FlxG.signals.preUpdate.remove(checkForResync);
+		
+		// 恢复原始判定设置
+		if (originalJudgmentSettings != null) {
+			if (Reflect.hasField(originalJudgmentSettings, 'rmPerfect')) ClientPrefs.data.rmPerfect = originalJudgmentSettings.rmPerfect;
+			if (Reflect.hasField(originalJudgmentSettings, 'perfectWindow')) ClientPrefs.data.perfectWindow = originalJudgmentSettings.perfectWindow;
+			if (Reflect.hasField(originalJudgmentSettings, 'sickWindow')) ClientPrefs.data.sickWindow = originalJudgmentSettings.sickWindow;
+			if (Reflect.hasField(originalJudgmentSettings, 'goodWindow')) ClientPrefs.data.goodWindow = originalJudgmentSettings.goodWindow;
+			if (Reflect.hasField(originalJudgmentSettings, 'badWindow')) ClientPrefs.data.badWindow = originalJudgmentSettings.badWindow;
+			if (Reflect.hasField(originalJudgmentSettings, 'safeFrames')) ClientPrefs.data.safeFrames = originalJudgmentSettings.safeFrames;
+			if (Reflect.hasField(originalJudgmentSettings, 'ratingOffset')) ClientPrefs.data.ratingOffset = originalJudgmentSettings.ratingOffset;
+			if (Reflect.hasField(originalJudgmentSettings, 'hitsoundVolume')) ClientPrefs.data.hitsoundVolume = originalJudgmentSettings.hitsoundVolume;
+			
+			// 重新初始化 ratingsData 以确保与恢复后的 rmPerfect 设置一致
+			ratingsData = Rating.loadDefault();
+			
+			// 更新 ratingsData 中的 hitWindow（虽然实例即将销毁，但为了完整性）
+			for (rating in ratingsData) {
+				var windowField:String = rating.name + 'Window';
+				if (Reflect.hasField(originalJudgmentSettings, windowField)) {
+					rating.hitWindow = Reflect.field(originalJudgmentSettings, windowField);
+				}
+			}
+		}
+		
 		super.destroy();
 	}
 

@@ -18,6 +18,9 @@
 	<!--Minimum without FLX_NO_GAMEPAD: 11.8, without FLX_NO_NATIVE_CURSOR: 11.2-->
 	<set name="SWF_VERSION" value="11.8" />
 	
+	<!-- _________________ MINTRHYTHM ENGINE CUSTOMIZATION _________________ -->
+	<define name="FEATURE_FILESYSTEM"/>
+
 	<!-- ______________________ PSYCH ENGINE CUSTOMIZATION ______________________ -->
 
 	<define name="MODS_ALLOWED" if="desktop || mobile" />
@@ -112,6 +115,7 @@
 
 	<!-- _______________________________ Libraries ______________________________ -->
 
+	<!-- 核心库 -->
 	<haxelib name="flixel" version="5.9.0"/>
 	<haxelib name="openfl" version="9.4.2"/>
 	<haxelib name="flixel-addons" version="4.0.1"/>
@@ -124,6 +128,7 @@
 	<haxelib name="hxvlc" if="VIDEOS_ALLOWED"/>
 	<haxelib name="hxdiscord_rpc" if="DISCORD_ALLOWED"/>
 	<haxelib name="flxanimate"/>
+	<haxelib name="spine-haxe"/>
 	<haxelib name="flxgif" version="1.0.3"/>
 	<haxelib name="flxsvg" version="1.1.0"/>
 	<haxelib name="sl-windows-api" version="1.1.0"  if="desktop"/>

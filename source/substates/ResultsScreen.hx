@@ -369,8 +369,8 @@ class ResultsScreen extends FlxSubState
 				}
 				var saveName:String = Paths.formatToSongPath(PlayState.SONG.song) + '-' + Std.string(Date.now().getTime()) + '.replay.json';
 				var savePath:String = replayFolder + '/' + saveName;
-				var outObj:Dynamic = { meta: { song: PlayState.SONG.song, chartPath: chartPath, chartMTime: statMTime, difficulty: Difficulty.getString(PlayState.storyDifficulty, false) }, replay: PlayState.instance.replayData };
-				File.saveContent(savePath, haxe.Json.stringify(outObj));
+				var outObj:Dynamic = { meta: { song: PlayState.SONG.song, chartPath: chartPath, chartMTime: statMTime, difficulty: Difficulty.getString(PlayState.storyDifficulty, false), judgmentSettings: { rmPerfect: ClientPrefs.data.rmPerfect, perfectWindow: ClientPrefs.data.perfectWindow, sickWindow: ClientPrefs.data.sickWindow, goodWindow: ClientPrefs.data.goodWindow, badWindow: ClientPrefs.data.badWindow, safeFrames: ClientPrefs.data.safeFrames, ratingOffset: ClientPrefs.data.ratingOffset, hitsoundVolume: ClientPrefs.data.hitsoundVolume } }, replay: PlayState.instance.replayData };
+				File.saveContent(savePath, haxe.Json.stringify(outObj, "\t"));
 				// show middle-screen prompt
 				var cx:Float = FlxG.width / 2;
 				var cy:Float = FlxG.height / 2;

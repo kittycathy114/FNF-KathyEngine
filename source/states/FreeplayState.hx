@@ -516,7 +516,7 @@ class FreeplayState extends MusicBeatState
 						{
 							var replaySongName:String = Reflect.field(meta, 'song');
 							var chartPath:Dynamic = (meta != null && Reflect.hasField(meta, 'chartPath')) ? Reflect.field(meta, 'chartPath') : null;
-							var replayDifficulty:String = getDifficultyFromChartPath(chartPath);
+							var replayDifficulty:String = getDifficultyFromChartPath(chartPath, meta);
 							
 							// 妫€鏌ユ瓕鏇插悕绉板拰闅惧害鏄惁閮藉尮閰?
 							if (Paths.formatToSongPath(replaySongName) == currentSongName && replayDifficulty == currentDifficultyName)
@@ -569,6 +569,12 @@ class FreeplayState extends MusicBeatState
 							// 璁剧疆寰呭姞杞藉洖鏀惧苟鍔犺浇姝屾洸
 							PlayState.pendingReplayData = replayArr;
 							PlayState.shouldStartReplay = true;
+							// 提取并保存判定设置
+							if (meta != null && Reflect.hasField(meta, 'judgmentSettings')) {
+								PlayState.replayJudgmentSettings = Reflect.field(meta, 'judgmentSettings');
+							} else {
+								PlayState.replayJudgmentSettings = null;
+							}
 							var songLowercase:String = Paths.formatToSongPath(songs[curSelected].songName);
 							var poop:String = Highscore.formatSong(songLowercase, curDifficulty);
 							Song.loadFromJson(poop, songLowercase);
@@ -765,7 +771,7 @@ class FreeplayState extends MusicBeatState
 						{
 							var replaySongName:String = Reflect.field(meta, 'song');
 							var chartPath:Dynamic = (meta != null && Reflect.hasField(meta, 'chartPath')) ? Reflect.field(meta, 'chartPath') : null;
-							var replayDifficulty:String = getDifficultyFromChartPath(chartPath);
+							var replayDifficulty:String = getDifficultyFromChartPath(chartPath, meta);
 							
 							// 妫€鏌ユ瓕鏇插悕绉板拰闅惧害鏄惁閮藉尮閰?
 							if (Paths.formatToSongPath(replaySongName) == currentSongName && replayDifficulty == currentDifficultyName)
