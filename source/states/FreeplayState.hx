@@ -1,4 +1,4 @@
-package states;
+﻿package states;
 
 import backend.WeekData;
 import backend.Highscore;
@@ -202,7 +202,7 @@ class FreeplayState extends MusicBeatState
 		changeSelection();
 		updateTexts();
 
-		// 妫€鏌ユ槸鍚﹀瓨鍦ㄥ凡淇濆瓨鐨勫洖鏀炬枃浠讹紝鑻ュ瓨鍦ㄥ垯鍦ㄥ簳閮ㄦ枃鏈坊鍔犳彁绀?
+		// Update replay status display text
 		updateReplayBottomText();
 
 		addTouchPad('LEFT_FULL', 'A_B_C_X_Y_Z');
@@ -483,7 +483,7 @@ class FreeplayState extends MusicBeatState
 			FlxG.sound.play(Paths.sound('scrollMenu'));
 		}
 
-		// 鍥炴斁鍔犺浇鍏ュ彛锛欶7 鍔犺浇鏈€杩戜繚瀛樼殑鍥炴斁锛堣嫢瀛樺湪锛?
+		// Replay loading entry point: F7 loads latest saved replay (if exists)
 		#if FEATURE_FILESYSTEM
 		var moddirLoad:String = (Mods.currentModDirectory != null && Mods.currentModDirectory.length > 0) ? Mods.currentModDirectory : 'global';
 		var replayFolderLoad:String = Paths.mods(moddirLoad + '/replay');
@@ -492,13 +492,13 @@ class FreeplayState extends MusicBeatState
 			var filesLoad:Array<String> = FileSystem.readDirectory(replayFolderLoad);
 			if (filesLoad != null && filesLoad.length > 0)
 			{
-				// 鑾峰彇褰撳墠閫変腑鐨勬瓕鏇插悕绉帮紙鏍煎紡鍖栧悗锛?
+				// Get currently selected song name (formatted)
 				var currentSongName:String = Paths.formatToSongPath(songs[curSelected].songName);
-				
-				// 鑾峰彇褰撳墠閫変腑鐨勯毦搴﹀悕绉?
+
+				// Get currently selected difficulty name
 				var currentDifficultyName:String = Difficulty.getString(curDifficulty, false);
-				
-				// 鎵惧埌涓庡綋鍓嶆瓕鏇插拰闅惧害鍖归厤鐨勬渶鏂板洖鏀炬枃浠?
+
+				// Find latest replay file matching current song and difficulty
 				var latest:String = null;
 				var latestM:Float = -1;
 				var savedSongName:String = null;
@@ -518,7 +518,7 @@ class FreeplayState extends MusicBeatState
 							var chartPath:Dynamic = (meta != null && Reflect.hasField(meta, 'chartPath')) ? Reflect.field(meta, 'chartPath') : null;
 							var replayDifficulty:String = getDifficultyFromChartPath(chartPath, meta);
 							
-							// 妫€鏌ユ瓕鏇插悕绉板拰闅惧害鏄惁閮藉尮閰?
+							// Check if replay matches current song and difficulty
 							if (Paths.formatToSongPath(replaySongName) == currentSongName && replayDifficulty == currentDifficultyName)
 							{
 								var s = FileSystem.stat(p);
@@ -542,7 +542,7 @@ class FreeplayState extends MusicBeatState
 				{
 					if (latest != null)
 					{
-						// 鍔犺浇鍥炴斁
+						// Load and play the replay
 						try
 						{
 							var content:String = File.getContent(latest);
@@ -566,8 +566,8 @@ class FreeplayState extends MusicBeatState
 								missingText.visible = true;
 								missingTextBG.visible = true;
 							}
-							// 璁剧疆寰呭姞杞藉洖鏀惧苟鍔犺浇姝屾洸
-							PlayState.pendingReplayData = replayArr;
+						// Set pending replay data and load song
+						PlayState.pendingReplayData = replayArr;
 							PlayState.shouldStartReplay = true;
 							// 提取并保存判定设置
 							if (meta != null && Reflect.hasField(meta, 'judgmentSettings')) {
@@ -590,7 +590,7 @@ class FreeplayState extends MusicBeatState
 					}
 					else
 					{
-						// 鏄剧ず鎻愮ず锛氬綋鍓嶆瓕鏇插拰闅惧害娌℃湁鍥炴斁
+						// Show prompt: current song and difficulty have no replay
 						missingText.text = 'No replay found for "${songs[curSelected].songName}" (${currentDifficultyName}).';
 						missingText.screenCenter(Y);
 						missingText.visible = true;
@@ -705,38 +705,38 @@ class FreeplayState extends MusicBeatState
 		songs[curSelected].lastDifficulty = Difficulty.getString(curDifficulty, false);
 
 	/**
-	 * 浠庡浘琛ㄨ矾寰勬彁鍙栭毦搴﹀悕绉帮紝濡傛灉meta涓寘鍚玠ifficulty瀛楁鍒欎紭鍏堜娇鐢ㄣ€?
-	 * @param chartPath 鍥捐〃鏂囦欢璺緞锛堜緥濡?".../song-hard.json"锛?
-	 * @param meta 鍙€夌殑meta瀵硅薄锛屽彲鑳藉寘鍚玠ifficulty瀛楁
-	 * @return 闅惧害鍚嶇О瀛楃涓诧紝濡傛灉鏃犳硶纭畾鍒欒繑鍥為粯璁ら毦搴︼紙Normal锛?
+	 * Get difficulty name from chart file path or meta data
+	 * @param chartPath Chart file path, e.g. ".../song-hard.json"
+	 * @param meta Replay meta data containing difficulty information
+	 * @return Difficulty name (e.g. Easy/Normal/Hard) or default difficulty
 	 */
 	private function getDifficultyFromChartPath(chartPath:String, ?meta:Dynamic):Null<String>
 	{
 		if (meta != null && Reflect.hasField(meta, 'difficulty'))
 			return Reflect.field(meta, 'difficulty');
 		if (chartPath == null) return Difficulty.getDefault();
-		// 鑾峰彇鏂囦欢鍚嶏紙涓嶅惈鐩綍锛?
+		// Find the last path separator
 		var lastSep = chartPath.lastIndexOf('/');
 		if (lastSep == -1) lastSep = chartPath.lastIndexOf('\\');
 		var fileName:String = (lastSep >= 0) ? chartPath.substr(lastSep + 1) : chartPath;
-		// 绉婚櫎 .json 鎵╁睍鍚?
+		// Remove .json extension
 		if (fileName.endsWith('.json'))
 			fileName = fileName.substr(0, fileName.length - 5);
-		// 妫€鏌ユ槸鍚︽湁闅惧害鍚庣紑锛堟牸寮忎负 "姝屾洸鍚?闅惧害"锛?
+		// Find the last dash separator like "song-hard.json"
 		var lastDash = fileName.lastIndexOf('-');
 		if (lastDash == -1)
 		{
-			// 娌℃湁杩炲瓧绗︼紝鍙兘鏄粯璁ら毦搴︼紙渚嬪 "song.json"锛?
+			// No dash found, file might be "song.json" without difficulty
 			return Difficulty.getDefault();
 		}
 		var potentialDiff:String = fileName.substr(lastDash + 1);
-		// 妫€鏌ユ槸鍚﹀湪闅惧害鍒楄〃涓?
+		// Check if the extracted part matches any difficulty name
 		for (diff in Difficulty.list)
 		{
 			if (Paths.formatToSongPath(diff) == Paths.formatToSongPath(potentialDiff))
 				return diff;
 		}
-		// 涓嶅湪鍒楄〃涓紝鍙兘鏄瓕鏇插悕鏈韩鍖呭惈杩炲瓧绗︼紝杩斿洖榛樿闅惧害
+		// No matching difficulty found, return default
 		return Difficulty.getDefault();
 	}
 
@@ -752,7 +752,7 @@ class FreeplayState extends MusicBeatState
 			var files:Array<String> = FileSystem.readDirectory(replayFolderCheck);
 			if (files != null && files.length > 0)
 			{
-				// 鑾峰彇褰撳墠閫変腑鐨勬瓕鏇插悕绉帮紙鏍煎紡鍖栧悗锛夊拰闅惧害鍚嶇О
+				// Get currently selected song name (formatted) and difficulty name
 				var currentSongName:String = Paths.formatToSongPath(songs[curSelected].songName);
 				var currentDifficultyName:String = Difficulty.getString(curDifficulty, false);
 				var matchedReplayCount:Int = 0;
@@ -773,7 +773,7 @@ class FreeplayState extends MusicBeatState
 							var chartPath:Dynamic = (meta != null && Reflect.hasField(meta, 'chartPath')) ? Reflect.field(meta, 'chartPath') : null;
 							var replayDifficulty:String = getDifficultyFromChartPath(chartPath, meta);
 							
-							// 妫€鏌ユ瓕鏇插悕绉板拰闅惧害鏄惁閮藉尮閰?
+							// 濡偓閺屻儲鐡曢弴鎻掓倳缁夋澘鎷伴梾鎯у閺勵垰鎯侀柈钘夊爱闁?
 							if (Paths.formatToSongPath(replaySongName) == currentSongName && replayDifficulty == currentDifficultyName)
 							{
 								matchedReplayCount++;
@@ -792,7 +792,7 @@ class FreeplayState extends MusicBeatState
 				}
 				else
 				{
-					// 娌℃湁褰撳墠姝屾洸鍜岄毦搴﹀尮閰嶇殑鍥炴斁锛屼絾浠嶇劧鏄剧ず鎬诲洖鏀炬暟閲忥紙渚涘弬鑰冿級
+					// No replay matching current song and difficulty, but still show total replay count (for reference)
 					var totalReplayFiles:Array<String> = files.filter(f -> f.endsWith('.replay.json'));
 					var totalReplayCount:Int = totalReplayFiles.length;
 					if (totalReplayCount > 0)
