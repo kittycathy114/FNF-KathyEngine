@@ -111,25 +111,27 @@ class MusicPlayer extends FlxGroup
 			if (curTime < 0)
 				curTime = 0;
 
-			FlxG.sound.music.time = curTime;
-			setVocalsTime(curTime);
-		}
-		if (controls.UI_RIGHT_P)
-		{
-			if (playing)
-				wasPlaying = true;
+FlxG.sound.music.time = curTime;
+		setVocalsTime(curTime);
+		instance.lastBeatHit = -1; // 重置beat检测
+	}
+	if (controls.UI_RIGHT_P)
+	{
+		if (playing)
+			wasPlaying = true;
 
-			pauseOrResume();
+		pauseOrResume();
 
-			curTime = FlxG.sound.music.time + 1000;
-			instance.holdTime = 0;
+		curTime = FlxG.sound.music.time + 1000;
+		instance.holdTime = 0;
 
-			if (curTime > FlxG.sound.music.length)
-				curTime = FlxG.sound.music.length;
+		if (curTime > FlxG.sound.music.length)
+			curTime = FlxG.sound.music.length;
 
-			FlxG.sound.music.time = curTime;
-			setVocalsTime(curTime);
-		}
+		FlxG.sound.music.time = curTime;
+		setVocalsTime(curTime);
+		instance.lastBeatHit = -1; // 重置beat检测
+	}
 
 		if(controls.UI_LEFT || controls.UI_RIGHT)
 		{
@@ -143,11 +145,12 @@ class MusicPlayer extends FlxGroup
 			if(curTime + difference > FlxG.sound.music.length) curTime = FlxG.sound.music.length;
 			else if(curTime - difference < 0) curTime = 0;
 
-			FlxG.sound.music.time = curTime;
-			setVocalsTime(curTime);
-		}
+FlxG.sound.music.time = curTime;
+		setVocalsTime(curTime);
+		instance.lastBeatHit = -1; // 重置beat检测
+	}
 
-		if(controls.UI_LEFT_R || controls.UI_RIGHT_R)
+	if(controls.UI_LEFT_R || controls.UI_RIGHT_R)
 		{
 			FlxG.sound.music.time = curTime;
 			setVocalsTime(curTime);
@@ -180,14 +183,15 @@ class MusicPlayer extends FlxGroup
 			}
 		}
 	
-		if (instance.touchPad.buttonC.justPressed || controls.RESET)
-		{
-			playbackRate = 1;
-			setPlaybackRate();
+if (instance.touchPad.buttonC.justPressed || controls.RESET)
+	{
+		playbackRate = 1;
+		setPlaybackRate();
 
-			FlxG.sound.music.time = 0;
-			setVocalsTime(0);
-		}
+		FlxG.sound.music.time = 0;
+		setVocalsTime(0);
+		instance.lastBeatHit = -1; // 重置beat检测
+	}
 
 		if (playing)
 		{

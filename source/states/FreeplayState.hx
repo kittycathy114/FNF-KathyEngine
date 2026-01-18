@@ -4,6 +4,7 @@ import backend.WeekData;
 import backend.Highscore;
 import backend.Song;
 import backend.SongMetadata;
+import backend.Conductor;
 
 import objects.HealthIcon;
 import objects.MusicPlayer;
@@ -13,6 +14,7 @@ import substates.ResetScoreSubState;
 
 import flixel.math.FlxMath;
 import flixel.util.FlxDestroyUtil;
+import flixel.graphics.FlxGraphic;
 
 import openfl.utils.Assets;
 
@@ -45,9 +47,12 @@ class FreeplayState extends MusicBeatState
 	private var curPlaying:Bool = false;
 
 	private var iconArray:Array<HealthIcon> = [];
-
+	
 	var bg:FlxSprite;
 	var intendedColor:Int;
+	private var bgScaleLerp:Float = 0; // Lerp插值进度 (0-1)
+	private var bgBeatDuration:Float = 0; // 节拍动画总时长
+	private var bgBeatElapsed:Float = 0; // 节拍动画已过去时间
 
 	var missingTextBG:FlxSprite;
 	var missingText:FlxText;
@@ -57,6 +62,12 @@ class FreeplayState extends MusicBeatState
 	var bottomBG:FlxSprite;
 
 	var player:MusicPlayer;
+	
+	// BPM变化提示相关
+	private var bpmText:FlxText;
+	private var bpmTextBG:FlxSprite;
+	private var lastBPM:Float = -1;
+	private var bpmDisplayTime:Float = 0;
 
 	override function create()
 	{
@@ -116,6 +127,7 @@ class FreeplayState extends MusicBeatState
 		bg.antialiasing = ClientPrefs.data.antialiasing;
 		add(bg);
 		bg.screenCenter();
+		bg.scale.set(1.0, 1.0); // 确保初始scale为1
 
 		grpSongs = new FlxTypedGroup<Alphabet>();
 		add(grpSongs);
@@ -199,6 +211,19 @@ class FreeplayState extends MusicBeatState
 		player = new MusicPlayer(this);
 		add(player);
 		
+		// 创建BPM变化提示背景（先创建，渲染在底层）
+		bpmTextBG = new FlxSprite(0, 0); // 初始位置为0,0
+		bpmTextBG.alpha = 0;
+		bpmTextBG.scrollFactor.set(); // 固定位置
+		add(bpmTextBG);
+		
+		// 创建BPM变化提示文本（后创建，渲染在顶层）
+		bpmText = new FlxText(0, 20, 0, "", 32);
+		bpmText.setFormat(Paths.font("vcr.ttf"), 32, FlxColor.WHITE, RIGHT);
+		bpmText.alpha = 0;
+		bpmText.scrollFactor.set(); // 固定位置
+		add(bpmText);
+		
 		changeSelection();
 		updateTexts();
 
@@ -243,6 +268,65 @@ class FreeplayState extends MusicBeatState
 
 		if (FlxG.sound.music.volume < 0.7)
 			FlxG.sound.music.volume += 0.5 * elapsed;
+		
+		// 更新Conductor.songPosition以触发beatHit
+		if (player.playingMusic && FlxG.sound.music != null)
+		{
+			Conductor.songPosition = FlxG.sound.music.time;
+			
+			// 检测BPM变化并显示提示 - 使用getBPMFromSeconds获取当前时间点的实际BPM
+			var currentBPM = Conductor.getBPMFromSeconds(Conductor.songPosition).bpm;
+			if (currentBPM != lastBPM)
+			{
+				bpmText.text = 'BPM: ${Math.round(currentBPM)}';
+				bpmText.x = FlxG.width - bpmText.width - 10;
+				bpmText.y = (FlxG.height - bpmText.height) / 2; // 垂直居中
+				
+				// 重新创建背景图形以确保正确的大小和位置
+				bpmTextBG.loadGraphic(FlxGraphic.fromRectangle(Std.int(bpmText.width + 20), Std.int(bpmText.height + 10), 0xFF000000));
+				bpmTextBG.x = bpmText.x - 10;
+				bpmTextBG.y = bpmText.y - 5;
+				
+				bpmDisplayTime = 0;
+			}
+			lastBPM = currentBPM;
+		}
+		
+		// 更新BPM提示显示/隐藏
+		if (bpmDisplayTime >= 0)
+		{
+			bpmDisplayTime += elapsed;
+			if (bpmDisplayTime < 1.0) // 显示1秒
+			{
+				bpmText.alpha = 1;
+				bpmTextBG.alpha = 0.6;
+			}
+			else if (bpmDisplayTime < 1.5) // 0.5秒淡出
+			{
+				var fade = (bpmDisplayTime - 1.0) / 0.5;
+				bpmText.alpha = 1 - fade;
+				bpmTextBG.alpha = 0.6 * (1 - fade);
+			}
+			else
+			{
+				bpmText.alpha = 0;
+				bpmTextBG.alpha = 0;
+			}
+		}
+
+		// 背景缩放Lerp动画（从1.05过渡回1）
+		if (bg != null && bg.scale.x > 1.0)
+		{
+			bgBeatElapsed += elapsed;
+			
+			// 计算插值进度 (0-1)
+			bgScaleLerp = Math.min(bgBeatElapsed / bgBeatDuration, 1.0);
+			
+			// 使用立方缓出函数使过渡更自然
+			var easedProgress = 1 - Math.pow(1 - bgScaleLerp, 3);
+			var scale = FlxMath.lerp(1.05, 1.0, easedProgress);
+			bg.scale.set(scale, scale);
+		}
 
 		lerpScore = Math.floor(FlxMath.lerp(intendedScore, lerpScore, Math.exp(-elapsed * 24)));
 		lerpRating = FlxMath.lerp(intendedRating, lerpRating, Math.exp(-elapsed * 12));
@@ -331,11 +415,21 @@ class FreeplayState extends MusicBeatState
 				FlxG.sound.music.volume = 0;
 				instPlaying = -1;
 
-				player.playingMusic = false;
-				player.switchPlayMusic();
+			player.playingMusic = false;
+			player.switchPlayMusic();
 
-				FlxG.sound.playMusic(Paths.music('freakyMenu'), 0);
-				FlxTween.tween(FlxG.sound.music, {volume: 1}, 1);
+			// 重置Conductor状态
+			Conductor.songPosition = 0;
+			lastBeatHit = -1;
+			
+			// 隐藏BPM提示
+			bpmText.alpha = 0;
+			bpmTextBG.alpha = 0;
+			bpmDisplayTime = -1;
+			lastBPM = -1;
+			
+			FlxG.sound.playMusic(Paths.music('freakyMenu'), 0);
+			FlxTween.tween(FlxG.sound.music, {volume: 1}, 1);
 			}
 			else 
 			{
@@ -361,6 +455,23 @@ class FreeplayState extends MusicBeatState
 				Mods.currentModDirectory = songs[curSelected].folder;
 				var poop:String = Highscore.formatSong(songs[curSelected].songName.toLowerCase(), curDifficulty);
 				Song.loadFromJson(poop, songs[curSelected].songName.toLowerCase());
+				
+				// 设置Conductor的BPM信息以支持beat检测
+				Conductor.bpm = PlayState.SONG.bpm;
+				Conductor.mapBPMChanges(PlayState.SONG);
+				
+				// 显示初始BPM
+				bpmText.text = 'BPM: ${Math.round(Conductor.bpm)}';
+				bpmText.x = FlxG.width - bpmText.width - 10;
+				bpmText.y = (FlxG.height - bpmText.height) / 2; // 垂直居中
+				
+				// 创建背景图形
+				bpmTextBG.loadGraphic(FlxGraphic.fromRectangle(Std.int(bpmText.width + 20), Std.int(bpmText.height + 10), 0xFF000000));
+				bpmTextBG.x = bpmText.x - 10;
+				bpmTextBG.y = bpmText.y - 5;
+				
+				bpmDisplayTime = 0;
+				
 				if (PlayState.SONG.needsVoices)
 				{
 					vocals = new FlxSound();
@@ -412,14 +523,18 @@ class FreeplayState extends MusicBeatState
 					}
 				}
 
-				FlxG.sound.playMusic(Paths.inst(PlayState.SONG.song, PlayState.SONG.specialInst), 0.8);
-				FlxG.sound.music.pause();
-				instPlaying = curSelected;
+FlxG.sound.playMusic(Paths.inst(PlayState.SONG.song, PlayState.SONG.specialInst), 0.8);
+			FlxG.sound.music.pause();
+			instPlaying = curSelected;
 
-				player.playingMusic = true;
-				player.curTime = 0;
-				player.switchPlayMusic();
-				player.pauseOrResume(true);
+			player.playingMusic = true;
+			player.curTime = 0;
+			player.switchPlayMusic();
+			player.pauseOrResume(true);
+			
+			// 重置BPM检测，并显示初始BPM
+			lastBPM = -1;
+			bpmDisplayTime = -1;
 			}
 			else if (instPlaying == curSelected && player.playingMusic)
 			{
@@ -438,11 +553,11 @@ class FreeplayState extends MusicBeatState
 				PlayState.isStoryMode = false;
 				PlayState.storyDifficulty = curDifficulty;
 
-				trace('CURRENT WEEK: ' + WeekData.getWeekFileName());
-			}
-			catch(e:haxe.Exception)
-			{
-				trace('ERROR! ${e.message}');
+trace('CURRENT WEEK: ' + WeekData.getWeekFileName());
+		}
+		catch(e:haxe.Exception)
+		{
+			// Error handling
 
 				var errorStr:String = e.message;
 				if(errorStr.contains('There is no TEXT asset with an ID of')) errorStr = 'Missing file: ' + errorStr.substring(errorStr.indexOf(songLowercase), errorStr.length-1); //Missing chart
@@ -459,12 +574,11 @@ class FreeplayState extends MusicBeatState
 				return;
 			}
 
-			@:privateAccess
-			if(PlayState._lastLoadedModDirectory != Mods.currentModDirectory)
-			{
-				trace('CHANGED MOD DIRECTORY, RELOADING STUFF');
-				Paths.freeGraphicsFromMemory();
-			}
+@:privateAccess
+		if(PlayState._lastLoadedModDirectory != Mods.currentModDirectory)
+		{
+			Paths.freeGraphicsFromMemory();
+		}
 			LoadingState.prepareToSong();
 			LoadingState.loadAndSwitchState(new PlayState());
 			#if !SHOW_LOADING_SCREEN FlxG.sound.music.stop(); #end
@@ -675,17 +789,17 @@ class FreeplayState extends MusicBeatState
 			FlxTween.color(bg, 1, bg.color, intendedColor);
 		}
 
-		for (num => item in grpSongs.members)
+for (num => item in grpSongs.members)
+	{
+		var icon:HealthIcon = iconArray[num];
+		item.alpha = 0.6;
+		icon.alpha = 0.6;
+		if (item.targetY == curSelected)
 		{
-			var icon:HealthIcon = iconArray[num];
-			item.alpha = 0.6;
-			icon.alpha = 0.6;
-			if (item.targetY == curSelected)
-			{
-				item.alpha = 1;
-				icon.alpha = 1;
-			}
+			item.alpha = 1;
+			icon.alpha = 1;
 		}
+	}
 		
 		Mods.currentModDirectory = songs[curSelected].folder;
 		PlayState.storyWeek = songs[curSelected].week;
@@ -859,12 +973,54 @@ class FreeplayState extends MusicBeatState
 		}
 	}
 
+	override function stepHit():Void
+	{
+		super.stepHit();
+		
+		// 每4步（每拍）触发背景缩放动画
+		if (curStep % 4 == 0)
+		{
+			//trace('Step hit: ' + curStep + ', songPosition: ' + Conductor.songPosition + ', calling beatHit');
+			beatHit();
+		}
+	}
+	
+	private var lastBeatHit:Int = -1;
+	override function beatHit():Void
+	{
+		//trace('beatHit called, curBeat: ' + curBeat + ', lastBeatHit: ' + lastBeatHit + ', playingMusic: ' + player.playingMusic);
+		if (lastBeatHit >= curBeat || !player.playingMusic) {
+			//trace('beatHit blocked: lastBeatHit >= curBeat = ' + (lastBeatHit >= curBeat) + ', !playingMusic = ' + (!player.playingMusic));
+			return;
+		}
+		
+		lastBeatHit = curBeat;
+		
+		// 背景立刻缩放到1.05，然后开始lerp回1
+		if (bg != null)
+		{
+			//trace('Beat hit! Scaling bg to 1.05, crochet: ' + Conductor.crochet);
+			bg.scale.set(1.05, 1.05);
+			bgBeatElapsed = 0;
+			bgBeatDuration = Conductor.crochet / 1000; // 转换为秒
+		}
+	}
+	
 	override function destroy():Void
 	{
+		// 清理背景缩放状态
+		bgScaleLerp = 0;
+		bgBeatElapsed = 0;
+		bgBeatDuration = 0;
+		
 		super.destroy();
 
 		FlxG.autoPause = ClientPrefs.data.autoPause;
 		if (!FlxG.sound.music.playing && !stopMusicPlay)
 			FlxG.sound.playMusic(Paths.music('freakyMenu'));
+			
+		// 清理BPM提示
+		bpmText = null;
+		bpmTextBG = null;
 	}	
 }
