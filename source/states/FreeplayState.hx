@@ -575,6 +575,12 @@ class FreeplayState extends MusicBeatState
 							} else {
 								PlayState.replayJudgmentSettings = null;
 							}
+							// 提取并保存游戏设置
+							if (meta != null && Reflect.hasField(meta, 'gameplaySettings')) {
+								PlayState.replayGameplaySettings = Reflect.field(meta, 'gameplaySettings');
+							} else {
+								PlayState.replayGameplaySettings = null;
+							}
 							var songLowercase:String = Paths.formatToSongPath(songs[curSelected].songName);
 							var poop:String = Highscore.formatSong(songLowercase, curDifficulty);
 							Song.loadFromJson(poop, songLowercase);

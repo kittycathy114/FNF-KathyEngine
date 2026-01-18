@@ -124,9 +124,11 @@ class PlayState extends MusicBeatState
 	public static var pendingReplayData:Array<ReplayData> = null;	// 待加载的回放数据
 	public static var shouldStartReplay:Bool = false;			// 是否应该启动回放
 	public static var replayJudgmentSettings:Dynamic = null;	// 回放中的判定设置
+	public static var replayGameplaySettings:Dynamic = null;	// 回放中的游戏设置
 	
-	// 存储原始判定设置以便恢复
+	// 存储原始设置以便恢复
 	var originalJudgmentSettings:Dynamic = null;
+	var originalGameplaySettings:Dynamic = null;
 	
 	var dancingLeft:Bool = false;
 	var icondancingLeft:Bool = false;
@@ -497,19 +499,55 @@ class PlayState extends MusicBeatState
 					}
 				}
 			}
+		
+		// 应用回放中的游戏设置
+		if (replayGameplaySettings != null) {
+			// 保存原始游戏设置
+			originalGameplaySettings = {
+				downScroll: ClientPrefs.data.downScroll,
+				middleScroll: ClientPrefs.data.middleScroll,
+				opponentStrums: ClientPrefs.data.opponentStrums,
+				ghostTapping: ClientPrefs.data.ghostTapping,
+				noReset: ClientPrefs.data.noReset,
+				guitarHeroSustains: ClientPrefs.data.guitarHeroSustains,
+				popUpRating: ClientPrefs.data.popUpRating
+			};
+			
+			// 应用 basic gameplay preferences
+			if (Reflect.hasField(replayGameplaySettings, 'downScroll')) ClientPrefs.data.downScroll = replayGameplaySettings.downScroll;
+			if (Reflect.hasField(replayGameplaySettings, 'middleScroll')) ClientPrefs.data.middleScroll = replayGameplaySettings.middleScroll;
+			if (Reflect.hasField(replayGameplaySettings, 'opponentStrums')) ClientPrefs.data.opponentStrums = replayGameplaySettings.opponentStrums;
+			if (Reflect.hasField(replayGameplaySettings, 'ghostTapping')) ClientPrefs.data.ghostTapping = replayGameplaySettings.ghostTapping;
+			if (Reflect.hasField(replayGameplaySettings, 'noReset')) ClientPrefs.data.noReset = replayGameplaySettings.noReset;
+			if (Reflect.hasField(replayGameplaySettings, 'guitarHeroSustains')) ClientPrefs.data.guitarHeroSustains = replayGameplaySettings.guitarHeroSustains;
+			if (Reflect.hasField(replayGameplaySettings, 'popUpRating')) ClientPrefs.data.popUpRating = replayGameplaySettings.popUpRating;
+			
+			// 应用 GameplayChangersSubstate 设置
+			if (Reflect.hasField(replayGameplaySettings, 'scrolltype')) ClientPrefs.data.gameplaySettings.set('scrolltype', replayGameplaySettings.scrolltype);
+			if (Reflect.hasField(replayGameplaySettings, 'scrollspeed')) ClientPrefs.data.gameplaySettings.set('scrollspeed', replayGameplaySettings.scrollspeed);
+			if (Reflect.hasField(replayGameplaySettings, 'songspeed')) ClientPrefs.data.gameplaySettings.set('songspeed', replayGameplaySettings.songspeed);
+			if (Reflect.hasField(replayGameplaySettings, 'healthgain')) ClientPrefs.data.gameplaySettings.set('healthgain', replayGameplaySettings.healthgain);
+			if (Reflect.hasField(replayGameplaySettings, 'healthloss')) ClientPrefs.data.gameplaySettings.set('healthloss', replayGameplaySettings.healthloss);
+			if (Reflect.hasField(replayGameplaySettings, 'instakill')) ClientPrefs.data.gameplaySettings.set('instakill', replayGameplaySettings.instakill);
+			if (Reflect.hasField(replayGameplaySettings, 'practice')) ClientPrefs.data.gameplaySettings.set('practice', replayGameplaySettings.practice);
+			if (Reflect.hasField(replayGameplaySettings, 'botplay')) ClientPrefs.data.gameplaySettings.set('botplay', replayGameplaySettings.botplay);
+			if (Reflect.hasField(replayGameplaySettings, 'opponentplay')) ClientPrefs.data.gameplaySettings.set('opponentplay', replayGameplaySettings.opponentplay);
 		}
-		else
-		{
-			isReplaying = false;
-			replayData = [];
-			currentReplayIndex = 0;
-			replayHeldKeys = [false, false, false, false];
-			keyPressIndices = [-1, -1, -1, -1];
-			replayNoteDelays = [[], [], [], []];
-			replayHeldNonNoteKeys = new Map<Int, Bool>();
-			nonNoteKeyPressIndices = new Map<Int, Int>();
-			// 重置回放判定设置
-			replayJudgmentSettings = null;
+	}
+	else
+	{
+isReplaying = false;
+		replayData = [];
+		currentReplayIndex = 0;
+		replayHeldKeys = [false, false, false, false];
+		keyPressIndices = [-1, -1, -1, -1];
+		replayNoteDelays = [[], [], [], []];
+		replayHeldNonNoteKeys = new Map<Int, Bool>();
+		nonNoteKeyPressIndices = new Map<Int, Int>();
+		// 重置回放判定设置
+		replayJudgmentSettings = null;
+		// 重置回放游戏设置
+		replayGameplaySettings = null;
 		}
 
 		startCallback = startCountdown;
@@ -4162,6 +4200,21 @@ class PlayState extends MusicBeatState
 				}
 			}
 		}
+		
+		// 恢复原始游戏设置
+		if (originalGameplaySettings != null) {
+			if (Reflect.hasField(originalGameplaySettings, 'downScroll')) ClientPrefs.data.downScroll = originalGameplaySettings.downScroll;
+			if (Reflect.hasField(originalGameplaySettings, 'middleScroll')) ClientPrefs.data.middleScroll = originalGameplaySettings.middleScroll;
+			if (Reflect.hasField(originalGameplaySettings, 'opponentStrums')) ClientPrefs.data.opponentStrums = originalGameplaySettings.opponentStrums;
+			if (Reflect.hasField(originalGameplaySettings, 'ghostTapping')) ClientPrefs.data.ghostTapping = originalGameplaySettings.ghostTapping;
+			if (Reflect.hasField(originalGameplaySettings, 'noReset')) ClientPrefs.data.noReset = originalGameplaySettings.noReset;
+			if (Reflect.hasField(originalGameplaySettings, 'guitarHeroSustains')) ClientPrefs.data.guitarHeroSustains = originalGameplaySettings.guitarHeroSustains;
+			if (Reflect.hasField(originalGameplaySettings, 'popUpRating')) ClientPrefs.data.popUpRating = originalGameplaySettings.popUpRating;
+		}
+		
+		// 重置回放设置静态变量
+		replayJudgmentSettings = null;
+		replayGameplaySettings = null;
 		
 		super.destroy();
 	}

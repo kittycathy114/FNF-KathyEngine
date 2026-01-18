@@ -68,6 +68,8 @@ class ResultsScreen extends FlxSubState
 	public var canReplay:Bool = false;	// 是否可以回放
 	public var replayPressed:Bool = false;	// 是否按下了回放键
 	public var savePressed:Bool = false; // 是否按下保存回放键（防抖）
+	
+	private var saveReplayTimer:FlxTimer = null; // 保存回放的提示定时器
 
 	override function create()
 	{
@@ -355,29 +357,82 @@ class ResultsScreen extends FlxSubState
 		else if (FlxG.keys.justPressed.F9 && PlayState.instance != null && PlayState.instance.replayData != null && PlayState.instance.replayData.length > 0 && !savePressed)
 		{
 			savePressed = true;
-			#if FEATURE_FILESYSTEM
-			try
-			{
-				var moddir:String = (Mods.currentModDirectory != null && Mods.currentModDirectory.length > 0) ? Mods.currentModDirectory : 'global';
-				var replayFolder:String = Paths.mods(moddir + '/replay');
-				if (!FileSystem.exists(replayFolder)) FileSystem.createDirectory(replayFolder);
-				var chartPath:String = Song.chartPath != null ? Song.chartPath : (PlayState.SONG != null ? PlayState.SONG.song : '');
-				var statMTime:Dynamic = null;
-				if (chartPath != null && FileSystem.exists(chartPath)) {
+#if FEATURE_FILESYSTEM
+		try {
+			var moddir:String = (Mods.currentModDirectory != null && Mods.currentModDirectory.length > 0) ? Mods.currentModDirectory : 'global';
+			var replayFolder:String = Paths.mods(moddir + '/replay');
+			if (!FileSystem.exists(replayFolder)) FileSystem.createDirectory(replayFolder);
+			var chartPath:String = Song.chartPath != null ? Song.chartPath : (PlayState.SONG != null ? PlayState.SONG.song : '');
+			var statMTime:Dynamic = null;
+			// 移除路径检测，但仍尝试获取文件时间（如果文件存在的话）
+			if (chartPath != null) {
+				try {
 					var s = FileSystem.stat(chartPath);
 					if (s != null && Reflect.hasField(s, 'mtime')) statMTime = Reflect.field(s, 'mtime');
+				} catch (e:Dynamic) {
+					// 文件不存在或无法访问，忽略错误，chartMTime保持为null
 				}
-				var saveName:String = Paths.formatToSongPath(PlayState.SONG.song) + '-' + Std.string(Date.now().getTime()) + '.replay.json';
-				var savePath:String = replayFolder + '/' + saveName;
-				var outObj:Dynamic = { meta: { song: PlayState.SONG.song, chartPath: chartPath, chartMTime: statMTime, difficulty: Difficulty.getString(PlayState.storyDifficulty, false), judgmentSettings: { rmPerfect: ClientPrefs.data.rmPerfect, perfectWindow: ClientPrefs.data.perfectWindow, sickWindow: ClientPrefs.data.sickWindow, goodWindow: ClientPrefs.data.goodWindow, badWindow: ClientPrefs.data.badWindow, safeFrames: ClientPrefs.data.safeFrames, ratingOffset: ClientPrefs.data.ratingOffset, hitsoundVolume: ClientPrefs.data.hitsoundVolume } }, replay: PlayState.instance.replayData };
-				File.saveContent(savePath, haxe.Json.stringify(outObj, "\t"));
+			}
+			var saveName:String = Paths.formatToSongPath(PlayState.SONG.song) + '-' + Std.string(Date.now().getTime()) + '.replay.json';
+			var savePath:String = replayFolder + '/' + saveName;
+			var outObj:Dynamic = { 
+				meta: { 
+					song: PlayState.SONG.song, 
+					chartPath: chartPath, 
+					chartMTime: statMTime, 
+					difficulty: Difficulty.getString(PlayState.storyDifficulty, false), 
+					judgmentSettings: { 
+						rmPerfect: ClientPrefs.data.rmPerfect, 
+						perfectWindow: ClientPrefs.data.perfectWindow, 
+						sickWindow: ClientPrefs.data.sickWindow, 
+						goodWindow: ClientPrefs.data.goodWindow, 
+						badWindow: ClientPrefs.data.badWindow, 
+						safeFrames: ClientPrefs.data.safeFrames, 
+						ratingOffset: ClientPrefs.data.ratingOffset, 
+						hitsoundVolume: ClientPrefs.data.hitsoundVolume 
+					},
+					gameplaySettings: {
+						// Basic gameplay preferences
+						downScroll: ClientPrefs.data.downScroll,
+						middleScroll: ClientPrefs.data.middleScroll,
+						opponentStrums: ClientPrefs.data.opponentStrums,
+						ghostTapping: ClientPrefs.data.ghostTapping,
+						noReset: ClientPrefs.data.noReset,
+						guitarHeroSustains: ClientPrefs.data.guitarHeroSustains,
+						popUpRating: ClientPrefs.data.popUpRating,
+						
+						// Gameplay changers settings
+						scrolltype: ClientPrefs.getGameplaySetting('scrolltype', 'multiplicative'),
+						scrollspeed: ClientPrefs.getGameplaySetting('scrollspeed', 1.0),
+						songspeed: ClientPrefs.getGameplaySetting('songspeed', 1.0),
+						healthgain: ClientPrefs.getGameplaySetting('healthgain', 1.0),
+						healthloss: ClientPrefs.getGameplaySetting('healthloss', 1.0),
+						instakill: ClientPrefs.getGameplaySetting('instakill', false),
+						practice: ClientPrefs.getGameplaySetting('practice', false),
+						botplay: ClientPrefs.getGameplaySetting('botplay', false),
+						opponentplay: ClientPrefs.getGameplaySetting('opponentplay', false)
+					}
+				}, 
+				replay: PlayState.instance.replayData 
+			};
+			File.saveContent(savePath, haxe.Json.stringify(outObj, "\t"));
 				// show middle-screen prompt
 				var cx:Float = FlxG.width / 2;
 				var cy:Float = FlxG.height / 2;
 				var center:TextField = createTextField(Math.floor(cx - 300), Math.floor(cy - 24), Math.floor(600), FlxColor.WHITE, 24);
 				center.text = 'Replay saved to mods/' + moddir + '/replay/' + saveName;
 				overlaySprite.addChild(center);
-			new FlxTimer().start(2, function(tw:FlxTimer) { if (overlaySprite.contains(center)) overlaySprite.removeChild(center); });
+			
+			// 使用成员变量保存timer，并添加安全检查
+			saveReplayTimer = new FlxTimer();
+			saveReplayTimer.start(2, function(tw:FlxTimer) {
+				// 检查overlaySprite和center是否还存在且在舞台上
+				if (overlaySprite != null && FlxG.stage != null && FlxG.stage.contains(overlaySprite)) {
+					if (center != null && overlaySprite.contains(center)) {
+						overlaySprite.removeChild(center);
+					}
+				}
+			});
 			}
 			catch(e:Dynamic)
 			{
@@ -398,6 +453,13 @@ class ResultsScreen extends FlxSubState
 
 	override function destroy()
 	{
+		// 清理timer
+		if (saveReplayTimer != null)
+		{
+			saveReplayTimer.cancel();
+			saveReplayTimer = null;
+		}
+		
 		// 从 OpenFL stage 移除 overlay
 		if (overlaySprite != null && FlxG.stage != null && FlxG.stage.contains(overlaySprite))
 		{
