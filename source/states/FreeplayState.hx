@@ -67,6 +67,12 @@ class FreeplayState extends MusicBeatState
 	private var lastBPM:Float = -1;
 	private var bpmDisplayTime:Float = 0;
 
+	// 回放缓存相关
+	private var lastReplayCheckTime:Float = 0;
+	private var cachedReplayText:String = "";
+	private var cachedReplayIndex:Map<String, Array<String>> = new Map(); // 缓存回放文件索引：歌曲名 -> 难度列表
+	private var lastReplayFolderMTime:Float = 0; // 回放文件夹的最后修改时间，用于检测变化
+
 	override function create()
 	{
 		// Paths.clearStoredMemory();
@@ -228,8 +234,8 @@ class FreeplayState extends MusicBeatState
 		changeSelection();
 		updateTexts();
 
-		// Update replay status display text
-		updateReplayBottomText();
+		// 预加载回放文件索引（异步，不阻塞主线程）
+		preloadReplayIndex();
 
 		addTouchPad('LEFT_FULL', 'A_B_C_X_Y_Z');
 		super.create();
@@ -239,6 +245,7 @@ class FreeplayState extends MusicBeatState
 	{
 		changeSelection(0, false);
 		persistentUpdate = true;
+		lastLerpSelected = -9999; // 重置，确保下次更新时重新计算可见范围
 		super.closeSubState();
 		removeTouchPad();
 		addTouchPad('LEFT_FULL', 'A_B_C_X_Y_Z');
@@ -280,21 +287,25 @@ class FreeplayState extends MusicBeatState
 			Conductor.songPosition = FlxG.sound.music.time;
 
 			// 检测BPM变化并显示提示 - 使用getBPMFromSeconds获取当前时间点的实际BPM
-			var currentBPM = Conductor.getBPMFromSeconds(Conductor.songPosition).bpm;
-			if (currentBPM != lastBPM)
+			// 限制BPM检测频率，避免每帧都检测
+			if (Conductor.songPosition % 250 < 16) // 每250ms检测一次
 			{
-				bpmText.text = 'BPM: ${Math.round(currentBPM)}';
-				bpmText.x = FlxG.width - bpmText.width - 10;
-				bpmText.y = (FlxG.height - bpmText.height) / 2; // 垂直居中
+				var currentBPM = Conductor.getBPMFromSeconds(Conductor.songPosition).bpm;
+				if (currentBPM != lastBPM)
+				{
+					bpmText.text = 'BPM: ${Math.round(currentBPM)}';
+					bpmText.x = FlxG.width - bpmText.width - 10;
+					bpmText.y = (FlxG.height - bpmText.height) / 2; // 垂直居中
 
-				// 重新创建背景图形以确保正确的大小和位置
-				bpmTextBG.loadGraphic(FlxGraphic.fromRectangle(Std.int(bpmText.width + 20), Std.int(bpmText.height + 10), 0xFF000000));
-				bpmTextBG.x = bpmText.x - 10;
-				bpmTextBG.y = bpmText.y - 5;
+					// 重新创建背景图形以确保正确的大小和位置
+					bpmTextBG.loadGraphic(FlxGraphic.fromRectangle(Std.int(bpmText.width + 20), Std.int(bpmText.height + 10), 0xFF000000));
+					bpmTextBG.x = bpmText.x - 10;
+					bpmTextBG.y = bpmText.y - 5;
 
-				bpmDisplayTime = 0;
+					bpmDisplayTime = 0;
+				}
+				lastBPM = currentBPM;
 			}
-			lastBPM = currentBPM;
 		}
 
 		// 更新BPM提示显示/隐藏
@@ -331,6 +342,20 @@ class FreeplayState extends MusicBeatState
 			var easedProgress = 1 - Math.pow(1 - bgScaleLerp, 3);
 			var scale = FlxMath.lerp(1.05, 1.0, easedProgress);
 			bg.scale.set(scale, scale);
+		}
+
+		// 图标缩放Lerp动画（从1.1过渡回1）
+		if (iconArray != null && iconArray[curSelected] != null && iconArray[curSelected].scale.x > 1.0)
+		{
+			iconBeatElapsed += elapsed;
+
+			// 计算插值进度 (0-1)
+			iconScaleLerp = Math.min(iconBeatElapsed / iconBeatDuration, 1.0);
+
+			// 使用立方缓出函数使过渡更自然
+			var easedProgress = 1 - Math.pow(1 - iconScaleLerp, 3);
+			var scale = FlxMath.lerp(1.1, 1.0, easedProgress);
+			iconArray[curSelected].scale.set(scale, scale);
 		}
 
 		lerpScore = Math.floor(FlxMath.lerp(intendedScore, lerpScore, Math.exp(-elapsed * 24)));
@@ -611,70 +636,71 @@ class FreeplayState extends MusicBeatState
 
 		// Replay loading entry point: F7 loads latest saved replay (if exists)
 		#if FEATURE_FILESYSTEM
-		var moddirLoad:String = (Mods.currentModDirectory != null && Mods.currentModDirectory.length > 0) ? Mods.currentModDirectory : 'global';
-		var replayFolderLoad:String = Paths.mods(moddirLoad + '/replay');
-		if (FileSystem.exists(replayFolderLoad))
+		// 只在按下F7时扫描回放文件，而不是每帧都扫描
+		if (FlxG.keys.justPressed.F7 && !player.playingMusic)
 		{
-			var filesLoad:Array<String> = FileSystem.readDirectory(replayFolderLoad);
-			if (filesLoad != null && filesLoad.length > 0)
+			var moddirLoad:String = (Mods.currentModDirectory != null && Mods.currentModDirectory.length > 0) ? Mods.currentModDirectory : 'global';
+			var replayFolderLoad:String = Paths.mods(moddirLoad + '/replay');
+			if (FileSystem.exists(replayFolderLoad))
 			{
-				// Get currently selected song name (formatted)
-				var currentSongName:String = Paths.formatToSongPath(songs[curSelected].songName);
-
-				// Get currently selected difficulty name
-				var currentDifficultyName:String = Difficulty.getString(curDifficulty, false);
-
-				// Find latest replay file matching current song and difficulty
-				var latest:String = null;
-				var latestM:Float = -1;
-				var savedSongName:String = null;
-				for (f in filesLoad)
+				var filesLoad:Array<String> = FileSystem.readDirectory(replayFolderLoad);
+				if (filesLoad != null && filesLoad.length > 0)
 				{
-					if (!f.endsWith('.replay.json'))
-						continue;
+					// Get currently selected song name (formatted)
+					var currentSongName:String = Paths.formatToSongPath(songs[curSelected].songName);
 
-					var p = replayFolderLoad + '/' + f;
-					try
+					// Get currently selected difficulty name
+					var currentDifficultyName:String = Difficulty.getString(curDifficulty, false);
+
+					// Find latest replay file matching current song and difficulty
+					var latest:String = null;
+					var latestM:Float = -1;
+					var savedSongName:String = null;
+					for (f in filesLoad)
 					{
-						var content:String = File.getContent(p);
-						var obj:Dynamic = Json.parse(content);
-						var meta:Dynamic = Reflect.field(obj, 'meta');
-						if (meta != null && Reflect.hasField(meta, 'song'))
-						{
-							var replaySongName:String = Reflect.field(meta, 'song');
-							var chartPath:Dynamic = (meta != null && Reflect.hasField(meta, 'chartPath')) ? Reflect.field(meta, 'chartPath') : null;
-							var replayDifficulty:String = getDifficultyFromChartPath(chartPath, meta);
+						if (!f.endsWith('.replay.json'))
+							continue;
 
-							// Check if replay matches current song and difficulty
-							if (Paths.formatToSongPath(replaySongName) == currentSongName && replayDifficulty == currentDifficultyName)
+						var p = replayFolderLoad + '/' + f;
+						try
+						{
+							var content:String = File.getContent(p);
+							var obj:Dynamic = Json.parse(content);
+							var meta:Dynamic = Reflect.field(obj, 'meta');
+							if (meta != null && Reflect.hasField(meta, 'song'))
 							{
-								var s = FileSystem.stat(p);
-								var m:Float = 0;
-								if (s != null && Reflect.hasField(s, 'mtime'))
+								var replaySongName:String = Reflect.field(meta, 'song');
+								var chartPath:Dynamic = (meta != null && Reflect.hasField(meta, 'chartPath')) ? Reflect.field(meta, 'chartPath') : null;
+								var replayDifficulty:String = getDifficultyFromChartPath(chartPath, meta);
+
+								// Check if replay matches current song and difficulty
+								if (Paths.formatToSongPath(replaySongName) == currentSongName && replayDifficulty == currentDifficultyName)
 								{
-									var mt = Reflect.field(s, 'mtime');
-									if (Std.isOfType(mt, Date))
-										m = mt.getTime();
-									else
-										m = Std.parseFloat(Std.string(mt));
-								}
-								if (m > latestM)
-								{
-									latestM = m;
-									latest = p;
-									savedSongName = replaySongName;
+									var s = FileSystem.stat(p);
+									var m:Float = 0;
+									if (s != null && Reflect.hasField(s, 'mtime'))
+									{
+										var mt = Reflect.field(s, 'mtime');
+										if (Std.isOfType(mt, Date))
+											m = mt.getTime();
+										else
+											m = Std.parseFloat(Std.string(mt));
+									}
+									if (m > latestM)
+									{
+										latestM = m;
+										latest = p;
+										savedSongName = replaySongName;
+									}
 								}
 							}
 						}
+						catch (e:Dynamic)
+						{
+							trace('Failed to read replay file ${f}: ' + e);
+						}
 					}
-					catch (e:Dynamic)
-					{
-						trace('Failed to read replay file ${f}: ' + e);
-					}
-				}
 
-				if (FlxG.keys.justPressed.F7 && !player.playingMusic)
-				{
 					if (latest != null)
 					{
 						// Load and play the replay
@@ -722,7 +748,7 @@ class FreeplayState extends MusicBeatState
 							}
 							else
 							{
-								PlayState.replayGameplaySettings = null;
+								PlayState.replayJudgmentSettings = null;
 							}
 							var songLowercase:String = Paths.formatToSongPath(songs[curSelected].songName);
 							var poop:String = Highscore.formatSong(songLowercase, curDifficulty);
@@ -804,6 +830,9 @@ class FreeplayState extends MusicBeatState
 		positionHighscore();
 		missingText.visible = false;
 		missingTextBG.visible = false;
+		
+		// 更新底部回放文本（因为难度可能变化，回放的可用性也会变化）
+		updateReplayBottomText(true); // 强制更新，确保切换难度时立即刷新
 	}
 
 	function changeSelection(change:Int = 0, playSound:Bool = true)
@@ -824,17 +853,8 @@ class FreeplayState extends MusicBeatState
 			FlxTween.color(bg, 1, bg.color, intendedColor);
 		}
 
-		for (num => item in grpSongs.members)
-		{
-			var icon:HealthIcon = iconArray[num];
-			item.alpha = 0.6;
-			icon.alpha = 0.6;
-			if (item.targetY == curSelected)
-			{
-				item.alpha = 1;
-				icon.alpha = 1;
-			}
-		}
+		// 只在切换歌曲时更新可见对象，而不是每帧更新
+		updateVisibleItems();
 
 		Mods.currentModDirectory = songs[curSelected].folder;
 		PlayState.storyWeek = songs[curSelected].week;
@@ -853,7 +873,8 @@ class FreeplayState extends MusicBeatState
 
 		changeDiff();
 		_updateSongLastDifficulty();
-		updateReplayBottomText();
+		updateReplayBottomText(true); // 强制更新，确保切换时立即刷新回放文本
+		lastLerpSelected = -9999; // 重置，确保切换歌曲时立即更新可见范围
 	}
 
 	inline private function _updateSongLastDifficulty()
@@ -897,82 +918,148 @@ class FreeplayState extends MusicBeatState
 		return Difficulty.getDefault();
 	}
 
-	private function updateReplayBottomText():Void
+	#if FEATURE_FILESYSTEM
+	/**
+	 * 预加载回放文件索引到内存缓存中
+	 * 只扫描一次文件列表，避免重复的文件I/O操作
+	 */
+	private function preloadReplayIndex():Void
+	{
+		// 清空之前的缓存
+		cachedReplayIndex = new Map();
+		
+		var moddirCheck:String = (Mods.currentModDirectory != null && Mods.currentModDirectory.length > 0) ? Mods.currentModDirectory : 'global';
+		var replayFolderCheck:String = Paths.mods(moddirCheck + '/replay');
+		
+		if (!FileSystem.exists(replayFolderCheck))
+		{
+			// 回放文件夹不存在，直接返回
+			return;
+		}
+		
+		var files:Array<String> = FileSystem.readDirectory(replayFolderCheck);
+		if (files == null || files.length == 0)
+		{
+			// 没有回放文件
+			return;
+		}
+		
+		// 遍历所有回放文件，建立索引
+		for (f in files)
+		{
+			if (!f.endsWith('.replay.json'))
+				continue;
+			
+			var p = replayFolderCheck + '/' + f;
+			try
+			{
+				var content:String = File.getContent(p);
+				var obj:Dynamic = Json.parse(content);
+				var meta:Dynamic = Reflect.field(obj, 'meta');
+				
+				if (meta != null && Reflect.hasField(meta, 'song'))
+				{
+					var replaySongName:String = Reflect.field(meta, 'song');
+					var formattedSongName:String = Paths.formatToSongPath(replaySongName);
+					var chartPath:Dynamic = (meta != null && Reflect.hasField(meta, 'chartPath')) ? Reflect.field(meta, 'chartPath') : null;
+					var replayDifficulty:String = getDifficultyFromChartPath(chartPath, meta);
+					
+					// 将难度添加到对应歌曲的列表中
+					if (!cachedReplayIndex.exists(formattedSongName))
+					{
+						cachedReplayIndex.set(formattedSongName, []);
+					}
+					
+					var difficultyList:Array<String> = cachedReplayIndex.get(formattedSongName);
+					if (difficultyList.indexOf(replayDifficulty) == -1)
+					{
+						difficultyList.push(replayDifficulty);
+					}
+				}
+			}
+			catch (e:Dynamic)
+			{
+				trace('Failed to preload replay file ${f}: ' + e);
+			}
+		}
+	}
+	#end
+
+	private function updateReplayBottomText(?forceUpdate:Bool = false):Void
 	{
 		#if FEATURE_FILESYSTEM
+		// 限制回放文本更新频率，避免每帧都更新（UI更新开销）
+		// 但切换曲目/难度时强制更新（forceUpdate = true）
+		var currentTime:Float = FlxG.game.ticks / 1000;
+		if (!forceUpdate && currentTime - lastReplayCheckTime < 0.5) // 每0.5秒更新一次文本
+		{
+			// 使用缓存的文本
+			if (cachedReplayText.length > 0)
+			{
+				bottomText.text = cachedReplayText;
+				bottomText.y = FlxG.height - bottomText.height - 2;
+				bottomBG.y = bottomText.y - 4;
+				bottomBG.makeGraphic(FlxG.width, Std.int(bottomText.height) + 8, 0x99000000);
+			}
+			return;
+		}
+		
+		lastReplayCheckTime = currentTime;
+		
+		// 检测回放文件夹是否有变化（新增、修改或删除回放文件）
 		var moddirCheck:String = (Mods.currentModDirectory != null && Mods.currentModDirectory.length > 0) ? Mods.currentModDirectory : 'global';
 		var replayFolderCheck:String = Paths.mods(moddirCheck + '/replay');
 		if (FileSystem.exists(replayFolderCheck))
 		{
-			var files:Array<String> = FileSystem.readDirectory(replayFolderCheck);
-			if (files != null && files.length > 0)
+			var folderStat = FileSystem.stat(replayFolderCheck);
+			var currentMTime:Float = (folderStat != null && Reflect.hasField(folderStat, 'mtime')) ? Reflect.field(folderStat, 'mtime').getTime() : 0;
+			
+			// 如果文件夹修改时间变化，重新加载索引
+			if (currentMTime > lastReplayFolderMTime + 1000) // 加1秒缓冲，避免频繁重载
 			{
-				// Get currently selected song name (formatted) and difficulty name
-				var currentSongName:String = Paths.formatToSongPath(songs[curSelected].songName);
-				var currentDifficultyName:String = Difficulty.getString(curDifficulty, false);
-				var matchedReplayCount:Int = 0;
-
-				for (f in files)
-				{
-					if (!f.endsWith('.replay.json'))
-						continue;
-
-					var p = replayFolderCheck + '/' + f;
-					try
-					{
-						var content:String = File.getContent(p);
-						var obj:Dynamic = Json.parse(content);
-						var meta:Dynamic = Reflect.field(obj, 'meta');
-						if (meta != null && Reflect.hasField(meta, 'song'))
-						{
-							var replaySongName:String = Reflect.field(meta, 'song');
-							var chartPath:Dynamic = (meta != null && Reflect.hasField(meta, 'chartPath')) ? Reflect.field(meta, 'chartPath') : null;
-							var replayDifficulty:String = getDifficultyFromChartPath(chartPath, meta);
-
-							// 濡偓閺屻儲鐡曢弴鎻掓倳缁夋澘鎷伴梾鎯у閺勵垰鎯侀柈钘夊爱闁?
-							if (Paths.formatToSongPath(replaySongName) == currentSongName && replayDifficulty == currentDifficultyName)
-							{
-								matchedReplayCount++;
-							}
-						}
-					}
-					catch (e:Dynamic)
-					{
-						trace('Failed to read replay file ${f}: ' + e);
-					}
-				}
-
-				if (matchedReplayCount > 0)
-				{
-					bottomText.text = bottomString
-						+ ' | ${matchedReplayCount} replay(s) found for this song (${currentDifficultyName}) - Press F7 to watch latest replay.';
-				}
-				else
-				{
-					// No replay matching current song and difficulty, but still show total replay count (for reference)
-					var totalReplayFiles:Array<String> = files.filter(f -> f.endsWith('.replay.json'));
-					var totalReplayCount:Int = totalReplayFiles.length;
-					if (totalReplayCount > 0)
-					{
-						bottomText.text = bottomString + ' | ${totalReplayCount} replay(s) in mod (not for this song/difficulty).';
-					}
-					else
-					{
-						bottomText.text = bottomString;
-					}
-				}
+				lastReplayFolderMTime = currentMTime;
+				preloadReplayIndex(); // 重新加载索引
+			}
+		}
+		
+		// 使用预加载的索引，不再扫描文件系统
+		var currentSongName:String = Paths.formatToSongPath(songs[curSelected].songName);
+		var currentDifficultyName:String = Difficulty.getString(curDifficulty, false);
+		
+		var difficultyList:Array<String> = cachedReplayIndex.exists(currentSongName) ? cachedReplayIndex.get(currentSongName) : null;
+		var songReplayCount:Int = (difficultyList != null) ? difficultyList.length : 0;
+		var matchedReplayCount:Int = (difficultyList != null && difficultyList.indexOf(currentDifficultyName) != -1) ? 1 : 0;
+		
+		// Generate hint text based on index data
+		if (songReplayCount > 0)
+		{
+			if (matchedReplayCount > 0)
+			{
+				// Current difficulty has matching replays
+				cachedReplayText = bottomString + '\nThis song has ${songReplayCount} replay(s) - Press F7 to watch';
 			}
 			else
 			{
-				bottomText.text = bottomString;
+				// Song has replays but current difficulty doesn't
+				cachedReplayText = bottomString + '\nThis song has ${songReplayCount} replay(s) (but no replay for ${currentDifficultyName} difficulty)';
 			}
 		}
 		else
 		{
-			bottomText.text = bottomString;
+			// Current song has no replay files
+			cachedReplayText = bottomString;
 		}
+		
+		bottomText.text = cachedReplayText;
+		
+		// Adjust position based on text height to prevent overflow
+		bottomText.y = FlxG.height - bottomText.height - 2;
+		bottomBG.y = bottomText.y - 4;
+		bottomBG.makeGraphic(FlxG.width, Std.int(bottomText.height) + 8, 0x99000000);
 		#end
 	}
+
+	
 
 	private function positionHighscore()
 	{
@@ -985,10 +1072,36 @@ class FreeplayState extends MusicBeatState
 
 	var _drawDistance:Int = 4;
 	var _lastVisibles:Array<Int> = [];
+	private var lastLerpSelected:Float = -9999; // 用于检测lerpSelected是否变化
 
 	public function updateTexts(elapsed:Float = 0.0)
 	{
+		// 每帧更新lerp位置
 		lerpSelected = FlxMath.lerp(curSelected, lerpSelected, Math.exp(-elapsed * 9.6));
+		
+		// 检测lerpSelected是否变化足够大，需要重新计算可见范围
+		var lerpChanged:Bool = Math.abs(lerpSelected - lastLerpSelected) > 0.5;
+		
+		if (lerpChanged)
+		{
+			updateVisibleItems();
+			lastLerpSelected = lerpSelected;
+		}
+		else
+		{
+			// 只更新已可见的对象位置，不遍历所有对象
+			for (i in _lastVisibles)
+			{
+				var item:Alphabet = grpSongs.members[i];
+				item.x = ((item.targetY - lerpSelected) * item.distancePerItem.x) + item.startPosition.x;
+				item.y = ((item.targetY - lerpSelected) * 1.3 * item.distancePerItem.y) + item.startPosition.y;
+			}
+		}
+	}
+
+	private function updateVisibleItems():Void
+	{
+		// 隐藏之前的可见对象
 		for (i in _lastVisibles)
 		{
 			grpSongs.members[i].visible = grpSongs.members[i].active = false;
@@ -996,34 +1109,45 @@ class FreeplayState extends MusicBeatState
 		}
 		_lastVisibles = [];
 
+		// 计算当前可见范围（基于lerpSelected而不是curSelected，使过渡更平滑）
 		var min:Int = Math.round(Math.max(0, Math.min(songs.length, lerpSelected - _drawDistance)));
 		var max:Int = Math.round(Math.max(0, Math.min(songs.length, lerpSelected + _drawDistance)));
+		
+		// 只显示可见范围内的对象
 		for (i in min...max)
 		{
 			var item:Alphabet = grpSongs.members[i];
 			item.visible = item.active = true;
 			item.x = ((item.targetY - lerpSelected) * item.distancePerItem.x) + item.startPosition.x;
 			item.y = ((item.targetY - lerpSelected) * 1.3 * item.distancePerItem.y) + item.startPosition.y;
+			item.alpha = (i == curSelected) ? 1.0 : 0.6; // 设置选中项的透明度（选中不透明，未选中半透明）
 
 			var icon:HealthIcon = iconArray[i];
 			icon.visible = icon.active = true;
+			icon.alpha = (i == curSelected) ? 1.0 : 0.6; // 设置选中项的透明度
+			
 			_lastVisibles.push(i);
 		}
 	}
+
+	private var lastSectionHit:Int = -1;
 
 	override function stepHit():Void
 	{
 		super.stepHit();
 
-		// 每4步（每拍）触发背景缩放动画
-		if (curStep % 4 == 0)
+		// 每section（章节）触发背景缩放动画（不再是每4步）
+		if (lastSectionHit != curSection && player.playingMusic)
 		{
-			// trace('Step hit: ' + curStep + ', songPosition: ' + Conductor.songPosition + ', calling beatHit');
-			beatHit();
+			lastSectionHit = curSection;
+			sectionHit();
 		}
 	}
 
 	private var lastBeatHit:Int = -1;
+	private var iconScaleLerp:Float = 0; // 图标缩放Lerp进度 (0-1)
+	private var iconBeatElapsed:Float = 0; // 图标节拍动画已过去时间
+	private var iconBeatDuration:Float = 0; // 图标节拍动画总时长
 
 	override function beatHit():Void
 	{
@@ -1036,13 +1160,26 @@ class FreeplayState extends MusicBeatState
 
 		lastBeatHit = curBeat;
 
-		// 背景立刻缩放到1.05，然后开始lerp回1
-		if (bg != null)
+		// 选中图标立刻缩放到1.1，然后开始lerp回1
+		if (iconArray != null && iconArray[curSelected] != null)
 		{
-			// trace('Beat hit! Scaling bg to 1.05, crochet: ' + Conductor.crochet);
+			var icon:HealthIcon = iconArray[curSelected];
+			icon.scale.set(1.1, 1.1);
+			iconBeatElapsed = 0;
+			iconBeatDuration = Conductor.crochet / 1000;
+		}
+	}
+
+	override function sectionHit():Void
+	{
+		// 背景每section缩放一次（每section触发一次）
+		// 不再调用super.sectionHit()，避免父类中的额外缩放
+		// 只有当缩放接近完成时才重新触发，避免在lerp动画中重复设置
+		if (bg != null && player.playingMusic && bg.scale.x <= 1.01)
+		{
 			bg.scale.set(1.05, 1.05);
 			bgBeatElapsed = 0;
-			bgBeatDuration = Conductor.crochet / 1000; // 转换为秒
+			bgBeatDuration = Conductor.crochet / 1000;
 		}
 	}
 
