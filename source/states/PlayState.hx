@@ -591,6 +591,11 @@ isReplaying = false;
     		camHUD.zoom = ClientPrefs.data.hudSize;
 		}
 
+		camGame.pixelPerfectRender = true;
+		camHUD.pixelPerfectRender = true;
+		camOther.pixelPerfectRender = true;
+		camArchived.pixelPerfectRender = true;
+
 		FlxG.cameras.add(camHUD, false);
 		FlxG.cameras.add(camOther, false);
 		FlxG.cameras.add(camArchived, false);

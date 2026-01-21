@@ -168,14 +168,15 @@ class FreeplayState extends MusicBeatState
 		scoreText = new FlxText(FlxG.width * 0.7, 5, 0, "", 32);
 		scoreText.setFormat(Paths.font(Language.get('game_font')), 32, FlxColor.WHITE, RIGHT);
 
-		scoreBG = new FlxSprite(scoreText.x - 6, 0).makeGraphic(1, 66, 0xFF000000);
-		scoreBG.alpha = 0.6;
-		add(scoreBG);
-
-		diffText = new FlxText(scoreText.x, scoreText.y + 36, 0, "", 24);
+		diffText = new FlxText(scoreText.x, scoreText.y + scoreText.height, 0, "", 24);
 		diffText.font = scoreText.font;
-		add(diffText);
 
+		var height:Float = scoreText.y + diffText.height + scoreText.height + 4;
+		scoreBG = new FlxSprite(scoreText.x - 6, 0).makeGraphic(1, Std.int(height), 0xFF000000);
+		scoreBG.alpha = 0.6;
+
+		add(scoreBG);
+		add(diffText);
 		add(scoreText);
 
 		missingTextBG = new FlxSprite().makeGraphic(FlxG.width, FlxG.height, FlxColor.BLACK);

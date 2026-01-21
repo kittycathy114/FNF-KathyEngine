@@ -33,6 +33,9 @@ class PauseSubState extends MusicBeatSubstate
 
 	override function create()
 	{
+		var format1 = new FlxTextFormat(0xFFFFFF, false, false);
+		var format2 = new FlxTextFormat(0xFF4000, false, false);
+
 		if(Difficulty.list.length < 2) menuItemsOG.remove('Change Difficulty'); //No need to change difficulty if there is only one!
 		if(PlayState.chartingMode)
 		{
@@ -93,12 +96,17 @@ class PauseSubState extends MusicBeatSubstate
 		bpmText.updateHitbox();
 		add(bpmText);
 
-		var speedText:FlxText = new FlxText(20, 15 + 96, 0, 'NOTE SPEED: ${PlayState.instance.songSpeed}x${PlayState.SONG.speed != PlayState.instance.songSpeed ? ' (${PlayState.SONG.speed}x)' : ''}', 32);
+		var speedText:FlxText = new FlxText(20, 15 + 96, 0, '', 32);
 		speedText.scrollFactor.set();
 		speedText.setFormat(Paths.font('vcr.ttf'), 32);
 		speedText.updateHitbox();
+		if (ClientPrefs.getGameplaySetting('scrolltype', 'multiplicative') == 'constant') {
+			speedText.applyMarkup('<y>NOTE SPEED: <y>!${PlayState.instance.songSpeed}x!${PlayState.SONG.speed != PlayState.instance.songSpeed ? '<y> (${PlayState.SONG.speed}x)<y>' : ''}', [
+			new FlxTextFormatMarkerPair(format1, "<y>"),
+			new FlxTextFormatMarkerPair(format2, "!"),
+		]);
+		} else speedText.text = 'NOTE SPEED: ${PlayState.instance.songSpeed}x${PlayState.SONG.speed != PlayState.instance.songSpeed ? ' (${PlayState.SONG.speed}x)' : ''}';
 		add(speedText);
-
 		var formatText:FlxText = new FlxText(20, 15 + 128, 0, 'CHART FORMAT: ${PlayState.SONG.format}', 32);
 		formatText.scrollFactor.set();
 		formatText.setFormat(Paths.font('vcr.ttf'), 32);

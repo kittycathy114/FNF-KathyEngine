@@ -2,12 +2,12 @@ package;
 
 import debug.FPSCounter;
 import debug.GameLogDisplay;
-import backend.Highscore;
 import flixel.FlxGame;
 import openfl.Lib;
 import openfl.display.Sprite;
 import openfl.events.Event;
 import openfl.display.StageScaleMode;
+import openfl.display.StageQuality;
 import lime.app.Application;
 import states.TitleState;
 #if HSCRIPT_ALLOWED
@@ -102,7 +102,6 @@ class Main extends Sprite
 		Mods.loadTopMod();
 
 		FlxG.save.bind('funkin', CoolUtil.getSavePath());
-		Highscore.load();
 
 		#if HSCRIPT_ALLOWED
 		Iris.warn = function(x, ?pos:haxe.PosInfos)
@@ -196,7 +195,9 @@ class Main extends Sprite
 		fpsVar = new FPSCounter(10, 3, 0xFFFFFF);
 		Lib.current.stage.addChild(fpsVar);
 		Lib.current.stage.align = "tl";
-		Lib.current.stage.scaleMode = StageScaleMode.NO_SCALE;
+		Lib.current.stage.scaleMode = StageScaleMode.SHOW_ALL;
+		Lib.current.stage.quality = StageQuality.BEST;
+		
 		if (fpsVar != null)
 		{
 			fpsVar.visible = ClientPrefs.data.showFPS;

@@ -111,6 +111,9 @@ class Highscore
 
 	public static function load():Void
 	{
+		if (FlxG.save == null || FlxG.save.data == null)
+			return;
+
 		if (FlxG.save.data.weekScores != null)
 			weekScores = FlxG.save.data.weekScores;
 

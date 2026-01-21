@@ -18,6 +18,8 @@ import shaders.ColorSwap;
 import states.StoryMenuState;
 import states.MainMenuState;
 
+import backend.Highscore;
+
 typedef TitleData =
 {
 	var titlex:Float;
@@ -73,6 +75,7 @@ class TitleState extends MusicBeatState
 		if(!initialized)
 		{
 			ClientPrefs.loadPrefs();
+			Highscore.load();
 			LanguageBasic.reloadPhrases();
 		}
 
