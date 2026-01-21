@@ -940,7 +940,7 @@ isReplaying = false;
 			botplayTxt.y = ClientPrefs.data.botplayStyle == 'Kade' ? healthBar.y + 120 : healthBar.y + 70;
 
 		watermarkText = new FlxText(20, FlxG.height - 20, 0,
-			(ClientPrefs.data.timebarStyle == 'Leather' ? 'M.R.E v${Application.current.meta.get('version')}' : '${SONG.song}-${Difficulty.getString().toUpperCase()} | PE-MRE ${MainMenuState.mrExtendVersion}'),
+			(ClientPrefs.data.timebarStyle == 'Leather' ? 'M.R.E v${Application.current.meta.get('version')}' : '${SONG.song}-${Difficulty.getString().toUpperCase()} | PE-MRE ${MainMenuState.kathyEngineVersion}'),
 			14);
 		watermarkText.setFormat(Paths.font("vcr.ttf"), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		watermarkText.scrollFactor.set();
@@ -1573,7 +1573,7 @@ isReplaying = false;
 
         var tempScore:String;
         if(!instakillOnMiss) {
-            if (ClientPrefs.data.scoretxtstyle == 'MintRhythm')
+            if (ClientPrefs.data.scoretxtstyle == 'Kathy')
 			{
     			if (!cpuControlled || ClientPrefs.data.botplayScore)
     			{
@@ -1630,7 +1630,7 @@ isReplaying = false;
 
 		//ratingFC = "";
 		ratingFC = /*ClientPrefs.data.scoretxtstyle == 'Psych' ? "?" : */"?";
-		if(ClientPrefs.data.scoretxtstyle == 'MintRhythm') ratingFC = "IDK";
+		if(ClientPrefs.data.scoretxtstyle == 'Kathy') ratingFC = "IDK";
 		if(ClientPrefs.data.scoretxtstyle == 'Kade') ratingFC = "PFC";
 		if(songMisses == 0)
 		{
@@ -1665,7 +1665,7 @@ isReplaying = false;
 		if (ClientPrefs.data.scoretxtbounce) 
 		{
 			scoreTxt.angle = (Math.random() * 2.5) * (Math.random() > .5 ? 1 : -1);
-			scoreTxtTweenAngle = FlxTween.tween(scoreTxt, {angle: 0}, ClientPrefs.data.scoretxtstyle == 'MintRhythm' ? 0.15 : 0.2, {
+			scoreTxtTweenAngle = FlxTween.tween(scoreTxt, {angle: 0}, ClientPrefs.data.scoretxtstyle == 'Kathy' ? 0.15 : 0.2, {
 				onComplete: function (twn: FlxTween) {
 					scoreTxtTweenAngle = null;
 				}
@@ -2299,7 +2299,7 @@ isReplaying = false;
 
 		super.update(elapsed);
 
-		if (ClientPrefs.data.iconbopstyle == "MintRhythm") {
+		if (ClientPrefs.data.iconbopstyle == "Kathy") {
         iconP1.angle = FlxMath.lerp(iconP1.angle, iconP1TargetAngle, elapsed / iconP1AngleLerpSpeed);
         iconP2.angle = FlxMath.lerp(iconP2.angle, iconP2TargetAngle, elapsed / iconP2AngleLerpSpeed);
    	 	}
@@ -2482,7 +2482,7 @@ isReplaying = false;
 			nps = notesHitArray.length;
 			if (nps > maxNPS)
 				maxNPS = nps;
-			if (ClientPrefs.data.showNPS && npsCheck != nps && ClientPrefs.data.scoretxtstyle == 'MintRhythm' || ClientPrefs.data.scoretxtstyle == 'Kade') {
+			if (ClientPrefs.data.showNPS && npsCheck != nps && ClientPrefs.data.scoretxtstyle == 'Kathy' || ClientPrefs.data.scoretxtstyle == 'Kade') {
 				npsCheck = nps;
 			    updateScoreText();
 			}
@@ -2580,8 +2580,8 @@ isReplaying = false;
 	// Health icon updaters
 	public dynamic function updateIconsScale(elapsed:Float)
 {
-    // MintRhythm 专属缩放逻辑
-    if (ClientPrefs.data.iconbopstyle == "MintRhythm") {
+    // Kathy 专属缩放逻辑
+    if (ClientPrefs.data.iconbopstyle == "Kathy") {
         var healthPercent:Float = healthBar.percent;
         var targetScale:Float = 1.0;
         
@@ -2650,9 +2650,9 @@ isReplaying = false;
 	{
 		var iconOffset:Int = 26;
 
-		// MintRhythm专属动效
-		//不要了，不好看
-		/*if(ClientPrefs.data.iconbopstyle == "MintRhythm") {
+	// Kathy专属动效
+	//不要了，不好看
+	/*if(ClientPrefs.data.iconbopstyle == "Kathy") {
 			iconP1.x = healthBar.barCenter + (150 * iconP1.scale.x - 150)/2 - iconOffset;
 			iconP2.x = healthBar.barCenter - (150 * iconP2.scale.x)/2 - iconOffset*2;
 
@@ -3286,7 +3286,7 @@ isReplaying = false;
 					comboSpr.acceleration.y = FlxG.random.int(200, 300) * playbackRate * playbackRate;
 					comboSpr.velocity.y -= FlxG.random.int(140, 160) * playbackRate;
 				}
-				else if (ClientPrefs.data.ratingFallStyle == "MintRhythm" || ClientPrefs.data.ratingFallStyle == "MintRhythm(Legacy)")
+				else if (ClientPrefs.data.ratingFallStyle == "Kathy" || ClientPrefs.data.ratingFallStyle == "Kathy(Legacy)")
 				{
 					rating.velocity.y = 0;
 					theEXrating.velocity.y = 0;
@@ -3356,19 +3356,19 @@ isReplaying = false;
 			else
 			{
 				// Combo Stacking禁用时，统一切换符号
-				if (ClientPrefs.data.ratbounce == true && !PlayState.isPixelStage && ClientPrefs.data.ratingFallStyle != "MintRhythm(Legacy)")
+				if (ClientPrefs.data.ratbounce == true && !PlayState.isPixelStage && ClientPrefs.data.ratingFallStyle != "Kathy(Legacy)")
 				{
 					rating.angle = (Math.random() * 7) * (Math.random() > .5 ? 1 : -1);
 				}
 
-				if(ClientPrefs.data.exratbounce == true && ClientPrefs.data.exratingDisplay && ClientPrefs.data.ratingFallStyle != "MintRhythm(Legacy)")
+				if(ClientPrefs.data.exratbounce == true && ClientPrefs.data.exratingDisplay && ClientPrefs.data.ratingFallStyle != "Kathy(Legacy)")
 				{
 					theEXrating.angle = (Math.random() * 7) * (Math.random() > .5 ? 1 : -1);
 				}
 
-				if ((ClientPrefs.data.ratingFallStyle == "MintRhythm" || ClientPrefs.data.ratingFallStyle == "MintRhythm(Legacy)"))
+				if ((ClientPrefs.data.ratingFallStyle == "Kathy" || ClientPrefs.data.ratingFallStyle == "Kathy(Legacy)"))
 				{
-					if (ClientPrefs.data.ratingFallStyle == "MintRhythm(Legacy)")
+					if (ClientPrefs.data.ratingFallStyle == "Kathy(Legacy)")
 					{
 						rating.angle = -8;
 						rating.x -= 150;
@@ -3430,7 +3430,7 @@ isReplaying = false;
 						numScore.velocity.y = FlxG.random.int(30, 60);
 						numScore.velocity.x = FlxG.random.float(-5, 5) * playbackRate;
 					}
-					else if (ClientPrefs.data.ratingFallStyle == "MintRhythm" || ClientPrefs.data.ratingFallStyle == "MintRhythm(Legacy)")
+					else if (ClientPrefs.data.ratingFallStyle == "Kathy" || ClientPrefs.data.ratingFallStyle == "Kathy(Legacy)")
 					{
 						numScore.velocity.y = 0;
 						numScore.velocity.x = 0;
@@ -3451,9 +3451,9 @@ isReplaying = false;
 
 				// 根据不同的跳动风格设置渐隐延迟
 				var numScoreFadeDelay:Float = Conductor.crochet * 0.002 / playbackRate;
-				if (!ClientPrefs.data.comboStacking && (ClientPrefs.data.ratingFallStyle == "MintRhythm" || ClientPrefs.data.ratingFallStyle == "MintRhythm(Legacy)"))
+				if (!ClientPrefs.data.comboStacking && (ClientPrefs.data.ratingFallStyle == "Kathy" || ClientPrefs.data.ratingFallStyle == "Kathy(Legacy)"))
 				{
-					// MintRhythm模式下，跳动完成后才开始渐隐
+					// Kathy模式下，跳动完成后才开始渐隐
 					numScoreFadeDelay += 0.2;
 				}
 
@@ -3476,9 +3476,10 @@ isReplaying = false;
 			var exRatingFadeDelay:Float = Conductor.crochet * 0.0008 / playbackRate;
 			var comboFadeDelay:Float = Conductor.crochet * 0.0015 / playbackRate;
 
-			if (!ClientPrefs.data.comboStacking && (ClientPrefs.data.ratingFallStyle == "MintRhythm" || ClientPrefs.data.ratingFallStyle == "MintRhythm(Legacy)"))
+
+			if (!ClientPrefs.data.comboStacking && (ClientPrefs.data.ratingFallStyle == "Kathy" || ClientPrefs.data.ratingFallStyle == "Kathy(Legacy)"))
 			{
-				// MintRhythm模式下，跳动完成后才开始渐隐
+				// Kathy模式下，跳动完成后才开始渐隐
 				ratingFadeDelay += 0.2;
 				exRatingFadeDelay += 0.2;
 				comboFadeDelay += 0.2;
@@ -4276,7 +4277,7 @@ isReplaying = false;
 						iconP1.scale.set(1.4, 1.4);
 						iconP2.scale.set(1.4, 1.4);
 
-            	case /*"Leather" | */"VSlice(New)" | "Codename" | "VSlice(Old)" | "NovaFlare" | "MintRhythm":
+            	case /*"Leather" | */"VSlice(New)" | "Codename" | "VSlice(Old)" | "NovaFlare" | "Kathy":
 						iconP1.scale.set(1.3, 1.3);
 						iconP2.scale.set(1.3, 1.3);
 
@@ -4321,7 +4322,7 @@ isReplaying = false;
 					iconP2.angle = -15;
 				}
 			}
-			else if (ClientPrefs.data.iconbopstyle == "MintRhythm")
+			else if (ClientPrefs.data.iconbopstyle == "Kathy")
 			{
 				var healthPercent:Float = healthBar.percent;
 				if (healthPercent < 20)
@@ -4364,7 +4365,7 @@ isReplaying = false;
                 	iconP1.scale.set(1.4, 1.4);
                 	iconP2.scale.set(1.4, 1.4);
 
-            	case /*"Leather" | */"VSlice(New)" | "Codename" | "VSlice(Old)" | "NovaFlare" | "MintRhythm":
+            	case /*"Leather" | */"VSlice(New)" | "Codename" | "VSlice(Old)" | "NovaFlare" | "Kathy":
                 	iconP1.scale.set(1.3, 1.3);
                 	iconP2.scale.set(1.3, 1.3);
                 
@@ -4397,7 +4398,7 @@ isReplaying = false;
     			iconP1.angle = 15; iconP2.angle = -15;
     		}
     	}
-    	else if (ClientPrefs.data.iconbopstyle == "MintRhythm")
+    	else if (ClientPrefs.data.iconbopstyle == "Kathy")
     	{
     		var healthPercent:Float = healthBar.percent;
     		if (healthPercent < 20)
@@ -4445,7 +4446,7 @@ isReplaying = false;
             camHUD.zoom += 0.03 * camZoomingMult;
         }
 
-        if (ClientPrefs.data.iconbopstyle == "MintRhythm" && iconBopEnabled)
+        if (ClientPrefs.data.iconbopstyle == "Kathy" && iconBopEnabled)
 			{
 				var healthPercent:Float = healthBar.percent;
 				if (healthPercent < 20)

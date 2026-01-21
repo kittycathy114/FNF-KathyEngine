@@ -101,14 +101,14 @@ import states.TitleState;
 	public var showHaxelibs:Bool = true;
 	public var rmPerfect:Bool = false;	
 	public var ratbounce:Bool = true;
-	public var scoretxtstyle:String = 'MintRhythm';
+	public var scoretxtstyle:String = 'Kathy';
 	public var rmmsTimeTxt:Bool = false;
 	public var scoretxtbounce:Bool = false;
 	public var exratbounce:Bool = false;
-	public var iconbopstyle:String = 'MintRhythm';
+	public var iconbopstyle:String = 'Kathy';
 	public var healthbarstyle:String = 'Psych';
 	public var ratingsAlpha:Float = 1;
-	public var customFadeStyle:String = 'MintRhythm';
+	public var customFadeStyle:String = 'Kathy';
 	public var showRunningOS:Bool = true;
 	//NFE的特性
 	//public var CustomFadeSound:Bool = true;
@@ -140,7 +140,7 @@ import states.TitleState;
 	public var showNPS:Bool = true; // Show NPS in the HUD
 	public var showResultScreen:Bool = true; // Show the result screen after finishing a song
 	public var comboSprDisplay:Bool = false; //据说这是官方废稿，我不确定
-	public var ratingFallStyle:String = "Legacy"; // 禁用Combo Stacking时的跳动风格：Legacy = 向下速度，MintRhythm = 向下移动一段距离
+	public var ratingFallStyle:String = "Legacy"; // 禁用Combo Stacking时的跳动风格：Legacy = 向下速度，Kathy = 向下移动一段距离
 	
 	public var backgroundVolume:Bool = true; // 是否启用后台降音
 	public var backgroundVolumeLevel:Float = 0.2; // 后台音量级别

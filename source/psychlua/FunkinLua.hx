@@ -1585,7 +1585,7 @@ class FunkinLua {
 		});
 		Lua_helper.add_callback(lua, "setWindowTitle", function(title:String) {
 			if(FlxG.stage != null) {
-				FlxG.stage.window.title = title.trim() != "" ? title.trim() : 'Psych Engine: MintRhythm Extended';
+				FlxG.stage.window.title = title.trim() != "" ? title.trim() : 'Kathy Engine';
 			}
 		});
 		/*#else

@@ -12,8 +12,8 @@ class CoolUtil
 	
 	public static function checkForUpdates(url:String = null):String {
 		if (url == null || url.length == 0)
-			url = "https://raw.gitmirror.com/kittycathy233/FNF-MintRhythm-Extended/main/gitVersion.txt";
-		var version:String = states.MainMenuState.mrExtendVersion.trim();
+			url = "https://raw.gitmirror.com/kittycathy233/FNF-KathyEngine/main/gitVersion.txt";
+		var version:String = states.MainMenuState.kathyEngineVersion.trim();
 		if(ClientPrefs.data.checkForUpdates) {
 			trace('checking for updates...');
 			var http = new haxe.Http(url);
@@ -42,7 +42,7 @@ class CoolUtil
 			return cachedTips;
 			
 		if (url == null || url.length == 0)
-			url = "https://raw.gitmirror.com/kittycathy233/FNF-MintRhythm-Things/main/engine/menu/tips/zh_cn.txt";
+			url = "https://raw.gitmirror.com/kittycathy233/FNF-Kathy-Things/main/engine/menu/tips/zh_cn.txt";
 		
 		var tipContent:String = "";
 		trace('searching for tips...');

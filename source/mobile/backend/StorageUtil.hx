@@ -56,7 +56,7 @@ class StorageUtil
 	#if android
 	// always force path due to haxe
 	public static function getExternalStorageDirectory():String
-		return '/sdcard/.MintRhythm Extended/';
+		return '/sdcard/.KathyEngine/';
 
 	public static function requestPermissions():Void
 	{

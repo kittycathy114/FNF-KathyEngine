@@ -128,7 +128,7 @@ class ExtraGameplaySettingSubState extends BaseOptionsMenu
 			Language.get("rating_fall_style_desc"),
 			'ratingFallStyle',
 			STRING,
-			['Simple', 'Legacy', 'MintRhythm', 'MintRhythm(Legacy)']);
+			['Simple', 'Legacy', 'Kathy', 'Kathy(Legacy)']);
 		addOption(option);
 
 		option = new Option('Show Event Information',
@@ -237,21 +237,21 @@ class ExtraGameplaySettingSubState extends BaseOptionsMenu
 			Language.get("iconbop_style_desc"),
 			'iconbopstyle',
 			STRING,
-			['Psych', 'OS', 'MintRhythm', 'Leather', 'SB', 'Vanilla', 'VSlice(New)', 'VSlice(Old)', 'Codename', 'Dave', 'NovaFlare', 'NONE']);
+			['Psych', 'OS', 'Kathy', 'Leather', 'SB', 'Vanilla', 'VSlice(New)', 'VSlice(Old)', 'Codename', 'Dave', 'NovaFlare', 'NONE']);
 		addOption(option);
 
 		option = new Option('ScoreTxt Style',
 			Language.get("scoretxt_style_desc"),
 			'scoretxtstyle',
 			STRING,
-			['Psych', 'OS', 'MintRhythm', 'Kade', 'V-Slice']);
+			['Psych', 'OS', 'Kathy', 'Kade', 'V-Slice']);
 		addOption(option);
 
 		option = new Option('Loading Style',
 			Language.get("loading_style_desc"),
 			'customFadeStyle',
 			STRING,
-			['V-Slice', 'NovaFlare Move', 'NovaFlare Alpha', 'MintRhythm', 'BA_Schale_Glow']);
+			['V-Slice', 'NovaFlare Move', 'NovaFlare Alpha', 'Kathy', 'BA_Schale_Glow']);
 		addOption(option);
 
 		option = new Option('TimeBar Style',

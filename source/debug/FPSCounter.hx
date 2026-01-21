@@ -122,7 +122,7 @@ class FPSCounter extends Sprite
 		{
 			allText += '\n';
 			allText += 'Psych v${MainMenuState.psychEngineVersion}\n';
-			allText += 'MR v${MainMenuState.mrExtendVersion}\n';
+			allText += 'MR v${MainMenuState.kathyEngineVersion}\n';
 			allText += 'Commit: ${GameVersion.getGitCommitCount()} (${GameVersion.getGitCommitHash()})\n';
 			allText += 'Build: ${GameVersion.getBuildTime()}\n';
 			if (ClientPrefs.data.showHaxelibs) {

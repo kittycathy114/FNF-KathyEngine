@@ -22,7 +22,7 @@ enum MainMenuColumn {
 class MainMenuState extends MusicBeatState
 {
 	public static var psychEngineVersion:String = '1.0.4'; // This is also used for Discord RPC
-	public static var mrExtendVersion:String = '1.1.0.260105'; // This is also used for Discord RPC (?我说我不想改这个你信吗)
+	public static var kathyEngineVersion:String = '1.1.0.260121'; // This is also used for Discord RPC (?我说我不想改这个你信吗)
 	public static var curSelected:Int = 0;
 	public static var curColumn:MainMenuColumn = CENTER;
 	var allowMouse:Bool = true; //Turn this off to block mouse movement in menus
@@ -106,7 +106,7 @@ class MainMenuState extends MusicBeatState
 
 		var lang:String = ClientPrefs.data.language;
 
-		var mrVer:FlxText = new FlxText(12, FlxG.height - 66, 0, '${lang == "zh_cn" ? "薄荷韵律 (M.R. Extended)" : "MintRhythm Extended"} v' + mrExtendVersion, 12);
+		var mrVer:FlxText = new FlxText(12, FlxG.height - 66, 0, 'Kathy Engine v' + kathyEngineVersion, 12);
 		mrVer.scrollFactor.set();
 		mrVer.setFormat(Paths.font(lang == 'zh_cn' ? 'ResourceHanRoundedCN-Bold.ttf' : "vcr.ttf"), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		add(mrVer);
@@ -114,7 +114,7 @@ class MainMenuState extends MusicBeatState
 		psychVer.scrollFactor.set();
 		psychVer.setFormat(Paths.font(lang == 'zh_cn' ? 'ResourceHanRoundedCN-Bold.ttf' : "vcr.ttf"), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		add(psychVer);
-		var fnfVer:FlxText = new FlxText(12, FlxG.height - 26, 0, '${lang == 'zh_cn' ? "周五夜放克 (Friday Night Funkin')" : "Friday Night Funkin'"} v0.2.8' /*+ Application.current.meta.get('version')*/, 12);
+		var fnfVer:FlxText = new FlxText(12, FlxG.height - 26, 0, 'Friday Night Funkin\' v0.2.8' /*+ Application.current.meta.get('version')*/, 12);
 		fnfVer.scrollFactor.set();
 		fnfVer.setFormat(Paths.font(lang == 'zh_cn' ? 'ResourceHanRoundedCN-Bold.ttf' : "vcr.ttf"), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		add(fnfVer);
@@ -162,7 +162,7 @@ class MainMenuState extends MusicBeatState
 		#end
 
 		#if CHECK_FOR_UPDATES
-		if (showOutdatedWarning && ClientPrefs.data.checkForUpdates && substates.OutdatedSubState.updateVersion != mrExtendVersion) {
+		if (showOutdatedWarning && ClientPrefs.data.checkForUpdates && substates.OutdatedSubState.updateVersion != kathyEngineVersion) {
 			persistentUpdate = false;
 			showOutdatedWarning = false;
 			openSubState(new substates.OutdatedSubState());

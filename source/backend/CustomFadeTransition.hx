@@ -29,7 +29,7 @@ class CustomFadeTransition extends FlxSubState {
     var EventText: FlxText;
     var StateNameText: FlxText; // 显示要 reload 的 state 名称
     var transBG: FlxSprite;
-    static var mintRhythmImages:Array<String> = [];
+    static var kathyImages:Array<String> = [];
     static var lastRandomIndex:Int = -1;
     static var baGlowImages:Array<String> = [];
     static var currentImageIndex:Int = 0;
@@ -128,7 +128,7 @@ class CustomFadeTransition extends FlxSubState {
             loadLeft.setGraphicSize(FlxG.width, FlxG.height);
             loadLeft.updateHitbox();
             
-            WaterMark = new FlxText(isTransIn ? 50 : -1230, 720 - 50 - 50 * 2, 0, 'MINTRHYTHM EXTENDED V' + MainMenuState.mrExtendVersion, 50);
+            WaterMark = new FlxText(isTransIn ? 50 : -1230, 720 - 50 - 50 * 2, 0, 'KATHY ENGINE V' + MainMenuState.kathyEngineVersion, 50);
             WaterMark.scrollFactor.set();
             WaterMark.setFormat(Assets.getFont("assets/fonts/loadText.ttf").fontName, 50, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
             WaterMark.antialiasing = ClientPrefs.data.antialiasing;
@@ -214,7 +214,7 @@ class CustomFadeTransition extends FlxSubState {
             loadAlpha.setGraphicSize(FlxG.width, FlxG.height);
             loadAlpha.updateHitbox();
             
-            WaterMark = new FlxText( 50, 720 - 50 - 50 * 2, 0, 'MINTRHYTHM ENGINE V' + MainMenuState.mrExtendVersion, 50);
+            WaterMark = new FlxText( 50, 720 - 50 - 50 * 2, 0, 'KATHY ENGINE V' + MainMenuState.kathyEngineVersion, 50);
             WaterMark.scrollFactor.set();
             WaterMark.setFormat(Assets.getFont("assets/fonts/loadText.ttf").fontName, 50, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
             WaterMark.antialiasing = ClientPrefs.data.antialiasing;
@@ -282,27 +282,27 @@ class CustomFadeTransition extends FlxSubState {
                 
                 
                 }
-            }  else if (ClientPrefs.data.customFadeStyle == 'MintRhythm') {
+            }  else if (ClientPrefs.data.customFadeStyle == 'Kathy') {
             // 初始化图片列表（只在第一次加载时）
             
-            if (mintRhythmImages.length == 0) {
+            if (kathyImages.length == 0) {
                 var imagePath = Paths.getPath('images/menuExtend/CustomFadeTransition/Blue_Archive/CN/', IMAGE);
                 if (FileSystem.exists(imagePath)) {
                     for (file in FileSystem.readDirectory(imagePath)) {
                         if (Path.extension(file).toLowerCase() != 'txt') {
-                            mintRhythmImages.push('menuExtend/CustomFadeTransition/Blue_Archive/CN/' + Path.withoutExtension(file));
+                            kathyImages.push('menuExtend/CustomFadeTransition/Blue_Archive/CN/' + Path.withoutExtension(file));
                         }
                     }
                 }
                 // 如果没有找到图片则使用默认
-                if (mintRhythmImages.length == 0) {
-                    mintRhythmImages.push('menuExtend/CustomFadeTransition/Blue_Archive/CN/LoadingImage_44_Kr');
+                if (kathyImages.length == 0) {
+                    kathyImages.push('menuExtend/CustomFadeTransition/Blue_Archive/CN/LoadingImage_44_Kr');
                 }
             }
 
             // 随机选择新图片（确保不重复）
             if (!isTransIn) {
-                ClientPrefs.data.randomIndex = FlxG.random.int(0, mintRhythmImages.length - 1, [lastRandomIndex]);
+                ClientPrefs.data.randomIndex = FlxG.random.int(0, kathyImages.length - 1, [lastRandomIndex]);
             }
             lastRandomIndex = ClientPrefs.data.randomIndex;
 
@@ -320,7 +320,7 @@ class CustomFadeTransition extends FlxSubState {
            // add(transBG);
 
             // 图片加载（完全按照NovaFlare的方式）
-            baLoadingPics = new FlxSprite(0, 0).loadGraphic(Paths.image(mintRhythmImages[ClientPrefs.data.randomIndex]));
+            baLoadingPics = new FlxSprite(0, 0).loadGraphic(Paths.image(kathyImages[ClientPrefs.data.randomIndex]));
             baLoadingPics.scrollFactor.set();
             baLoadingPics.antialiasing = ClientPrefs.data.antialiasing;
             baLoadingPics.screenCenter();
@@ -475,7 +475,7 @@ class CustomFadeTransition extends FlxSubState {
                 if (finishCallback != null) finishCallback();
                 finishCallback = null;
             }
-        } else if (ClientPrefs.data.customFadeStyle == 'MintRhythm') {
+        } else if (ClientPrefs.data.customFadeStyle == 'Kathy') {
             transBlack.alpha = baLoadingPics.alpha;
            // transBG.alpha = baLoadingPics.alpha;
            /* if (baLoadingPics.alpha <= 0) {

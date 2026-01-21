@@ -343,7 +343,7 @@
     "bgvol_desc": "启用后台音量调整功能\n前提是禁用了「Auto Pause」选项",
     "bgvol_level_desc": "调整游戏处于后台时的音量\n同上，前提是禁用了「Auto Pause」",
     "gameplay_combospr_desc": "命中音符时，加入「Combo」的弹出效果",
-    "rating_fall_style_desc": "禁用「Combo Stacking」时的跳动风格\nLegacy：使用向下速度（当前默认行为）\nMintRhythm：仅向下移动一段距离（更类似ms数值的跳动效果）",
+    "rating_fall_style_desc": "禁用「Combo Stacking」时的跳动风格\nLegacy：使用向下速度（当前默认行为）\nKathy：仅向下移动一段距离（更类似ms数值的跳动效果）",
     "fixed_timestep_desc": "使用固定时间步长\n可以缓解画面丢帧，但是低帧率时会导致游戏画面滞后",
     "ratcounter_desc": "启用评分计数器以显示每种评分类型的命中次数",
     "watermark_desc": "在游戏画面上显示水印"

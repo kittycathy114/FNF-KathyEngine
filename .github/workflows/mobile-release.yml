@@ -6,8 +6,8 @@ permissions:
   discussions: write
 
 env:
-  PROJECT_NAME: mrEngine
-  REPO_PATH: kittycathy114/MintRhythm-Extended
+  PROJECT_NAME: KathyEngine
+  REPO_PATH: kittycathy114/FNF-KathyEngine
 
 jobs:
   get-commit-hash:

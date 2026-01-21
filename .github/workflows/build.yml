@@ -24,7 +24,7 @@ on:
 
 env:
   HAXE_VERSION: 4.3.7
-  PROJECT_NAME: MintRhythmExtended
+  PROJECT_NAME: KathyEngine
 
 jobs:
   build:

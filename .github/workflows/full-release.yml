@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
 
 env:
-  PROJECT_NAME: MintRhythmExtended
-  REPO_PATH: kittycathy114/MintRhythm-Extended
+  PROJECT_NAME: KathyEngine
+  REPO_PATH: kittycathy114/FNF-KathyEngine
   HAXE_VERSION: 4.3.7
 
 jobs:
