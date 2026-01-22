@@ -621,7 +621,8 @@ class FreeplayState extends MusicBeatState
 			@:privateAccess
 			if (PlayState._lastLoadedModDirectory != Mods.currentModDirectory)
 			{
-				Paths.freeGraphicsFromMemory();
+				// 使用异步清理，避免阻塞主线程
+				Paths.freeGraphicsFromMemoryAsync();
 			}
 			LoadingState.prepareToSong();
 			LoadingState.loadAndSwitchState(new PlayState());

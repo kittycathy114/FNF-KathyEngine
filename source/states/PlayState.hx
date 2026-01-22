@@ -430,10 +430,13 @@ class PlayState extends MusicBeatState
 	{
 		//trace('Playback Rate: ' + playbackRate);
 		_lastLoadedModDirectory = Mods.currentModDirectory;
-		Paths.clearStoredMemory();
+
+		// 使用异步清理，避免阻塞主线程
+		// 不等待清理完成，让清理在后台执行
+		Paths.clearStoredMemoryAsync();
 		if(nextReloadAll)
 		{
-			Paths.clearUnusedMemory();
+			Paths.clearUnusedMemoryAsync();
 			LanguageBasic.reloadPhrases();
 		}
 		nextReloadAll = false;

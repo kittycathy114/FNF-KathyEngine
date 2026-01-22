@@ -468,30 +468,34 @@ class LoadingState extends MusicBeatState
 
 		var song:SwagSong = PlayState.SONG;
 		var folder:String = Paths.formatToSongPath(Song.loadedSongName);
-		new Future<Bool>(() ->
+
+		// 并行化：note skin + note splash + preload.json（任务1）
+		threadsMax++;
+		threadPool.run(() ->
 		{
-			// LOAD NOTE IMAGE
-			var noteSkin:String = Note.defaultNoteSkin;
-			if (PlayState.SONG.arrowSkin != null && PlayState.SONG.arrowSkin.length > 1)
-				noteSkin = PlayState.SONG.arrowSkin;
-
-			var customSkin:String = noteSkin + Note.getNoteSkinPostfix();
-			if (Paths.fileExists('images/$customSkin.png', IMAGE))
-				noteSkin = customSkin;
-			imagesToPrepare.push(noteSkin);
-			//
-
-			// LOAD NOTE SPLASH IMAGE
-			var noteSplash:String = NoteSplash.defaultNoteSplash;
-			if (PlayState.SONG.splashSkin != null && PlayState.SONG.splashSkin.length > 0)
-				noteSplash = PlayState.SONG.splashSkin;
-			else
-				noteSplash += NoteSplash.getSplashSkinPostfix();
-			imagesToPrepare.push(noteSplash);
-
 			try
 			{
-				var path:String = Paths.json('$folder/preload');
+				// LOAD NOTE IMAGE
+				var noteSkin:String = Note.defaultNoteSkin;
+				if (PlayState.SONG.arrowSkin != null && PlayState.SONG.arrowSkin.length > 1)
+					noteSkin = PlayState.SONG.arrowSkin;
+
+				var customSkin:String = noteSkin + Note.getNoteSkinPostfix();
+				if (Paths.fileExists('images/$customSkin.png', IMAGE))
+					noteSkin = customSkin;
+				imagesToPrepare.push(noteSkin);
+				//
+
+				// LOAD NOTE SPLASH IMAGE
+				var noteSplash:String = NoteSplash.defaultNoteSplash;
+				if (PlayState.SONG.splashSkin != null && PlayState.SONG.splashSkin.length > 0)
+					noteSplash = PlayState.SONG.splashSkin;
+				else
+					noteSplash += NoteSplash.getSplashSkinPostfix();
+				imagesToPrepare.push(noteSplash);
+
+				// 加载preload.json
+				var preloadPath:String = Paths.json('$folder/preload');
 				var json:Dynamic = null;
 
 				#if MODS_ALLOWED
@@ -499,9 +503,9 @@ class LoadingState extends MusicBeatState
 				if (FileSystem.exists(moddyFile))
 					json = Json.parse(File.getContent(moddyFile));
 				else
-					json = Json.parse(File.getContent(path));
+					json = Json.parse(File.getContent(preloadPath));
 				#else
-				json = Json.parse(Assets.getText(path));
+				json = Json.parse(Assets.getText(preloadPath));
 				#end
 
 				if (json != null)
@@ -530,13 +534,20 @@ class LoadingState extends MusicBeatState
 			catch (e:Dynamic)
 			{
 			}
-			return true;
-		}, isIntrusive).then((_) -> new Future<Bool>(() ->
-			{
-				if (song.stage == null || song.stage.length < 1)
-					song.stage = StageData.vanillaSongStage(folder);
+			completedThread();
+		});
 
-				var stageData:StageFile = StageData.getStageFile(song.stage);
+		// 并行化：stage数据（任务2）
+		threadsMax++;
+		threadPool.run(() ->
+		{
+			try
+			{
+				var stageName:String = song.stage;
+				if (stageName == null || stageName.length < 1)
+					stageName = StageData.vanillaSongStage(folder);
+
+				var stageData:StageFile = StageData.getStageFile(stageName);
 				if (stageData != null)
 				{
 					var imgs:Array<String> = [];
@@ -572,9 +583,19 @@ class LoadingState extends MusicBeatState
 					}
 					prepare(imgs, snds, mscs);
 				}
+			}
+			catch (e:Dynamic)
+			{
+			}
+			completedThread();
+		});
 
-				songsToPrepare.push('$folder/Inst');
-
+		// 并行化：player1 + vocals（任务3）
+		threadsMax++;
+		threadPool.run(() ->
+		{
+			try
+			{
 				var player1:String = song.player1;
 				var player2:String = song.player2;
 				var gfVersion:String = song.gfVersion;
@@ -582,8 +603,9 @@ class LoadingState extends MusicBeatState
 				if (gfVersion == null)
 					gfVersion = 'gf';
 
-				dontPreloadDefaultVoices = false;
 				preloadCharacter(player1, prefixVocals);
+
+				dontPreloadDefaultVoices = false;
 				if (!dontPreloadDefaultVoices && prefixVocals != null)
 				{
 					if (Paths.fileExists('$prefixVocals-Player.${Paths.SOUND_EXT}', SOUND, false, 'songs')
@@ -596,6 +618,9 @@ class LoadingState extends MusicBeatState
 						songsToPrepare.push(prefixVocals);
 				}
 
+				songsToPrepare.push('$folder/Inst');
+
+				// 并行化：player2（任务4）
 				if (player2 != player1)
 				{
 					threadsMax++;
@@ -611,33 +636,33 @@ class LoadingState extends MusicBeatState
 						completedThread();
 					});
 				}
-				if (!stageData.hide_girlfriend && gfVersion != player2 && gfVersion != player1)
-				{
-					threadsMax++;
-					threadPool.run(() ->
-					{
-						try
-						{
-							preloadCharacter(gfVersion);
-						}
-						catch (e:Dynamic)
-						{
-						}
-						completedThread();
-					});
-				}
 
-				if (threadsCompleted == threadsMax)
+				// 并行化：gf（任务5）
+				if (gfVersion != player2 && gfVersion != player1)
 				{
-					clearInvalids();
-					startThreads();
-					initialThreadCompleted = true;
+					var stageData:StageFile = StageData.getStageFile(song.stage == null || song.stage.length < 1 ? StageData.vanillaSongStage(folder) : song.stage);
+					if (stageData == null || !stageData.hide_girlfriend)
+					{
+						threadsMax++;
+						threadPool.run(() ->
+						{
+							try
+							{
+								preloadCharacter(gfVersion);
+							}
+							catch (e:Dynamic)
+							{
+							}
+							completedThread();
+						});
+					}
 				}
-				return true;
-			}, isIntrusive)).onError((err:Dynamic) ->
+			}
+			catch (e:Dynamic)
 			{
-				trace('ERROR! while preparing song: $err');
-			});
+			}
+			completedThread();
+		});
 	}
 
 	public static function clearInvalids()
