@@ -940,7 +940,7 @@ isReplaying = false;
 			botplayTxt.y = ClientPrefs.data.botplayStyle == 'Kade' ? healthBar.y + 120 : healthBar.y + 70;
 
 		watermarkText = new FlxText(20, FlxG.height - 20, 0,
-			(ClientPrefs.data.timebarStyle == 'Leather' ? 'M.R.E v${Application.current.meta.get('version')}' : '${SONG.song}-${Difficulty.getString().toUpperCase()} | PE-MRE ${MainMenuState.kathyEngineVersion}'),
+			(ClientPrefs.data.timebarStyle == 'Leather' ? 'KYE v${Application.current.meta.get('version')}' : '${SONG.song}-${Difficulty.getString().toUpperCase()} | KYE ${MainMenuState.kathyEngineVersion}'),
 			14);
 		watermarkText.setFormat(Paths.font("vcr.ttf"), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		watermarkText.scrollFactor.set();

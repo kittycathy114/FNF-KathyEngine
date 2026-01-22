@@ -572,6 +572,12 @@ class FreeplayState extends MusicBeatState
 				// 重置BPM检测，并显示初始BPM
 				lastBPM = -1;
 				bpmDisplayTime = -1;
+
+				// 设置音乐循环回调，循环时重置beat检测
+				FlxG.sound.music.onComplete = function()
+				{
+					lastBeatHit = -1;
+				};
 			}
 			else if (instPlaying == curSelected && player.playingMusic)
 			{

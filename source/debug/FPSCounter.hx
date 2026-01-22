@@ -121,8 +121,8 @@ class FPSCounter extends Sprite
 		if (ClientPrefs.data.exgameversion)
 		{
 			allText += '\n';
-			allText += 'Psych v${MainMenuState.psychEngineVersion}\n';
-			allText += 'MR v${MainMenuState.kathyEngineVersion}\n';
+			allText += 'Psych ${MainMenuState.psychEngineVersion}\n';
+			allText += 'Kathy ${MainMenuState.kathyEngineVersion}\n';
 			allText += 'Commit: ${GameVersion.getGitCommitCount()} (${GameVersion.getGitCommitHash()})\n';
 			allText += 'Build: ${GameVersion.getBuildTime()}\n';
 			if (ClientPrefs.data.showHaxelibs) {
@@ -148,7 +148,7 @@ class FPSCounter extends Sprite
 
 			// 平台版本
 			if (LimeSystem.platformVersion != null && LimeSystem.platformVersion != LimeSystem.platformName)
-				allText += 'OS Version: ${LimeSystem.platformVersion}\n';
+				allText += 'OS Ver.: ${LimeSystem.platformVersion}\n';
 
 			// 显示器信息
 			try

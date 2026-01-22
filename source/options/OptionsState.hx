@@ -265,7 +265,7 @@ class OptionsState extends MusicBeatState
 		#if mobile
 		// 检查虚拟按键是否被按下（除了C按钮，它有单独的功能）
 		if (touchPad != null) {
-			var anyButtonPressed = touchPad.buttonUP.pressed || touchPad.buttonDOWN.pressed ||
+			var anyButtonPressed = touchPad.buttonUp.pressed || touchPad.buttonDown.pressed ||
 			                       touchPad.buttonA.pressed || touchPad.buttonB.pressed;
 			if (anyButtonPressed) {
 				hideSelectors = true; // 虚拟按键按下时隐藏选择器

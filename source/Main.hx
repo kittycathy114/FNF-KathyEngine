@@ -31,7 +31,9 @@ import flixel.tweens.FlxEase;
 import backend.ClientPrefs;
 import openfl.ui.Keyboard;
 import ui.MouseTrail;
+#if !mobile
 import hxwindowmode.WindowColorMode;
+#end
 
 // NATIVE API STUFF, YOU CAN IGNORE THIS AND SCROLL //
 #if (linux && !debug)
@@ -215,7 +217,9 @@ class Main extends Sprite
 		Language.load();
 
 		// Sets the window to dark mode. (returns true if it was successful)
+		#if !mobile
 		WindowColorMode.setDarkMode();
+		#end
 
 		#if (linux || mac) // fix the app icon not showing up on the Linux Panel / Mac Dock
 		var icon = Image.fromFile("icon.png");
