@@ -94,7 +94,7 @@ import states.TitleState;
 
 	//杂七杂八的特性
 	public var fpsCounterSize:Int = 14;
-	public var perfectWindow:Float = 20.50;
+	public var perfectWindow:Float = 18.50;
 	public var rainbowfpscounter:Bool = false;
 	public var exgameversion:Bool = true;
 	public var exratingDisplay:Bool = true;

@@ -86,6 +86,12 @@ class Controls
 	public var keyboardBinds:Map<String, Array<FlxKey>>;
 	public var gamepadBinds:Map<String, Array<FlxGamepadInputID>>;
 	public var mobileBinds:Map<String, Array<MobileInputID>>;
+	
+	// Virtual input states for replay mode
+	private var virtualPressedStates:Map<String, Bool> = new Map();
+	private var virtualJustPressedStates:Map<String, Bool> = new Map();
+	private var virtualJustReleasedStates:Map<String, Bool> = new Map();
+	
 	public function justPressed(key:String)
 	{
 		var result:Bool = (FlxG.keys.anyJustPressed(keyboardBinds[key]) == true);
@@ -94,7 +100,8 @@ class Controls
 		return result
 			|| _myGamepadJustPressed(gamepadBinds[key]) == true
 			|| mobileCJustPressed(mobileBinds[key]) == true
-			|| touchPadJustPressed(mobileBinds[key]) == true;
+			|| touchPadJustPressed(mobileBinds[key]) == true
+			|| virtualJustPressedStates[key] == true;
 	}
 
 	public function pressed(key:String)
@@ -105,7 +112,8 @@ class Controls
 		return result
 			|| _myGamepadPressed(gamepadBinds[key]) == true
 			|| mobileCPressed(mobileBinds[key]) == true
-			|| touchPadPressed(mobileBinds[key]) == true;
+			|| touchPadPressed(mobileBinds[key]) == true
+			|| virtualPressedStates[key] == true;
 	}
 
 	public function justReleased(key:String)
@@ -116,10 +124,48 @@ class Controls
 		return result
 			|| _myGamepadJustReleased(gamepadBinds[key]) == true
 			|| mobileCJustReleased(mobileBinds[key]) == true
-			|| touchPadJustReleased(mobileBinds[key]) == true;
+			|| touchPadJustReleased(mobileBinds[key]) == true
+			|| virtualJustReleasedStates[key] == true;
 	}
 
 	public var controllerMode:Bool = false;
+	
+	/**
+	 * Set virtual key state for replay mode. This allows replay system to simulate key presses
+	 * that can be detected by Controls.justPressed/pressed/justReleased methods.
+	 * @param key The key name (e.g., "note_left", "note_down", etc.)
+	 * @param pressed Whether the key is pressed (true) or released (false)
+	 */
+	public function setVirtualKeyState(key:String, pressed:Bool):Void
+	{
+		var currentState = virtualPressedStates[key] == true;
+		
+		if (pressed != currentState)
+		{
+			virtualPressedStates[key] = pressed;
+			
+			if (pressed)
+			{
+				virtualJustPressedStates[key] = true;
+				virtualJustReleasedStates.remove(key);
+			}
+			else
+			{
+				virtualJustPressedStates.remove(key);
+				virtualJustReleasedStates[key] = true;
+			}
+		}
+	}
+	
+	/**
+	 * Clear virtual input states. Call this at the start of each frame to ensure
+	 * justPressed/justReleased only trigger for one frame.
+	 */
+	public function clearVirtualJustStates():Void
+	{
+		virtualJustPressedStates.clear();
+		virtualJustReleasedStates.clear();
+	}
 	private function _myGamepadJustPressed(keys:Array<FlxGamepadInputID>):Bool
 	{
 		if(keys != null)

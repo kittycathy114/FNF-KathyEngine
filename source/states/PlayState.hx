@@ -568,6 +568,12 @@ isReplaying = false;
 			'note_up',
 			'note_right'
 		];
+		
+		// Initialize virtual input states for replay mode
+		if (isReplaying)
+		{
+			Controls.instance.clearVirtualJustStates();
+		}
 
 		if(FlxG.sound.music != null)
 			FlxG.sound.music.stop();
@@ -2134,6 +2140,9 @@ isReplaying = false;
 		// 回放模式下的自动按键逻辑
 		if(isReplaying && startedCountdown && !paused && !endingSong)
 		{
+			// 清理虚拟输入的just状态，确保每帧只触发一次
+			Controls.instance.clearVirtualJustStates();
+			
 			// 检查是否需要抬起按键（检查当前索引及之前的所有动作）
 			for (i in 0...currentReplayIndex)
 			{
@@ -2145,6 +2154,10 @@ isReplaying = false;
 					if(action.key < NON_NOTE_KEY_OFFSET)
 					{
 						replayHeldKeys[action.key] = false;
+						
+						// 同步虚拟输入状态到Controls，让模组能够检测到按键释放
+						var keyName = keysArray[action.key];
+						Controls.instance.setVirtualKeyState(keyName, false);
 						// 播放static动画
 						var spr:StrumNote = playerStrums.members[action.key];
 						if(spr != null)
@@ -2204,6 +2217,10 @@ isReplaying = false;
 						{
 							// 标记按键为按下状态
 							replayHeldKeys[replayAction.key] = true;
+							
+							// 同步虚拟输入状态到Controls，让模组能够检测到按键
+							var keyName = keysArray[replayAction.key];
+							Controls.instance.setVirtualKeyState(keyName, true);
 
 							// 空按 - 播放pressed动画
 							var spr:StrumNote = playerStrums.members[replayAction.key];
@@ -2233,12 +2250,16 @@ isReplaying = false;
 						{
 							// Miss，不需要按键
 						}
-						else
-						{
-							// 标记按键为按下状态
-							replayHeldKeys[replayAction.key] = true;
+							else
+							{
+								// 标记按键为按下状态
+								replayHeldKeys[replayAction.key] = true;
+								
+								// 同步虚拟输入状态到Controls，让模组能够检测到按键
+								var keyName = keysArray[replayAction.key];
+								Controls.instance.setVirtualKeyState(keyName, true);
 						
-							// 播放pressed动画（会在goodNoteHit中被confirm覆盖）
+								// 播放pressed动画（会在goodNoteHit中被confirm覆盖）
 							var spr:StrumNote = playerStrums.members[replayAction.key];
 							if(spr != null && strumsBlocked[replayAction.key] != true)
 							{
@@ -4699,7 +4720,7 @@ isReplaying = false;
 			if(totalPlayed != 0) //Prevent divide by 0
 			{
 				// Rating Percent
-				ratingPercent = Math.min(1, Math.max(0, totalNotesHit / totalPlayed));
+				ratingPercent = Math.max(0, totalNotesHit / totalPlayed);
 				//trace((totalNotesHit / totalPlayed) + ', Total: ' + totalPlayed + ', notes hit: ' + totalNotesHit);
 
 				// Rating Name

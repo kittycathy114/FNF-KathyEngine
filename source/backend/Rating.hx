@@ -7,7 +7,7 @@ class Rating
 	public var name:String = '';
 	public var image:String = '';
 	public var hitWindow:Null<Float> = 0.0; //ms
-	public var ratingMod:Float = 1;
+	public var ratingMod:Float = 0.98;
 	public var score:Int = 350;
 	public var noteSplash:Bool = true;
 	public var hits:Int = 0;
@@ -37,7 +37,7 @@ class Rating
 		ratingsData.push(rating);
 
 		var rating:Rating = new Rating('bad');
-		rating.ratingMod = 0.34;
+		rating.ratingMod = 0.33;
 		rating.score = 100;
 		rating.noteSplash = false;
 		ratingsData.push(rating);
@@ -50,8 +50,8 @@ class Rating
 
 		if (!ClientPrefs.data.rmPerfect){
     		var rating:Rating = new Rating('perfect');
-    		rating.ratingMod = 1;
-    		rating.score = 400;
+    		rating.ratingMod = 1.025;
+    		rating.score = 500;
     		rating.noteSplash = true;
 		    ratingsData.push(rating);
 		}
