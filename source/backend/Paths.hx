@@ -14,7 +14,6 @@ import openfl.system.System;
 import openfl.geom.Rectangle;
 
 import lime.utils.Assets;
-import sys.thread.Thread;
 import flash.media.Sound;
 
 import haxe.Json;
@@ -147,76 +146,7 @@ class Paths
 		FlxG.bitmap.remove(graphic);
 	}
 
-	#if MODS_ALLOWED
-	/**
-	 * 异步清理图形内存，避免阻塞主线程
-	 */
-	public static function freeGraphicsFromMemoryAsync():Void
-	{
-		#if (cpp || neko)
-		Thread.create(() ->
-		{
-			try
-			{
-				freeGraphicsFromMemory();
-			}
-			catch (e:Dynamic)
-			{
-				trace('Error in freeGraphicsFromMemoryAsync: $e');
-			}
-		});
-		#else
-		// 在不支持多线程的平台直接同步执行
-		freeGraphicsFromMemory();
-		#end
-	}
-	#end
 
-	/**
-	 * 异步清理存储的内存，避免阻塞主线程
-	 */
-	public static function clearStoredMemoryAsync():Void
-	{
-		#if (cpp || neko)
-		Thread.create(() ->
-		{
-			try
-			{
-				clearStoredMemory();
-			}
-			catch (e:Dynamic)
-			{
-				trace('Error in clearStoredMemoryAsync: $e');
-			}
-		});
-		#else
-		// 在不支持多线程的平台直接同步执行
-		clearStoredMemory();
-		#end
-	}
-
-	/**
-	 * 异步清理未使用的内存，避免阻塞主线程
-	 */
-	public static function clearUnusedMemoryAsync():Void
-	{
-		#if (cpp || neko)
-		Thread.create(() ->
-		{
-			try
-			{
-				clearUnusedMemory();
-			}
-			catch (e:Dynamic)
-			{
-				trace('Error in clearUnusedMemoryAsync: $e');
-			}
-		});
-		#else
-		// 在不支持多线程的平台直接同步执行
-		clearUnusedMemory();
-		#end
-	}
 
 	static public var currentLevel:String;
 	static public function setCurrentLevel(name:String)
