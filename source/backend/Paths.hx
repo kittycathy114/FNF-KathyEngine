@@ -182,8 +182,38 @@ class Paths
 	inline static public function getFolderPath(file:String, folder = "shared")
 		return 'assets/$folder/$file';
 
-	inline public static function getSharedPath(file:String = '')
-		return 'assets/shared/$file';
+inline public static function getSharedPath(file:String = '')
+	return 'assets/shared/$file';
+
+	static function extractModFromPath(path:String):String
+	{
+		#if MODS_ALLOWED
+		if (path.startsWith(mods())) {
+			var modsPrefix = mods();
+			var relativePath = path.substring(modsPrefix.length);
+			var slashIndex = relativePath.indexOf('/');
+			if (slashIndex > 0) {
+				return relativePath.substring(0, slashIndex);
+			}
+		}
+		#end
+		return 'shared';
+	}
+
+	static function generateCacheKey(path:String):String
+	{
+		var mod = extractModFromPath(path);
+		var relativePath = path;
+		#if MODS_ALLOWED
+		if (mod != 'shared') {
+			var modsPrefix = mods();
+			relativePath = path.substring(modsPrefix.length + mod.length + 1);
+		} else if (path.startsWith('assets/')) {
+			relativePath = path.substring(7);
+		}
+		#end
+		return '$mod:$relativePath';
+	}
 
 	inline static public function txt(key:String, ?folder:String)
 		return getPath('data/$key.txt', TEXT, folder, true);
@@ -241,17 +271,22 @@ inline static public function inst(song:String, ?specialInst:String = null, ?mod
 	static public function image(key:String, ?parentFolder:String = null, ?allowGPU:Bool = true):FlxGraphic
 	{
 		key = LanguageBasic.getFileTranslation('images/$key') + '.png';
+		var filePath:String = getPath(key, IMAGE, parentFolder, true);
+		var cacheKey:String = generateCacheKey(filePath);
 		var bitmap:BitmapData = null;
-		if (currentTrackedAssets.exists(key))
+		if (currentTrackedAssets.exists(cacheKey))
 		{
-			localTrackedAssets.push(key);
-			return currentTrackedAssets.get(key);
+			localTrackedAssets.push(cacheKey);
+			return currentTrackedAssets.get(cacheKey);
 		}
-		return cacheBitmap(key, parentFolder, bitmap, allowGPU);
+		return cacheBitmap(key, parentFolder, bitmap, allowGPU, cacheKey);
 	}
 
-	public static function cacheBitmap(key:String, ?parentFolder:String = null, ?bitmap:BitmapData, ?allowGPU:Bool = true):FlxGraphic
+	public static function cacheBitmap(key:String, ?parentFolder:String = null, ?bitmap:BitmapData, ?allowGPU:Bool = true, ?cacheKey:String = null):FlxGraphic
 	{
+		var actualCacheKey:String = cacheKey;
+		if (actualCacheKey == null) actualCacheKey = key;
+		
 		if (bitmap == null)
 		{
 			var file:String = getPath(key, IMAGE, parentFolder, true);
@@ -266,6 +301,7 @@ inline static public function inst(song:String, ?specialInst:String = null, ?mod
 				trace('Bitmap not found: $file | key: $key');
 				return null;
 			}
+			if (cacheKey == null) actualCacheKey = generateCacheKey(file);
 		}
 
 		if (allowGPU && ClientPrefs.data.cacheOnGPU && bitmap.image != null)
@@ -283,12 +319,12 @@ inline static public function inst(song:String, ?specialInst:String = null, ?mod
 			bitmap.readable = true;
 		}
 
-		var graph:FlxGraphic = FlxGraphic.fromBitmapData(bitmap, false, key);
+		var graph:FlxGraphic = FlxGraphic.fromBitmapData(bitmap, false, actualCacheKey);
 		graph.persist = true;
 		graph.destroyOnNoUse = false;
 
-		currentTrackedAssets.set(key, graph);
-		localTrackedAssets.push(key);
+		currentTrackedAssets.set(actualCacheKey, graph);
+		localTrackedAssets.push(actualCacheKey);
 		return graph;
 	}
 

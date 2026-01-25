@@ -40,7 +40,7 @@ class ModsMenuState extends MusicBeatState
 	var curSelectedMod:Int = 0;
 	
 	var hoveringOnMods:Bool = true;
-	var curSelectedButton:Int = 0; ///-1 = Enable/Disable All, -2 = Reload
+	var curSelectedButton:Int = 0; ///-1 = Enable All, -2 = Disable All, -3 = Reload
 	var modNameInitialY:Float = 0;
 
 	var noModsSine:Float = 0;
@@ -99,8 +99,7 @@ class ModsMenuState extends MusicBeatState
 		if(mod != null) bg.color = mod.bgColor;
 
 		//
-		var buttonX = bgList.x;
-		var buttonWidth = Std.int(bgList.width);
+		var buttonWidth = Std.int((bgList.width - 20) / 2);
 		var buttonHeight = 80;
 		var daY = 0;
 		if (controls.mobileC)
@@ -108,7 +107,7 @@ class ModsMenuState extends MusicBeatState
 		else
 			daY = 20;
 
-		buttonReload = new MenuButton(buttonX, bgList.y + bgList.height + daY, buttonWidth, buttonHeight, LanguageBasic.getPhrase('reload_button', 'RELOAD'), reload);
+		buttonReload = new MenuButton(bgList.x, bgList.y + bgList.height + daY, Std.int(bgList.width), buttonHeight, LanguageBasic.getPhrase('reload_button', 'RELOAD'), reload, 28);
 		add(buttonReload);
 		
 		var myY = buttonReload.y + buttonReload.bg.height + 20;
@@ -123,7 +122,7 @@ class ModsMenuState extends MusicBeatState
 		});
 		add(buttonModFolder);*/
 
-		buttonEnableAll = new MenuButton(buttonX, myY, buttonWidth, buttonHeight, LanguageBasic.getPhrase('enable_all_button', 'ENABLE ALL'), function() {
+		buttonEnableAll = new MenuButton(bgList.x, myY, buttonWidth, buttonHeight, LanguageBasic.getPhrase('enable_all_button', 'ENABLE ALL'), function() {
 			buttonEnableAll.ignoreCheck = false;
 			for (mod in modsGroup.members)
 			{
@@ -144,7 +143,7 @@ class ModsMenuState extends MusicBeatState
 		if(!controls.mobileC)
 			add(buttonEnableAll);
 
-		buttonDisableAll = new MenuButton(buttonX, myY, buttonWidth, buttonHeight, LanguageBasic.getPhrase('disable_all_button', 'DISABLE ALL'), function() {
+		buttonDisableAll = new MenuButton(bgList.x + buttonWidth + 20, myY, buttonWidth, buttonHeight, LanguageBasic.getPhrase('disable_all_button', 'DISABLE ALL'), function() {
 			buttonDisableAll.ignoreCheck = false;
 			for (mod in modsGroup.members)
 			{
@@ -168,8 +167,12 @@ class ModsMenuState extends MusicBeatState
 
 		if(modsList.all.length < 1)
 		{
-			buttonDisableAll.visible = buttonDisableAll.enabled = false;
 			buttonEnableAll.visible = true;
+			buttonEnableAll.enabled = false;
+			buttonEnableAll.alpha = 0.5;
+			buttonDisableAll.visible = true;
+			buttonDisableAll.enabled = false;
+			buttonDisableAll.alpha = 0.5;
 
 			var myX = bgList.x + bgList.width + 20;
 			noModsTxt = new FlxText(myX, 0, FlxG.width - myX - 20, LanguageBasic.getPhrase('no_mods_installed', "NO MODS INSTALLED\nPRESS {1} TO EXIT OR INSTALL A MOD", [daButton]), 48);
@@ -522,23 +525,31 @@ class ModsMenuState extends MusicBeatState
 						{
 							switch(curSelectedButton)
 							{
+								case -3:
+									curSelectedButton = -2;
+									changeSelectedButton();
 								case -2:
+									curSelectedButton = -1;
+									changeSelectedButton();
+								case -1:
 									curSelectedMod = 0;
 									hoveringOnMods = true;
 									var button = getButton();
 									button.ignoreCheck = button.onFocus = false;
 									changeSelectedMod();
-								case -1:
-									changeSelectedButton(-1);
 							}
 						}
 						else if(controls.UI_DOWN_P)
 						{
 							switch(curSelectedButton)
 							{
-								case -2:
-									changeSelectedButton(1);
 								case -1:
+									curSelectedButton = -2;
+									changeSelectedButton();
+								case -2:
+									curSelectedButton = -3;
+									changeSelectedButton();
+								case -3:
 									curSelectedMod = 0;
 									hoveringOnMods = true;
 									var button = getButton();
@@ -555,9 +566,25 @@ class ModsMenuState extends MusicBeatState
 						}
 					}
 					else if(controls.UI_LEFT_P)
-						changeSelectedButton(-1);
+					{
+						if(curSelectedButton == -2) // Disable All -> Enable All
+						{
+							curSelectedButton = -1;
+							changeSelectedButton();
+						}
+						else if(curSelectedButton < 0)
+							changeSelectedButton(-1);
+					}
 					else if(controls.UI_RIGHT_P)
-						changeSelectedButton(1);
+					{
+						if(curSelectedButton == -1) // Enable All -> Disable All
+						{
+							curSelectedButton = -2;
+							changeSelectedButton();
+						}
+						else if(curSelectedButton < 0)
+							changeSelectedButton(1);
+					}
 				}
 			}
 		}
@@ -592,8 +619,8 @@ class ModsMenuState extends MusicBeatState
 		button.ignoreCheck = button.onFocus = false;
 
 		curSelectedButton += add;
-		if(curSelectedButton < -2)
-			curSelectedButton = -2;
+		if(curSelectedButton < -3)
+			curSelectedButton = -3;
 		else if(curSelectedButton > max)
 			curSelectedButton = max;
 
@@ -606,6 +633,9 @@ class ModsMenuState extends MusicBeatState
 		{
 			bgButtons.color = FlxColor.BLACK;
 			bgButtons.alpha = 0.2;
+			// Enable/disable buttons are always visible but can be disabled
+			buttonEnableAll.visible = true;
+			buttonDisableAll.visible = true;
 		}
 		else
 		{
@@ -620,8 +650,9 @@ class ModsMenuState extends MusicBeatState
 	{
 		switch(curSelectedButton)
 		{
-			case -2: return buttonReload;
-			case -1: return buttonEnableAll.enabled ? buttonEnableAll : buttonDisableAll;
+			case -3: return buttonReload;
+			case -2: return buttonDisableAll;
+			case -1: return buttonEnableAll;
 		}
 
 		if(modsList.all.length < 1) return buttonReload; //prevent possible crash from my irresponsibility
@@ -660,7 +691,7 @@ class ModsMenuState extends MusicBeatState
 			{
 				curSelectedMod = lastSelected;
 				hoveringOnMods = false;
-				curSelectedButton = -1;
+				curSelectedButton = -1; // Enable All
 				changeSelectedButton();
 				return;
 			}
@@ -668,7 +699,7 @@ class ModsMenuState extends MusicBeatState
 			{
 				curSelectedMod = lastSelected;
 				hoveringOnMods = false;
-				curSelectedButton = -2;
+				curSelectedButton = -1; // Enable All (start from top)
 				changeSelectedButton();
 				return;
 			}
@@ -786,8 +817,12 @@ class ModsMenuState extends MusicBeatState
 
 	function checkToggleButtons()
 	{
-		buttonEnableAll.visible = buttonEnableAll.enabled = buttonEnableAll.active = modsList.disabled.length > 0;
-		buttonDisableAll.visible = buttonDisableAll.enabled = buttonDisableAll.active = !buttonEnableAll.visible;
+		buttonEnableAll.enabled = buttonEnableAll.active = modsList.disabled.length > 0;
+		buttonDisableAll.enabled = buttonDisableAll.active = modsList.enabled.length > 0;
+		
+		// Update button appearance based on enabled state
+		buttonEnableAll.alpha = buttonEnableAll.enabled ? 1.0 : 0.5;
+		buttonDisableAll.alpha = buttonDisableAll.enabled ? 1.0 : 0.5;
 	}
 
 	function reload()
@@ -927,12 +962,12 @@ class ModItem extends FlxSpriteGroup
 class MenuButton extends FlxSpriteGroup
 {
 	public var bg:FlxSprite;
-	public var textOn:Alphabet;
-	public var textOff:Alphabet;
+	public var textOn:FlxText;
+	public var textOff:FlxText;
 	public var icon:FlxSprite;
 	public var onClick:Void->Void = null;
 	public var enabled(default, set):Bool = true;
-	public function new(x:Float, y:Float, width:Int, height:Int, ?text:String = null, ?img:FlxGraphic = null, onClick:Void->Void = null, animWidth:Int = 0, animHeight:Int = 0)
+	public function new(x:Float, y:Float, width:Int, height:Int, ?text:String = null, ?img:FlxGraphic = null, onClick:Void->Void = null, animWidth:Int = 0, animHeight:Int = 0, ?fontSize:Int = 0)
 	{
 		super(x, y);
 		
@@ -942,20 +977,23 @@ class MenuButton extends FlxSpriteGroup
 
 		if(text != null)
 		{
-			textOn = new Alphabet(0, 0, "", false);
-			textOn.setScale(0.6);
-			textOn.text = text;
+			var actualFontSize = fontSize > 0 ? fontSize : 20;
+			var textHeight = Std.int(actualFontSize * 1.5); // 估算文本高度
+			var textY = Std.int((height - textHeight) / 2);
+			
+			textOn = new FlxText(0, textY, width, text);
+			textOn.setFormat(Paths.font("arturito-slab.ttf"), actualFontSize, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+			textOn.borderSize = 2;
+			textOn.bold = true;
 			textOn.alpha = 0.6;
 			textOn.visible = false;
-			centerOnBg(textOn);
-			textOn.y -= 30;
 			add(textOn);
 			
-			textOff = new Alphabet(0, 0, "", true);
-			textOff.setScale(0.52);
-			textOff.text = text;
+			textOff = new FlxText(0, textY, width, text);
+			textOff.setFormat(Paths.font("arturito-slab.ttf"), Std.int(actualFontSize * 0.85), FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+			textOff.borderSize = 2;
+			textOff.bold = true;
 			textOff.alpha = 0.6;
-			centerOnBg(textOff);
 			add(textOff);
 		}
 		else if(img != null)
@@ -1060,4 +1098,6 @@ class MenuButton extends FlxSpriteGroup
 		spr.x = bg.width/2 - spr.width/2;
 		spr.y = bg.height/2 - spr.height/2;
 	}
+	
+	
 }
