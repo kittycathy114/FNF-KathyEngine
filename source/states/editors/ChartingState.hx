@@ -7,6 +7,7 @@ import flixel.util.FlxSpriteUtil;
 import flixel.util.FlxStringUtil;
 import flixel.util.FlxDestroyUtil;
 import flixel.input.keyboard.FlxKey;
+import flixel.tweens.FlxEase;
 
 import lime.utils.Assets;
 import lime.media.AudioBuffer;
@@ -139,6 +140,11 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	var sectionFirstNoteID:Int = 0;
 	var sectionFirstEventID:Int = 0;
 	var curSec:Int = 0;
+	
+	// 不受noteOffset影响的纯粹播放信息（用于右下角显示）
+	var curSecPure:Int = 0;
+	var curBeatPure:Int = 0;
+	var curStepPure:Int = 0;
 
 	var chartEditorSave:FlxSave;
 	var mainBox:PsychUIBox;
@@ -154,6 +160,11 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	var nextGridBg:ChartingGridSprite;
 	var waveformSprite:FlxSprite;
 	var scrollY:Float = 0;
+	
+	// Grid轨道颜色覆盖层
+	var playerTrackOverlay:FlxSprite; // 玩家轨道（蓝色）
+	var opponentTrackOverlay:FlxSprite; // 对手轨道（红色）
+	var eventTrackOverlay:FlxSprite; // Event轨道（黄色）
 
 	var iconbopTween:FlxTween;
 
@@ -192,6 +203,15 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	
 	var vocals:FlxSound = new FlxSound();
 	var opponentVocals:FlxSound = new FlxSound();
+	
+	// 击打声音效池 - 用于高密度音符播放
+	var hitSoundPool:Array<FlxSound> = [];
+	var hitSoundPoolSize:Int = 16; // 池大小
+	var hitSoundPoolIndex:Int = 0; // 轮询索引
+
+	// 轨道颜色标识控制
+	var trackColorsCheckBox:PsychUICheckBox; // 主题设置中的复选框
+	var trackSeparators:Array<FlxSprite> = []; // 轨道分隔线
 
 	var timeLine:FlxSprite;
 	var infoText:FlxText;
@@ -232,11 +252,18 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		if(Difficulty.list.length < 1) Difficulty.resetList();
 		_keysPressedBuffer.resize(keysArray.length);
 
-		if(_shouldReset) Conductor.songPosition = 0;
-		persistentUpdate = false;
-		FlxG.mouse.visible = true;
-		FlxG.sound.list.add(vocals);
-		FlxG.sound.list.add(opponentVocals);
+if(_shouldReset) Conductor.songPosition = 0;
+	persistentUpdate = false;
+	FlxG.mouse.visible = true;
+	FlxG.sound.list.add(vocals);
+	FlxG.sound.list.add(opponentVocals);
+	
+	// 初始化击打声音效池
+	for (i in 0...hitSoundPoolSize)
+	{
+		hitSoundPool[i] = new FlxSound();
+		FlxG.sound.list.add(hitSoundPool[i]);
+	}
 
 		vocals.autoDestroy = false;
 		vocals.looped = true;
@@ -288,6 +315,55 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		vortexIndicator.active = false;
 		updateVortexColor();
 		add(vortexIndicator);
+		
+		// 创建轨道颜色覆盖层 - 只在gridBg显示的区域，放在strumLineNotes之前
+		var gridStartX:Float = gridBg.x + (SHOW_EVENT_COLUMN ? GRID_SIZE : 0); // 考虑Event列偏移
+		var gridHeight:Float = gridBg.height; // 只覆盖grid显示的高度
+		
+		// 初始化轨道颜色显示设置
+		if(chartEditorSave.data.showTrackColors == null) chartEditorSave.data.showTrackColors = true;
+		
+		// 设置默认颜色：玩家浅蓝，对手浅紫
+		var gridY:Float = gridBg.y;
+		var extraHeight:Int = 200; // 增加200像素缓冲消除底部空隙
+		playerTrackOverlay = new FlxSprite(gridStartX, gridY).makeGraphic(GRID_SIZE * GRID_COLUMNS_PER_PLAYER, Std.int(gridHeight) + extraHeight, 0xFF88CCFF); // 浅蓝色
+		playerTrackOverlay.alpha = 0.15;
+		playerTrackOverlay.scrollFactor.set();
+		playerTrackOverlay.visible = chartEditorSave.data.showTrackColors;
+		add(playerTrackOverlay);
+		
+		opponentTrackOverlay = new FlxSprite(gridStartX + GRID_SIZE * GRID_COLUMNS_PER_PLAYER, gridY).makeGraphic(GRID_SIZE * GRID_COLUMNS_PER_PLAYER, Std.int(gridHeight) + extraHeight, 0xFFCC88FF); // 浅紫色
+		opponentTrackOverlay.alpha = 0.15;
+		opponentTrackOverlay.scrollFactor.set();
+		opponentTrackOverlay.visible = chartEditorSave.data.showTrackColors;
+		add(opponentTrackOverlay);
+		
+		// Event轨道覆盖层（黄色）- 在Event列位置（最左边）- 使用gridBg的初始Y位置，增加高度缓冲
+		if(SHOW_EVENT_COLUMN)
+		{
+			eventTrackOverlay = new FlxSprite(gridBg.x, gridY).makeGraphic(GRID_SIZE, Std.int(gridHeight) + extraHeight, 0xFFFFFF44);
+			eventTrackOverlay.alpha = 0.15;
+			eventTrackOverlay.scrollFactor.set();
+			eventTrackOverlay.visible = chartEditorSave.data.showTrackColors;
+			add(eventTrackOverlay);
+		}
+		
+		// 添加轨道之间的垂直分隔线（各隔一个格子）
+		for (i in 0...(GRID_PLAYERS * GRID_COLUMNS_PER_PLAYER + (SHOW_EVENT_COLUMN ? 1 : 0)))
+		{
+			// 在每个轨道之后添加分隔线（除了最后一个）
+			if ((i + 1) % GRID_COLUMNS_PER_PLAYER == 0 && i < GRID_PLAYERS * GRID_COLUMNS_PER_PLAYER - 1 + (SHOW_EVENT_COLUMN ? 1 : 0))
+			{
+				var separatorX:Float = gridBg.x + (SHOW_EVENT_COLUMN ? GRID_SIZE : 0) + GRID_SIZE * (i + 1) - 2; // 2px偏移居中
+				var separator = new FlxSprite(separatorX, gridY).makeGraphic(4, Std.int(gridHeight) + extraHeight, FlxColor.BLACK);
+				separator.alpha = 0.3;
+				separator.scrollFactor.set();
+				separator.visible = chartEditorSave.data.showTrackColors;
+				add(separator);
+				trackSeparators.push(separator);
+			}
+		}
+		
 		add(strumLineNotes);
 
 		add(behindRenderedNotes);
@@ -320,6 +396,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 			note.scrollFactor.set();
 			note.playAnim('static');
 			note.alpha = 0.4;
+			
 			note.updateHitbox();
 			if(note.width > note.height)
 				note.setGraphicSize(GRID_SIZE);
@@ -330,6 +407,28 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 			note.x += GRID_SIZE/2 - note.width/2;
 			note.y += GRID_SIZE/2 - note.height/2;
 			strumLineNotes.add(note);
+		}
+		
+		// 为Grid格子添加颜色滤镜
+		if(gridBg != null)
+		{
+			// 玩家轨道列（0-3列）添加蓝色调
+			for (i in 0...GRID_COLUMNS_PER_PLAYER)
+			{
+				gridBg.stripe.color = 0xFF4488FF; // 蓝色
+			}
+			
+			// 对手轨道列（4-7列）添加红色调
+			for (i in GRID_COLUMNS_PER_PLAYER...(GRID_COLUMNS_PER_PLAYER * 2))
+			{
+				gridBg.stripe.color = 0xFFFF4488; // 红色
+			}
+			
+			// Event列添加黄色调
+			if(SHOW_EVENT_COLUMN)
+			{
+				gridBg.stripe.color = 0xFFFFFF44; // 黄色
+			}
 		}
 
 		var columns:Int = 0;
@@ -343,6 +442,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 			eventIcon.setGraphicSize(30, 30);
 			eventIcon.updateHitbox();
 			eventIcon.scrollFactor.set();
+			
 			add(eventIcon);
 			eventIcon.x = iconX + (GRID_SIZE * 0.5) - eventIcon.width/2;
 			iconX += GRID_SIZE;
@@ -354,6 +454,9 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		mustHitIndicator.scrollFactor.set();
 		mustHitIndicator.flipY = true;
 		mustHitIndicator.offset.x += mustHitIndicator.width/2;
+		// 初始化三角形位置到玩家图标上方
+		if(icons.length > 0)
+			mustHitIndicator.x = icons[0].x + icons[0].width/2;
 		add(mustHitIndicator);
 
 		var gridStripes:Array<Int> = [];
@@ -377,6 +480,8 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 			iconX += GRID_SIZE * GRID_COLUMNS_PER_PLAYER;
 		}
 		prevGridBg.stripes = nextGridBg.stripes = gridBg.stripes = gridStripes;
+		
+		
 		
 		selectionBox = new FlxSprite().makeGraphic(1, 1, FlxColor.CYAN);
 		selectionBox.alpha = 0.4;
@@ -706,6 +811,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	var backupLimit:Int = 10;
 
 	var lastBeatHit:Int = 0;
+	var songBeatNoOffset:Int = 0; // 不受noteOffset影响的纯粹歌曲节拍
 	override function update(elapsed:Float)
 	{
 		if(!fileDialog.completed)
@@ -1715,8 +1821,29 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		}
 		ignoreClickForThisFrame = false;
 
-		// Add icon bounce effect on every beat
-		if (curBeat != lastBeatHit) {
+		// 更新不受noteOffset影响的纯粹歌曲节拍（用于图标缩放）
+		var lastChangePure = Conductor.getBPMFromSeconds(Conductor.songPosition);
+		var shitPure = (Conductor.songPosition - lastChangePure.songTime) / lastChangePure.stepCrochet;
+		var curDecStepPure:Float = lastChangePure.stepTime + shitPure;
+		curStepPure = lastChangePure.stepTime + Math.floor(shitPure);
+		curBeatPure = Math.floor(curStepPure / 4);
+		
+		// 计算纯粹的section（不受noteOffset影响）
+		curSecPure = curSec; // 默认使用当前curSec
+		if (cachedSectionTimes != null && cachedSectionTimes.length > 0)
+		{
+			// 使用纯粹的songPosition（不受noteOffset影响）来计算section
+			var songPosPure = Conductor.songPosition;
+			while (curSecPure > 0 && songPosPure < cachedSectionTimes[curSecPure])
+				curSecPure--;
+			while (curSecPure < cachedSectionTimes.length - 1 && songPosPure >= cachedSectionTimes[curSecPure + 1])
+				curSecPure++;
+		}
+		
+		songBeatNoOffset = curBeatPure;
+		
+		// Add icon bounce effect on every beat（使用不受offset影响的节拍）
+		if (songBeatNoOffset != lastBeatHit) {
 			var mustHitSection:Bool = (PlayState.SONG.notes[curSec] != null && PlayState.SONG.notes[curSec].mustHitSection);
 			if(iconbopTween != null)
 				iconbopTween.cancel();
@@ -1737,9 +1864,9 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 			var curTime:String = FlxStringUtil.formatTime(Conductor.songPosition / 1000, true);
 			var songLength:String = (FlxG.sound.music != null) ? FlxStringUtil.formatTime(FlxG.sound.music.length / 1000, true) : '???';
 			var str:String =  '$curTime / $songLength' +
-							  '\n\nSection: $curSec' +
-							  '\nBeat: $curBeat' +
-							  '\nStep: $curStep' +
+							  '\n\nSection: $curSecPure' +
+							  '\nBeat: $curBeatPure' +
+							  '\nStep: $curStepPure' +
 							  '\n\nBeat Snap: ${curQuant} / 16' +
 							  '\nSelected: ${selectedNotes.length}';
 
@@ -1749,30 +1876,38 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 				if(infoText.autoSize) infoText.autoSize = false;
 			}
 
-			var vortexPlaying:Bool = (vortexEnabled && FlxG.sound.music != null && FlxG.sound.music.playing);
-			var canPlayHitSound:Bool = (FlxG.sound.music != null && FlxG.sound.music.playing && lastTime < Conductor.songPosition);
-			var hitSoundPlayer:Bool = (hitsoundPlayerStepper.value > 0);
-			var hitSoundOpp:Bool = (hitsoundOpponentStepper.value > 0);
-			for (note in curRenderedNotes)
-			{
-				if(note == null || note.isEvent) continue;
+var vortexPlaying:Bool = (vortexEnabled && FlxG.sound.music != null && FlxG.sound.music.playing);
+		var canPlayHitSound:Bool = (FlxG.sound.music != null && FlxG.sound.music.playing && lastTime < Conductor.songPosition);
+		
+		for (note in curRenderedNotes)
+		{
+			if(note == null || note.isEvent) continue;
 
-				note.alpha = (note.strumTime >= Conductor.songPosition) ? 1 : 0.6;
-				if(Conductor.songPosition > note.strumTime && lastTime <= note.strumTime)
+			note.alpha = (note.strumTime >= Conductor.songPosition) ? 1 : 0.6;
+			if(Conductor.songPosition > note.strumTime && lastTime <= note.strumTime)
+			{
+				if(canPlayHitSound)
 				{
-					if(canPlayHitSound)
+					// 使用音效池轮询播放，确保每个音符都能发声
+					if(note.mustPress && hitsoundPlayerStepper.value > 0)
 					{
-						if(hitSoundPlayer && note.mustPress)
-						{
-							FlxG.sound.play(Paths.sound('hitsoundP'), hitsoundPlayerStepper.value);
-							hitSoundPlayer = false;
-						}
-						else if(hitSoundOpp && !note.mustPress)
-						{
-							FlxG.sound.play(Paths.sound('hitsound'), hitsoundOpponentStepper.value);
-							hitSoundOpp = false;
-						}
+						var sound:FlxSound = hitSoundPool[hitSoundPoolIndex];
+						sound.loadEmbedded(Paths.sound('hitsoundP'));
+						sound.volume = hitsoundPlayerStepper.value;
+						sound.pan = -1; // 玩家音符：纯左声道
+						sound.play();
+						hitSoundPoolIndex = (hitSoundPoolIndex + 1) % hitSoundPoolSize;
 					}
+					else if(!note.mustPress && hitsoundOpponentStepper.value > 0)
+					{
+						var sound:FlxSound = hitSoundPool[hitSoundPoolIndex];
+						sound.loadEmbedded(Paths.sound('hitsound'));
+						sound.volume = hitsoundOpponentStepper.value;
+						sound.pan = 1; // 对手音符：纯右声道
+						sound.play();
+						hitSoundPoolIndex = (hitSoundPoolIndex + 1) % hitSoundPoolSize;
+					}
+				}
 
 					if(vortexPlaying)
 					{
@@ -1788,10 +1923,10 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 			forceDataUpdate = false;
 			
 			// moved from beatHit()
-			if(metronomeStepper.value > 0 && lastBeatHit != curBeat)
+			if(metronomeStepper.value > 0 && lastBeatHit != songBeatNoOffset)
 				FlxG.sound.play(Paths.sound('Metronome_Tick'), metronomeStepper.value);
 
-			lastBeatHit = curBeat;
+			lastBeatHit = songBeatNoOffset;
 		}
 
 		if(selectedNotes.length > 0)
@@ -1925,6 +2060,9 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		if(secStartTime == null || secCrochet == null || secRows == null) return;
 
 		scrollY = (((Conductor.songPosition - secStartTime) / secCrochet * GRID_SIZE * 4) + (secRows * GRID_SIZE)) * curZoom - FlxG.height/2;
+		
+		// 轨道颜色覆盖层的位置是固定的，不需要在scroll时更新（已在create时设置）
+		// 只确保覆盖层存在即可
 	}
 
 	function updateSelectionBox()
@@ -2455,6 +2593,18 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		gridBg.y = cachedSectionRow[curSec] * GRID_SIZE * curZoom;
 		gridBg.rows = 4 * PlayState.SONG.notes[curSec].sectionBeats * curZoom;
 		hei += gridBg.height;
+		
+		// 更新轨道颜色覆盖层的高度，添加额外缓冲消除底部空隙
+		if(playerTrackOverlay != null && opponentTrackOverlay != null)
+		{
+			var extraHeight:Int = 200; // 增加200像素缓冲
+			playerTrackOverlay.height = Std.int(gridBg.height) + extraHeight;
+			opponentTrackOverlay.height = Std.int(gridBg.height) + extraHeight;
+			if(eventTrackOverlay != null) 
+			{
+				eventTrackOverlay.height = Std.int(gridBg.height) + extraHeight;
+			}
+		}
 
 		if(!prevGridBg.visible) eventLockOverlay.y = gridBg.y;
 		eventLockOverlay.scale.y = hei;
@@ -2612,41 +2762,101 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	
 	var _lastSec:Int = -1;
 	var _lastGfSection:Null<Bool> = null;
+	var _lastMustHitSection:Null<Bool> = null; // 记录上一次的mustHitSection状态
 	function updateHeads(ignoreCheck:Bool = false):Void
 	{
 		var curSecData:SwagSection = PlayState.SONG.notes[curSec];
 		var isGfSection:Bool = (curSecData != null && curSecData.gfSection == true);
+		var mustHitSection:Bool = (curSecData != null && curSecData.mustHitSection == true);
+		
+		// 提前更新mustHitSection状态，确保动画逻辑能正确判断
+		var mustHitChanged:Bool = (_lastMustHitSection != mustHitSection);
+		_lastMustHitSection = mustHitSection;
+		
 		if(_lastGfSection == isGfSection && _lastSec == curSec && !ignoreCheck) return; //optimization
 
-		for (i in 0...GRID_PLAYERS)
+for (i in 0...GRID_PLAYERS)
+	{
+		var icon:HealthIcon = icons[i];
+		//trace('changing iconP${icon.ID}');
+		var iconName:String = Reflect.field(characterData, 'iconP${icon.ID}');
+		
+		// GF Section特殊处理：根据mustHitSection决定哪个图标显示GF
+		if (isGfSection)
 		{
-			var icon:HealthIcon = icons[i];
-			//trace('changing iconP${icon.ID}');
-			var iconName:String = Reflect.field(characterData, 'iconP${icon.ID}');
-			icon.changeIcon(iconName);
-		}
-
-		if(icons.length > 1)
-		{
-			var iconP1:HealthIcon = icons[0];
-			var iconP2:HealthIcon = icons[1];
-			var mustHitSection:Bool = (curSecData != null && curSecData.mustHitSection == true);
-			if (isGfSection)
+			var gfChar:String = (PlayState.SONG.gfVersion != null && PlayState.SONG.gfVersion.length > 0) ? PlayState.SONG.gfVersion : 'gf';
+			var gfData:CharacterFile = loadCharacterFile(gfChar);
+			var gfIcon:String = (gfData != null && gfData.healthicon != null && gfData.healthicon.length > 0) ? gfData.healthicon : 'face';
+			if (mustHitSection && i == 0) // 玩家位且GF在玩家位
 			{
-				if (mustHitSection)
-					iconP1.changeIcon('gf');
-				else
-					iconP2.changeIcon('gf');
+				icon.changeIcon(gfIcon);
 			}
-
-			if(mustHitSection)
-				mustHitIndicator.x = iconP1.x + iconP1.width/2;
+			else if (!mustHitSection && i == 1) // 对手位且GF在对手位
+			{
+				icon.changeIcon(gfIcon);
+			}
 			else
-				mustHitIndicator.x = iconP2.x + iconP2.width/2;
+			{
+				icon.changeIcon(iconName); // 恢复角色图标
+			}
 		}
-		_lastGfSection = isGfSection;
-		_lastSec = curSec;
+		else
+		{
+			icon.changeIcon(iconName); // 非GF Section，正常显示角色图标
+		}
 	}
+
+	if(icons.length > 1)
+	{
+		var iconP1:HealthIcon = icons[0];
+		var iconP2:HealthIcon = icons[1];
+		var mustHitSection:Bool = (curSecData != null && curSecData.mustHitSection == true);
+		
+		// GF Section时的颜色调整
+		if (isGfSection)
+		{
+			if (mustHitSection)
+			{
+				// 同时启用：mustHitSec + gfSection，GF在玩家位
+				// 玩家轨道改为浅红色，对手保持浅紫色
+				if(playerTrackOverlay != null) playerTrackOverlay.color = 0xFFFF8888; // 浅红色
+				// 对手保持浅紫色（不更改）
+			}
+			else
+			{
+				// 仅启用gfSection（mustHitSec禁用），GF在对手位
+				// 对手轨道改为浅红色，玩家保持浅紫色
+				if(opponentTrackOverlay != null) opponentTrackOverlay.color = 0xFFFF8888; // 浅红色
+				// 玩家保持浅紫色（不更改）
+			}
+		}
+		else
+		{
+			// 非GF Section，恢复默认颜色：玩家浅蓝，对手浅紫
+			if(playerTrackOverlay != null) playerTrackOverlay.color = 0xFF88CCFF; // 浅蓝色
+			if(opponentTrackOverlay != null) opponentTrackOverlay.color = 0xFFCC88FF; // 浅紫色
+		}
+
+			// 只在mustHitSection状态改变时执行Tween动画（使用之前记录的mustHitChanged）
+			if(mustHitChanged)
+			{
+				if(mustHitSection)
+				{
+					// 使用更强的缓动动画移动到玩家图标 - 先取消之前的Tween
+					FlxTween.cancelTweensOf(mustHitIndicator);
+					FlxTween.tween(mustHitIndicator, {x: iconP1.x + iconP1.width/2}, 0.3, {ease: FlxEase.backOut});
+				}
+				else
+				{
+					// 使用更强的缓动动画移动到对手图标 - 先取消之前的Tween
+					FlxTween.cancelTweensOf(mustHitIndicator);
+					FlxTween.tween(mustHitIndicator, {x: iconP2.x + iconP2.width/2}, 0.3, {ease: FlxEase.backOut});
+				}
+			}
+		}
+	_lastGfSection = isGfSection;
+	_lastSec = curSec;
+}
 
 	var playbackSlider:PsychUISlider;
 
@@ -4902,6 +5112,28 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 						changeTheme(CUSTOM);
 					}
 					state.add(input);
+					
+					// 添加轨道颜色标识显示开关
+					btnY += 60;
+					if(chartEditorSave.data.showTrackColors == null) chartEditorSave.data.showTrackColors = true;
+					
+trackColorsCheckBox = new PsychUICheckBox(state.bg.x + 20, btnY, Language.get('charting_showtrackcolors_text'), 180, function()
+				{
+					chartEditorSave.data.showTrackColors = trackColorsCheckBox.checked;
+					chartEditorSave.flush();
+					// 更新覆盖层可见性
+					if(playerTrackOverlay != null) playerTrackOverlay.visible = trackColorsCheckBox.checked;
+					if(opponentTrackOverlay != null) opponentTrackOverlay.visible = trackColorsCheckBox.checked;
+					if(eventTrackOverlay != null) eventTrackOverlay.visible = trackColorsCheckBox.checked;
+					// 更新分隔线可见性
+					for (separator in trackSeparators)
+					{
+						if(separator != null) separator.visible = trackColorsCheckBox.checked;
+					}
+				});
+					trackColorsCheckBox.checked = chartEditorSave.data.showTrackColors;
+					trackColorsCheckBox.cameras = state.cameras;
+					state.add(trackColorsCheckBox);
 				}
 			));
 		}, btnWid);
