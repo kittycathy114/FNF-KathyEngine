@@ -23,6 +23,9 @@ typedef WeekFile =
 class WeekData {
 	public static var weeksLoaded:Map<String, WeekData> = new Map<String, WeekData>();
 	public static var weeksList:Array<String> = [];
+	#if MODS_ALLOWED
+	public static var fileCache:Map<String, {data:WeekFile, mtime:Float}> = new Map();
+	#end
 	public var folder:String = '';
 
 	// JSON variables
@@ -160,10 +163,27 @@ class WeekData {
 		}
 	}
 
-	private static function getWeekFile(path:String):WeekFile {
+private static function getWeekFile(path:String):WeekFile {
 		var rawJson:String = null;
-		#if MODS_ALLOWED
+		var currentMTime:Float = 0;
+		
+#if MODS_ALLOWED
 		if(FileSystem.exists(path)) {
+			// 检查文件修改时间，判断是否需要重新加载
+			var stat = FileSystem.stat(path);
+			if (stat != null && Reflect.hasField(stat, 'mtime')) {
+				var mtime = Reflect.field(stat, 'mtime');
+				currentMTime = Std.isOfType(mtime, Date) ? mtime.getTime() : Std.parseFloat(Std.string(mtime));
+			}
+			
+			// 如果缓存存在且文件未修改，直接使用缓存
+			if (fileCache.exists(path)) {
+				var cached = fileCache.get(path);
+				if (cached != null && cached.mtime == currentMTime) {
+					return cached.data;
+				}
+			}
+			
 			rawJson = File.getContent(path);
 		}
 		#else
@@ -173,7 +193,12 @@ class WeekData {
 		#end
 
 		if(rawJson != null && rawJson.length > 0) {
-			return cast tjson.TJSON.parse(rawJson);
+			var parsedData = cast tjson.TJSON.parse(rawJson);
+		#if MODS_ALLOWED
+			// 缓存解析后的数据
+			fileCache.set(path, {data: parsedData, mtime: currentMTime});
+			#end
+			return parsedData;
 		}
 		return null;
 	}

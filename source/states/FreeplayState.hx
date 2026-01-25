@@ -44,7 +44,8 @@ class FreeplayState extends MusicBeatState
 	private var grpSongs:FlxTypedGroup<Alphabet>;
 	private var curPlaying:Bool = false;
 
-	private var iconArray:Array<HealthIcon> = [];
+	private var iconArray:Array<HealthIcon> = null;
+	private var iconLoadStatus:Array<Bool> = []; // 记录每个图标是否已加载
 
 	var bg:FlxSprite;
 	var intendedColor:Int;
@@ -138,6 +139,10 @@ class FreeplayState extends MusicBeatState
 		grpSongs = new FlxTypedGroup<Alphabet>();
 		add(grpSongs);
 
+		// 初始化图标数组和加载状态数组
+		iconArray = new Array<HealthIcon>();
+		iconLoadStatus = new Array<Bool>();
+		
 		for (i in 0...songs.length)
 		{
 			var songText:Alphabet = new Alphabet(90, 320, songs[i].songName, true);
@@ -147,17 +152,12 @@ class FreeplayState extends MusicBeatState
 			songText.scaleX = Math.min(1, 980 / songText.width);
 			songText.snapToPosition();
 
-			Mods.currentModDirectory = songs[i].folder;
-			var icon:HealthIcon = new HealthIcon(songs[i].songCharacter);
-			icon.sprTracker = songText;
+			// 初始化图标占位符，但暂不创建（延迟加载）
+			iconArray.push(null);
+			iconLoadStatus.push(false);
 
 			// too laggy with a lot of songs, so i had to recode the logic for it
 			songText.visible = songText.active = songText.isMenuItem = false;
-			icon.visible = icon.active = false;
-
-			// using a FlxGroup is too much fuss!
-			iconArray.push(icon);
-			add(icon);
 
 			// songText.x += 40;
 			// DONT PUT X IN THE FIRST PARAMETER OF new ALPHABET() !!
@@ -1112,7 +1112,10 @@ class FreeplayState extends MusicBeatState
 		for (i in _lastVisibles)
 		{
 			grpSongs.members[i].visible = grpSongs.members[i].active = false;
-			iconArray[i].visible = iconArray[i].active = false;
+			if (iconArray[i] != null)
+			{
+				iconArray[i].visible = iconArray[i].active = false;
+			}
 		}
 		_lastVisibles = [];
 
@@ -1129,9 +1132,24 @@ class FreeplayState extends MusicBeatState
 			item.y = ((item.targetY - lerpSelected) * 1.3 * item.distancePerItem.y) + item.startPosition.y;
 			item.alpha = (i == curSelected) ? 1.0 : 0.6; // 设置选中项的透明度（选中不透明，未选中半透明）
 
+			// 延迟加载图标：只在需要显示时才创建
+			if (!iconLoadStatus[i])
+			{
+				Mods.currentModDirectory = songs[i].folder;
+				iconArray[i] = new HealthIcon(songs[i].songCharacter);
+				iconArray[i].sprTracker = item;
+				iconArray[i].visible = false;
+				iconArray[i].active = false;
+				add(iconArray[i]);
+				iconLoadStatus[i] = true;
+			}
+			
 			var icon:HealthIcon = iconArray[i];
-			icon.visible = icon.active = true;
-			icon.alpha = (i == curSelected) ? 1.0 : 0.6; // 设置选中项的透明度
+			if (icon != null)
+			{
+				icon.visible = icon.active = true;
+				icon.alpha = (i == curSelected) ? 1.0 : 0.6; // 设置选中项的透明度
+			}
 			
 			_lastVisibles.push(i);
 		}
