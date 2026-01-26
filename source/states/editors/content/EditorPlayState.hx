@@ -247,6 +247,13 @@ class EditorPlayState extends MusicBeatSubstate
 						'\n\nSection: $curSection' +
 						'\nBeat: $curBeat' +
 						'\nStep: $curStep';
+		// 手动更新ChartingState中的角色，防止动画卡住
+		var chartingState:ChartingState = cast FlxG.state;
+		if(chartingState != null)
+		{
+			chartingState.updateCharacter(elapsed);
+		}
+
 		super.update(elapsed);
 	}
 
@@ -828,6 +835,12 @@ class EditorPlayState extends MusicBeatSubstate
 		}
 		note.hitByOpponent = true;
 
+		// 播放dad角色的sing动画
+		var chartingState:ChartingState = cast FlxG.state;
+		if(chartingState.dad != null && chartingState.dad.visible) {
+			chartingState.playCharacterSing(chartingState.dad, Std.int(Math.abs(note.noteData)));
+		}
+
 		if (!note.isSustainNote)
 			invalidateNote(note);
 	}
@@ -860,6 +873,12 @@ class EditorPlayState extends MusicBeatSubstate
 		var spr:StrumNote = playerStrums.members[note.noteData];
 		if(spr != null) spr.playAnim('confirm', true);
 		vocals.volume = 1;
+
+		// 播放boyfriend角色的sing动画
+		var chartingState:ChartingState = cast FlxG.state;
+		if(chartingState.boyfriend != null && chartingState.boyfriend.visible) {
+			chartingState.playCharacterSing(chartingState.boyfriend, Std.int(Math.abs(note.noteData)));
+		}
 
 		if (!note.isSustainNote)
 			invalidateNote(note);

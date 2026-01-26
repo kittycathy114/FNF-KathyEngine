@@ -154,6 +154,21 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	var upperBox:PsychUIBox;
 	
 	var camUI:FlxCamera;
+	var camChart:FlxCamera;
+
+	// 角色对象
+	public var dad:Character;
+	public var boyfriend:Character;
+	public var showCharactersCheckBox:PsychUICheckBox;
+	public var charactersLoaded:Bool = false;
+
+	// idle动画重新播放标记
+	private var boyfriendNeedIdleReplay:Bool = false;
+	private var dadNeedIdleReplay:Bool = false;
+	private var lastBeat:Int = 0;
+
+	// Sing动画相关
+	private var singAnimations:Array<String> = ['singLEFT', 'singDOWN', 'singUP', 'singRIGHT'];
 
 	var prevGridBg:ChartingGridSprite;
 	var gridBg:ChartingGridSprite;
@@ -270,10 +285,14 @@ if(_shouldReset) Conductor.songPosition = 0;
 		opponentVocals.autoDestroy = false;
 		opponentVocals.looped = true;
 
-		initPsychCamera();
-		camUI = new FlxCamera();
-		camUI.bgColor.alpha = 0;
-		FlxG.cameras.add(camUI, false);
+	initPsychCamera();
+	camUI = new FlxCamera();
+	camUI.bgColor.alpha = 0;
+	FlxG.cameras.add(camUI, false);
+
+	camChart = new FlxCamera();
+	camChart.bgColor.alpha = 0;
+	FlxG.cameras.add(camChart, false);
 
 		chartEditorSave = new FlxSave();
 		chartEditorSave.bind('chart_editor_data', CoolUtil.getSavePath());
@@ -664,8 +683,153 @@ if(_shouldReset) Conductor.songPosition = 0;
     		: Language.get("charting_desktop_tips").split('\n').join('\n');
 		fullTipText.screenCenter();
 		add(fullTipText);
-		addTouchPad('LEFT_FULL', 'CHART_EDITOR');
-		super.create();
+	addTouchPad('LEFT_FULL', 'CHART_EDITOR');
+	super.create();
+
+	// 初始化角色显示
+	if(chartEditorSave.data.showCharacters == null) chartEditorSave.data.showCharacters = false;
+	if(chartEditorSave.data.showCharacters) initCharacters();
+	}
+
+	function initCharacters()
+	{
+		var stageData = StageData.dummy();
+
+		// 创建对手角色（左侧）
+		if(dad != null) remove(dad);
+		dad = new Character(stageData.opponent[0], stageData.opponent[1], PlayState.SONG.player2);
+		dad.cameras = [camChart];
+		dad.updateHitbox();
+		dad.visible = showCharactersCheckBox != null ? chartEditorSave.data.showCharacters : false;
+		
+		// 自定义对手角色位置（覆盖StageData，不影响全局）
+		dad.x = -850;
+		dad.y = 100;
+		
+		add(dad);
+
+		// 创建玩家角色（右侧）
+		if(boyfriend != null) remove(boyfriend);
+		boyfriend = new Character(stageData.boyfriend[0], stageData.boyfriend[1], PlayState.SONG.player1, true);
+		boyfriend.cameras = [camChart];
+		boyfriend.updateHitbox();
+		boyfriend.visible = showCharactersCheckBox != null ? chartEditorSave.data.showCharacters : false;
+		
+		// 自定义玩家角色位置（覆盖StageData，不影响全局）
+		boyfriend.x = 1500;
+		boyfriend.y = 100;
+		
+		add(boyfriend);
+
+		charactersLoaded = true;
+		
+		// 设置相机缩放以获得更好的视觉效果
+		camChart.zoom = 0.3;
+	}
+
+	function updateCharacters()
+	{
+		if(!charactersLoaded) return;
+
+		var stageData = StageData.dummy();
+
+		// 更新对手角色
+		if(dad != null && dad.curCharacter != PlayState.SONG.player2)
+		{
+			remove(dad);
+			dad = new Character(stageData.opponent[0], stageData.opponent[1], PlayState.SONG.player2);
+			dad.cameras = [camChart];
+			dad.updateHitbox();
+			dad.visible = showCharactersCheckBox.checked;
+			
+			// 自定义对手角色位置（覆盖StageData，不影响全局）
+			dad.x = -850;
+			dad.y = 100;
+			
+			add(dad);
+		}
+
+		// 更新玩家角色
+		if(boyfriend != null && boyfriend.curCharacter != PlayState.SONG.player1)
+		{
+			remove(boyfriend);
+			boyfriend = new Character(stageData.boyfriend[0], stageData.boyfriend[1], PlayState.SONG.player1, true);
+			boyfriend.cameras = [camChart];
+			boyfriend.updateHitbox();
+			boyfriend.visible = showCharactersCheckBox.checked;
+			
+			// 自定义玩家角色位置（覆盖StageData，不影响全局）
+			boyfriend.x = 1500;
+			boyfriend.y = 100;
+			
+			add(boyfriend);
+		}
+	}
+
+	// 播放角色的sing动画
+	public function playCharacterSing(char:Character, noteData:Int, ?forcePlay:Bool = false):Void
+	{
+		if(char == null || !char.visible) return;
+
+		var animToPlay:String = singAnimations[Std.int(Math.abs(Math.min(singAnimations.length-1, noteData)))];
+		if(char.animation.exists(animToPlay))
+		{
+			char.playAnim(animToPlay, true);
+			char.holdTimer = 0;
+		}
+	}
+
+	// 处理idle动画的循环播放
+	// 当非循环的idle动画播放完成时，在下一拍重新播放它
+	private function handleIdleAnimationLoop(char:Character, currentBeat:Int, needIdleReplay:Bool):Bool
+	{
+		if(char == null || !char.visible) return needIdleReplay;
+
+		var animName:String = char.getAnimationName();
+
+		// 检查是否在播放idle动画（包括idle、danceLeft、danceRight）
+		if(animName.startsWith('idle') || animName.startsWith('dance'))
+		{
+			// 检查idle动画是否播放完成
+			if(char.isAnimationFinished())
+			{
+				// 检查是否存在对应的循环版本（例如idle-loop、danceLeft-loop）
+				var loopAnimName:String = animName + '-loop';
+
+				// 如果不存在循环版本，标记需要在下一拍重新播放
+				if(!char.hasAnimation(loopAnimName))
+				{
+					return true;
+				}
+			}
+		}
+
+		// 如果当前拍不同于上一拍，并且需要重新播放idle动画
+		if(needIdleReplay && currentBeat != lastBeat)
+		{
+			if(char.hasAnimation('idle'))
+				char.playAnim('idle', false);
+			else if(char.hasAnimation('danceLeft'))
+				char.playAnim(char.danced ? 'danceLeft' : 'danceRight', false);
+			return false; // 已播放，重置标记
+		}
+
+		return needIdleReplay; // 保持当前状态
+	}
+
+	// 更新角色的holdTimer和动画状态（用于EditorPlayState中手动更新角色）
+	public function updateCharacter(elapsed:Float):Void
+	{
+		if(dad != null && dad.visible) dad.update(elapsed);
+		if(boyfriend != null && boyfriend.visible) boyfriend.update(elapsed);
+	}
+
+	// 获取角色的动画偏移（用于显示和调试）
+	public function getCharacterOffset(char:Character, animName:String):{x:Float, y:Float}
+	{
+		if(char == null || !char.animOffsets.exists(animName)) return {x: 0, y: 0};
+		var offset:Array<Dynamic> = char.animOffsets.get(animName);
+		return {x: offset[0], y: offset[1]};
 	}
 
 	var gridColors:Array<FlxColor>;
@@ -1820,6 +1984,82 @@ if(_shouldReset) Conductor.songPosition = 0;
 			}
 		}
 		ignoreClickForThisFrame = false;
+
+	// 基于Conductor.songPosition自动播放角色sing动画
+	if(showCharactersCheckBox.checked && charactersLoaded)
+	{
+		// 检测音符是否刚刚到达判定点（类似打击音的时机）
+		var currentStrumTime:Float = Conductor.songPosition;
+		var lastStrumTime:Float = lastTime;
+
+		for(note in notes)
+		{
+			if(note == null || note.isEvent) continue;
+
+			var noteStrumTime:Float = note.strumTime;
+			var noteData:Int = Std.int(note.noteData);
+
+			// 检查音符是否在上一帧和当前帧之间到达（类似打击音的触发时机）
+			if(noteStrumTime > lastStrumTime && noteStrumTime <= currentStrumTime)
+			{
+				if(note.mustPress)
+				{
+					// 玩家音符（noteData 0-3或4-7，取决于mustHitSection）
+					var direction:Int = noteData % 4;
+					if(boyfriend != null && boyfriend.visible)
+						playCharacterSing(boyfriend, direction);
+				}
+				else
+				{
+					// 对手音符（noteData 0-3或4-7，取决于mustHitSection）
+					var direction:Int = noteData % 4;
+					if(dad != null && dad.visible)
+						playCharacterSing(dad, direction);
+				}
+			}
+		}
+
+		// 处理长条持续的期间：防止角色回到idle动画
+		// 检查当前是否处于长条持续时间内
+		var boyfriendInSustain:Bool = false;
+		var dadInSustain:Bool = false;
+
+		for(note in notes)
+		{
+			if(note == null || note.isEvent) continue;
+
+			// 检查音符是否在当前时间范围内（包括长条持续时间）
+			var noteStartTime:Float = note.strumTime;
+			var noteEndTime:Float = note.strumTime + (note.sustainLength > 0 ? note.sustainLength : 0);
+
+			// 如果当前时间在音符的持续时间内
+			if(currentStrumTime >= noteStartTime && currentStrumTime <= noteEndTime)
+			{
+				if(note.mustPress && boyfriend != null && boyfriend.visible)
+				{
+					boyfriendInSustain = true;
+				}
+				else if(!note.mustPress && dad != null && dad.visible)
+				{
+					dadInSustain = true;
+				}
+			}
+		}
+
+		// 如果角色当前在长条中，重置holdTimer以防止回到idle
+		if(boyfriendInSustain && boyfriend.getAnimationName().startsWith('sing'))
+			boyfriend.holdTimer = 0;
+
+		if(dadInSustain && dad.getAnimationName().startsWith('sing'))
+			dad.holdTimer = 0;
+
+		// 处理idle动画的循环播放（非循环的idle动画在下一拍重新播放）
+		boyfriendNeedIdleReplay = handleIdleAnimationLoop(boyfriend, curBeatPure, boyfriendNeedIdleReplay);
+		dadNeedIdleReplay = handleIdleAnimationLoop(dad, curBeatPure, dadNeedIdleReplay);
+
+		// 更新上一拍的记录
+		lastBeat = curBeatPure;
+	}
 
 		// 更新不受noteOffset影响的纯粹歌曲节拍（用于图标缩放）
 		var lastChangePure = Conductor.getBPMFromSeconds(Conductor.songPosition);
@@ -3805,13 +4045,33 @@ for (i in 0...GRID_PLAYERS)
 		tab_group.add(reloadAudioButton);
 		tab_group.add(specialInstInputText);
 		tab_group.add(specialVocalInputText);
-		#if (mac || mobile)
+	#if (mac || mobile)
 		tab_group.add(reloadJsonButton);
-		#end
+	#end
 
-		// Find characters
-		var characters:Array<String> = [];
-		//
+	// Show Characters checkbox
+	showCharactersCheckBox = new PsychUICheckBox(objX + 200, specialVocalInputText.y + 40, 'Show Characters', 100);
+	showCharactersCheckBox.checked = chartEditorSave.data.showCharacters;
+	showCharactersCheckBox.onClick = function()
+	{
+		chartEditorSave.data.showCharacters = showCharactersCheckBox.checked;
+		chartEditorSave.flush();
+
+		if(!charactersLoaded)
+		{
+			initCharacters();
+		}
+		else
+		{
+			if(dad != null) dad.visible = showCharactersCheckBox.checked;
+			if(boyfriend != null) boyfriend.visible = showCharactersCheckBox.checked;
+		}
+	};
+	tab_group.add(showCharactersCheckBox);
+
+	// Find characters
+	var characters:Array<String> = [];
+	//
 		
 		objY += 40;
 		playerDropDown = new PsychUIDropDownMenu(objX, objY, [''], function(id:Int, character:String)
@@ -3820,6 +4080,7 @@ for (i in 0...GRID_PLAYERS)
 			updateJsonData();
 			updateHeads(true);
 			loadMusic();
+			updateCharacters();
 			trace('selected $character');
 		});
 		stageDropDown = new PsychUIDropDownMenu(objX + 140, objY, [''], function(id:Int, stage:String)
@@ -3835,6 +4096,7 @@ for (i in 0...GRID_PLAYERS)
 			updateJsonData();
 			updateHeads(true);
 			loadMusic();
+			updateCharacters();
 			trace('selected $character');
 		});
 		
