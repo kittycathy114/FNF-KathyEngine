@@ -105,6 +105,7 @@
     "charting_waveform_tab3": " Waveform...",
     "charting_go2time_tab3": " Go to...",
     "charting_theme_tab3": " Theme...",
+    "charting_visualeffects_tab3": " Visual Effects...",
     "charting_resetuibox_tab3": " Reset UI Boxes",
 
     "charting_mousescrsnap_text": "Mouse Scroll Snap",
@@ -173,6 +174,7 @@
     "prompt_go2time_tab": "Go to Time/Section:",
     "prompt_waveform_tab": "Waveform Settings",
     "prompt_theme_tab": "Chart Editor Theme",
+    "prompt_visualeffects_tab": "Visual Effects Settings",
 
     
     "ok_text": "OK",
@@ -193,6 +195,16 @@
     "theme_bgcolor": "BG Color",
     "theme_gridcolor": "Grid Colors",
     "theme_ngridcolor": "Next Grid Colors",
+
+    "visualeffect_iconbop": "Icon Bounce",
+    "visualeffect_bgbop": "Background Bounce",
+    "visualeffect_musthittween": "MustHit Tween",
+    "visualeffect_trackcolors": "Track Colors",
+    "charting_showtrackcolors_text": "Show Track Colors",
+    "charting_showseparators_text": "Show Track Separators",
+    "visualeffect_showcharacter": "Show Character",
+    "visualeffect_hitbox": "Hitbox",
+    "visualeffect_dragcharacter": "Drag Character",
 
     "go2time_time": "Time (in seconds):",
     "go2time_section": "Section:",

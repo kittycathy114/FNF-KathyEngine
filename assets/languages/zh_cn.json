@@ -112,6 +112,7 @@
     "charting_waveform_tab3": "  频谱设置...",
     "charting_go2time_tab3": "  快捷跳转...",
     "charting_theme_tab3": "  主题设置...",
+    "charting_visualeffects_tab3": "  视觉效果设置...",
     "charting_resetuibox_tab3": "  重置UI框架",
 
     "charting_mousescrsnap_text": "鼠标滚轮自动对齐",
@@ -177,6 +178,7 @@
     "prompt_go2time_tab": "快捷跳转时间/小节",
     "prompt_waveform_tab": "频谱设置",
     "prompt_theme_tab": "主题设置",
+    "prompt_visualeffects_tab": "视觉效果设置",
 
     "ok_text": "确定",
     "cancel_text": "取消",
@@ -196,6 +198,16 @@
     "theme_bgcolor": "背景色",
     "theme_gridcolor": "网格颜色",
     "theme_ngridcolor": "下一小节的网格色",
+
+    "visualeffect_iconbop": "小图标跳动",
+    "visualeffect_bgbop": "背景跳动",
+    "visualeffect_musthittween": "倒三角tween",
+    "visualeffect_trackcolors": "轨道颜色",
+    "charting_showtrackcolors_text": "显示轨道颜色",
+    "charting_showseparators_text": "显示轨道分隔线",
+    "visualeffect_showcharacter": "显示角色",
+    "visualeffect_hitbox": "碰撞箱",
+    "visualeffect_dragcharacter": "可拖动角色",
 
     "go2time_time": "时间（以秒为单位）：",
     "go2time_section": "小节：",

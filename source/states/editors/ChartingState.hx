@@ -96,9 +96,11 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	
 	public static var keysArray:Array<FlxKey> = [ONE, TWO, THREE, FOUR, FIVE, SIX, SEVEN, EIGHT]; //Used for Vortex Editor
 	public static var SHOW_EVENT_COLUMN = true;
+	public static var EVENT_TRACK_COUNT = 4; // Event轨道数量，用于分散同一时间点的多个event
 	public static var GRID_COLUMNS_PER_PLAYER = 4;
 	public static var GRID_PLAYERS = 2;
 	public static var GRID_SIZE = 40;
+	public static var TRACK_SPACING = 20; // 轨道之间的间距（半个grid方格）
 	final BACKUP_EXT = '.bkp';
 
 	public var quantizations:Array<Int> = [
@@ -162,17 +164,99 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	public var showCharactersCheckBox:PsychUICheckBox;
 	public var charactersLoaded:Bool = false;
 
-	// idle动画重新播放标记
-	private var boyfriendNeedIdleReplay:Bool = false;
-	private var dadNeedIdleReplay:Bool = false;
+	// idle动画重新播放标记（初始为true，让角色开始播放idle动画）
+	private var boyfriendNeedIdleReplay:Bool = true;
+	private var dadNeedIdleReplay:Bool = true;
+
+	// sing Duration完成时的beat记录（用于在下一拍播放idle）
+	private var boyfriendSingFinishedBeat:Null<Int> = null;
+	private var dadSingFinishedBeat:Null<Int> = null;
+
+	// 角色拖动相关
+	private var isDraggingCharacter:Bool = false;
+	private var draggedCharacter:Character = null;
+	private var dragOffsetX:Float = 0;
+	private var dragOffsetY:Float = 0;
+
+	// 碰撞箱绘制相关
+	private var dadHitboxSprites:FlxSpriteGroup;
+	private var boyfriendHitboxSprites:FlxSpriteGroup;
+
+	// 角色拖动范围可视化相关
+	private var dadDragRangeSprites:FlxSpriteGroup;
+	private var boyfriendDragRangeSprites:FlxSpriteGroup;
+	private var showDragRangeCheckBox:PsychUICheckBox;
+
+	// 角色拖动范围定义
+	private var dadDragRange:{minX:Float, maxX:Float, minY:Float, maxY:Float};
+	private var boyfriendDragRange:{minX:Float, maxX:Float, minY:Float, maxY:Float};
+
+	function drawCharacterHitbox(char:Character, spriteGroup:FlxSpriteGroup, color:FlxColor):Void
+	{
+		if (char == null || !char.visible || !char.isOnScreen(camChart))
+		{
+			// 隐藏所有碰撞箱sprite
+			for (spr in spriteGroup.members)
+				spr.visible = false;
+			return;
+		}
+
+		@:privateAccess
+		var lineSize:Int = Std.int(Math.max(2, Math.floor(3 / camChart.zoom)));
+
+		var sprX:Float = char.x - char.offset.x;
+		var sprY:Float = char.y - char.offset.y;
+		var sprWidth:Int = Std.int(char.frameWidth * char.scale.x);
+		var sprHeight:Int = Std.int(char.frameHeight * char.scale.y);
+
+		// 确保有4个sprite可用
+		while(spriteGroup.members.length < 4)
+		{
+			var spr:FlxSprite = new FlxSprite().makeGraphic(1, 1, color);
+			spr.alpha = 0.8;
+			spr.cameras = [camChart];
+			spriteGroup.add(spr);
+		}
+
+		for (num => sel in spriteGroup.members)
+		{
+			sel.x = sprX;
+			sel.y = sprY;
+			sel.cameras = [camChart];
+			switch(num)
+			{
+				case 0: //Top
+					sel.setGraphicSize(sprWidth, lineSize);
+				case 1: //Bottom
+					sel.setGraphicSize(sprWidth, lineSize);
+					sel.y += sprHeight - lineSize;
+				case 2: //Left
+					sel.setGraphicSize(lineSize, sprHeight);
+				case 3: //Right
+					sel.setGraphicSize(lineSize, sprHeight);
+					sel.x += sprWidth - lineSize;
+			}
+			sel.updateHitbox();
+			sel.scrollFactor.set(char.scrollFactor.x, char.scrollFactor.y);
+			sel.visible = true;
+		}
+	}
+	
+
 	private var lastBeat:Int = 0;
 
 	// Sing动画相关
 	private var singAnimations:Array<String> = ['singLEFT', 'singDOWN', 'singUP', 'singRIGHT'];
 
-	var prevGridBg:ChartingGridSprite;
-	var gridBg:ChartingGridSprite;
-	var nextGridBg:ChartingGridSprite;
+	var prevOpponentGridBg:ChartingGridSprite;
+	var prevEventGridBg:ChartingGridSprite;
+	var prevPlayerGridBg:ChartingGridSprite;
+	var opponentGridBg:ChartingGridSprite;
+	var eventGridBg:ChartingGridSprite;
+	var playerGridBg:ChartingGridSprite;
+	var nextOpponentGridBg:ChartingGridSprite;
+	var nextEventGridBg:ChartingGridSprite;
+	var nextPlayerGridBg:ChartingGridSprite;
 	var waveformSprite:FlxSprite;
 	var scrollY:Float = 0;
 	
@@ -227,6 +311,12 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	// 轨道颜色标识控制
 	var trackColorsCheckBox:PsychUICheckBox; // 主题设置中的复选框
 	var trackSeparators:Array<FlxSprite> = []; // 轨道分隔线
+
+	// 视觉效果控制变量
+	var iconBopEnabled:Bool = true;        // 小图标跳动开关
+	var bgBopEnabled:Bool = false;         // 背景跳动开关
+	var mustHitTweenEnabled:Bool = true;   // 倒三角tween开关
+	var bgBopTween:FlxTween;             // 背景跳动tween
 
 	var timeLine:FlxSprite;
 	var infoText:FlxText;
@@ -316,7 +406,8 @@ if(_shouldReset) Conductor.songPosition = 0;
 
 		createGrids();
 
-		waveformSprite = new FlxSprite(gridBg.x + (SHOW_EVENT_COLUMN ? GRID_SIZE : 0), 0).makeGraphic(1, 1, 0x00FFFFFF);
+		var gridLayout = getGridLayout();
+		waveformSprite = new FlxSprite(gridLayout.startX, 0).makeGraphic(1, 1, 0x00FFFFFF);
 		waveformSprite.scrollFactor.x = 0;
 		waveformSprite.visible = false;
 		add(waveformSprite);
@@ -327,69 +418,104 @@ if(_shouldReset) Conductor.songPosition = 0;
 		dummyArrow.scrollFactor.x = 0;
 		add(dummyArrow);
 
-		vortexIndicator = new FlxSprite(gridBg.x - GRID_SIZE, FlxG.height/2).loadGraphic(Paths.image('editors/vortex_indicator'));
+		vortexIndicator = new FlxSprite(gridLayout.startX - GRID_SIZE, FlxG.height/2).loadGraphic(Paths.image('editors/vortex_indicator'));
 		vortexIndicator.setGraphicSize(GRID_SIZE);
 		vortexIndicator.updateHitbox();
 		vortexIndicator.scrollFactor.set();
 		vortexIndicator.active = false;
 		updateVortexColor();
 		add(vortexIndicator);
-		
+
 		// 创建轨道颜色覆盖层 - 只在gridBg显示的区域，放在strumLineNotes之前
-		var gridStartX:Float = gridBg.x + (SHOW_EVENT_COLUMN ? GRID_SIZE : 0); // 考虑Event列偏移
-		var gridHeight:Float = gridBg.height; // 只覆盖grid显示的高度
-		
+		var gridHeight:Float = opponentGridBg.height; // 只覆盖grid显示的高度
+
 		// 初始化轨道颜色显示设置
 		if(chartEditorSave.data.showTrackColors == null) chartEditorSave.data.showTrackColors = true;
-		
-		// 设置默认颜色：玩家浅蓝，对手浅紫
-		var gridY:Float = gridBg.y;
-		var extraHeight:Int = 200; // 增加200像素缓冲消除底部空隙
-		playerTrackOverlay = new FlxSprite(gridStartX, gridY).makeGraphic(GRID_SIZE * GRID_COLUMNS_PER_PLAYER, Std.int(gridHeight) + extraHeight, 0xFF88CCFF); // 浅蓝色
-		playerTrackOverlay.alpha = 0.15;
-		playerTrackOverlay.scrollFactor.set();
-		playerTrackOverlay.visible = chartEditorSave.data.showTrackColors;
-		add(playerTrackOverlay);
-		
-		opponentTrackOverlay = new FlxSprite(gridStartX + GRID_SIZE * GRID_COLUMNS_PER_PLAYER, gridY).makeGraphic(GRID_SIZE * GRID_COLUMNS_PER_PLAYER, Std.int(gridHeight) + extraHeight, 0xFFCC88FF); // 浅紫色
+		// 初始化轨道分隔线显示设置
+		if(chartEditorSave.data.showTrackSeparators == null) chartEditorSave.data.showTrackSeparators = true;
+
+		// 新轨道布局：对手(0-3) → Event(4-7) → 玩家(8-11)
+		var gridY:Float = 0; // 从屏幕顶部开始，覆盖整个屏幕
+		var extraHeight:Int = 500; // 增加500像素缓冲确保覆盖整个网格区域
+		var gridLayout = getGridLayout();
+
+		// 对手轨道覆盖层（最左侧，UI列0-3）
+		opponentTrackOverlay = new FlxSprite(gridLayout.opponentX, gridY).makeGraphic(GRID_SIZE * GRID_COLUMNS_PER_PLAYER, Std.int(gridHeight) + extraHeight, 0xFFCC88FF); // 浅紫色
 		opponentTrackOverlay.alpha = 0.15;
-		opponentTrackOverlay.scrollFactor.set();
+		opponentTrackOverlay.scrollFactor.set(0, 0); // X和Y方向都固定，不随网格滚动
 		opponentTrackOverlay.visible = chartEditorSave.data.showTrackColors;
 		add(opponentTrackOverlay);
-		
-		// Event轨道覆盖层（黄色）- 在Event列位置（最左边）- 使用gridBg的初始Y位置，增加高度缓冲
+
+		// Event轨道覆盖层（中间，UI列4-7）- 4列宽度
 		if(SHOW_EVENT_COLUMN)
 		{
-			eventTrackOverlay = new FlxSprite(gridBg.x, gridY).makeGraphic(GRID_SIZE, Std.int(gridHeight) + extraHeight, 0xFFFFFF44);
+			eventTrackOverlay = new FlxSprite(gridLayout.eventX, gridY).makeGraphic(GRID_SIZE * EVENT_TRACK_COUNT, Std.int(gridHeight) + extraHeight, 0xFFFFFF44); // 黄色
 			eventTrackOverlay.alpha = 0.15;
-			eventTrackOverlay.scrollFactor.set();
+			eventTrackOverlay.scrollFactor.set(0, 0); // X和Y方向都固定，不随网格滚动
 			eventTrackOverlay.visible = chartEditorSave.data.showTrackColors;
 			add(eventTrackOverlay);
 		}
-		
-		// 添加轨道之间的垂直分隔线（各隔一个格子）
-		for (i in 0...(GRID_PLAYERS * GRID_COLUMNS_PER_PLAYER + (SHOW_EVENT_COLUMN ? 1 : 0)))
+
+		// 玩家轨道覆盖层（最右侧，UI列8-11）
+		playerTrackOverlay = new FlxSprite(gridLayout.playerX, gridY).makeGraphic(GRID_SIZE * GRID_COLUMNS_PER_PLAYER, Std.int(gridHeight) + extraHeight, 0xFF88CCFF); // 浅蓝色
+		playerTrackOverlay.alpha = 0.15;
+		playerTrackOverlay.scrollFactor.set(0, 0); // X和Y方向都固定，不随网格滚动
+		playerTrackOverlay.visible = chartEditorSave.data.showTrackColors;
+		add(playerTrackOverlay);
+
+
+
+		// 添加轨道之间的垂直分隔线（新布局：对手(0-3) → Event(4-7) → 玩家(8-11)）
+		var totalColumns:Int = GRID_PLAYERS * GRID_COLUMNS_PER_PLAYER + (SHOW_EVENT_COLUMN ? EVENT_TRACK_COUNT : 0);
+
+		// 对手/Event之间的分隔线（在第3列后）
+		if(SHOW_EVENT_COLUMN)
 		{
-			// 在每个轨道之后添加分隔线（除了最后一个）
-			if ((i + 1) % GRID_COLUMNS_PER_PLAYER == 0 && i < GRID_PLAYERS * GRID_COLUMNS_PER_PLAYER - 1 + (SHOW_EVENT_COLUMN ? 1 : 0))
-			{
-				var separatorX:Float = gridBg.x + (SHOW_EVENT_COLUMN ? GRID_SIZE : 0) + GRID_SIZE * (i + 1) - 2; // 2px偏移居中
-				var separator = new FlxSprite(separatorX, gridY).makeGraphic(4, Std.int(gridHeight) + extraHeight, FlxColor.BLACK);
-				separator.alpha = 0.3;
-				separator.scrollFactor.set();
-				separator.visible = chartEditorSave.data.showTrackColors;
-				add(separator);
-				trackSeparators.push(separator);
-			}
+			var separatorX1:Float = gridLayout.opponentX + GRID_SIZE * GRID_COLUMNS_PER_PLAYER + TRACK_SPACING / 2 - 2;
+			var separator1 = new FlxSprite(separatorX1, gridY).makeGraphic(4, Std.int(gridHeight) + extraHeight, FlxColor.BLACK);
+			separator1.alpha = 1.0; // 黑色分隔线完全不透明
+			separator1.scrollFactor.set(0, 0); // X和Y方向都固定，不随网格滚动
+			separator1.visible = chartEditorSave.data.showTrackSeparators; // 由新选项控制
+			add(separator1);
+			trackSeparators.push(separator1);
+
+			// Event/玩家之间的分隔线（在第7列后）
+			var separatorX2:Float = gridLayout.eventX + GRID_SIZE * EVENT_TRACK_COUNT + TRACK_SPACING / 2 - 2;
+			var separator2 = new FlxSprite(separatorX2, gridY).makeGraphic(4, Std.int(gridHeight) + extraHeight, FlxColor.BLACK);
+			separator2.alpha = 1.0; // 黑色分隔线完全不透明
+			separator2.scrollFactor.set(0, 0); // X和Y方向都固定，不随网格滚动
+			separator2.visible = chartEditorSave.data.showTrackSeparators; // 由新选项控制
+			add(separator2);
+			trackSeparators.push(separator2);
 		}
-		
+
+
+
+		// 初始化碰撞箱绘制所需的FlxSpriteGroup
+		dadHitboxSprites = new FlxSpriteGroup();
+		dadHitboxSprites.cameras = [camChart];
+		add(dadHitboxSprites);
+
+		boyfriendHitboxSprites = new FlxSpriteGroup();
+		boyfriendHitboxSprites.cameras = [camChart];
+		add(boyfriendHitboxSprites);
+
+		// 初始化拖动范围绘制所需的FlxSpriteGroup
+		dadDragRangeSprites = new FlxSpriteGroup();
+		dadDragRangeSprites.cameras = [camChart];
+		add(dadDragRangeSprites);
+
+		boyfriendDragRangeSprites = new FlxSpriteGroup();
+		boyfriendDragRangeSprites.cameras = [camChart];
+		add(boyfriendDragRangeSprites);
+
 		add(strumLineNotes);
 
 		add(behindRenderedNotes);
 		add(curRenderedNotes);
 		add(movingNotes);
 
-		eventLockOverlay = new FlxSprite(gridBg.x, 0).makeGraphic(1, 1, FlxColor.BLACK);
+		eventLockOverlay = new FlxSprite(SHOW_EVENT_COLUMN ? gridLayout.eventX : gridLayout.opponentX, 0).makeGraphic(1, 1, FlxColor.BLACK);
 		eventLockOverlay.alpha = 0.6;
 		eventLockOverlay.visible = false;
 		eventLockOverlay.scrollFactor.x = 0;
@@ -397,62 +523,93 @@ if(_shouldReset) Conductor.songPosition = 0;
 		eventLockOverlay.updateHitbox();
 		add(eventLockOverlay);
 
-		timeLine = new FlxSprite(gridBg.x, 0).makeGraphic(1, 1, FlxColor.WHITE);
-		timeLine.setGraphicSize(Std.int(gridBg.width), 4);
+		timeLine = new FlxSprite(gridLayout.startX, 0).makeGraphic(1, 1, FlxColor.WHITE);
+		timeLine.setGraphicSize(Std.int(gridLayout.totalWidth), 4);
 		timeLine.updateHitbox();
 		timeLine.screenCenter(Y);
 		timeLine.scrollFactor.set();
 		add(timeLine);
-		
-		var startX:Float = gridBg.x;
+
+
+		var startX:Float = gridLayout.startX;
 		var startY:Float = FlxG.height/2;
 		vortexIndicator.visible = strumLineNotes.visible = strumLineNotes.active = vortexEnabled;
-		if(SHOW_EVENT_COLUMN) startX += GRID_SIZE;
 
+		// 新布局：strumLineNotes显示在对手和玩家轨道区域
+		// noteData 0-3（原玩家）→ UI列8-11（玩家）
+		// noteData 4-7（原对手）→ UI列0-3（对手）
 		for (i in 0...Std.int(GRID_PLAYERS * GRID_COLUMNS_PER_PLAYER))
 		{
-			var note:StrumNote = new StrumNote(startX + (GRID_SIZE * i), startY, i % GRID_COLUMNS_PER_PLAYER, 0);
+			var noteData:Int = i % GRID_COLUMNS_PER_PLAYER;
+			var isPlayer:Bool = i < 4; // 前4个是玩家（noteData 0-3），后4个是对手（noteData 0-3）
+			var uiColumn:Int = isPlayer ? (noteData + 8) : noteData; // 玩家→8-11，对手→0-3
+
+			// 根据逻辑列号计算额外的间距偏移
+			var spacingOffset:Float = 0;
+			if (uiColumn >= GRID_COLUMNS_PER_PLAYER)
+			{
+				spacingOffset += TRACK_SPACING; // Event轨道后的间距
+			}
+			if (uiColumn >= GRID_COLUMNS_PER_PLAYER + EVENT_TRACK_COUNT)
+			{
+				spacingOffset += TRACK_SPACING; // 玩家轨道前的间距
+			}
+
+			var note:StrumNote = new StrumNote(gridLayout.startX + (GRID_SIZE * uiColumn) + spacingOffset, startY, noteData, 0);
 			note.scrollFactor.set();
 			note.playAnim('static');
 			note.alpha = 0.4;
-			
+
 			note.updateHitbox();
 			if(note.width > note.height)
 				note.setGraphicSize(GRID_SIZE);
 			else
 				note.setGraphicSize(0, GRID_SIZE);
-	
+
 			note.updateHitbox();
 			note.x += GRID_SIZE/2 - note.width/2;
 			note.y += GRID_SIZE/2 - note.height/2;
 			strumLineNotes.add(note);
 		}
-		
-		// 为Grid格子添加颜色滤镜
-		if(gridBg != null)
+
+
+		// 为Grid格子添加颜色滤镜（新布局：对手(0-3) → Event(4-7) → 玩家(8-11)）
+		if(opponentGridBg != null)
 		{
-			// 玩家轨道列（0-3列）添加蓝色调
+			// 对手轨道列（0-3）添加红色调
 			for (i in 0...GRID_COLUMNS_PER_PLAYER)
 			{
-				gridBg.stripe.color = 0xFF4488FF; // 蓝色
+				opponentGridBg.stripe.color = 0xFFFF4488; // 红色
 			}
-			
-			// 对手轨道列（4-7列）添加红色调
-			for (i in GRID_COLUMNS_PER_PLAYER...(GRID_COLUMNS_PER_PLAYER * 2))
-			{
-				gridBg.stripe.color = 0xFFFF4488; // 红色
-			}
-			
-			// Event列添加黄色调
+
+			// Event轨道列（4-7）添加黄色调
 			if(SHOW_EVENT_COLUMN)
 			{
-				gridBg.stripe.color = 0xFFFFFF44; // 黄色
+				for (i in GRID_COLUMNS_PER_PLAYER...(GRID_COLUMNS_PER_PLAYER + EVENT_TRACK_COUNT))
+				{
+					eventGridBg.stripe.color = 0xFFFFFF44; // 黄色
+				}
+			}
+
+			// 玩家轨道列（8-11）添加蓝色调
+			for (i in (GRID_COLUMNS_PER_PLAYER + EVENT_TRACK_COUNT)...(GRID_COLUMNS_PER_PLAYER + EVENT_TRACK_COUNT + GRID_COLUMNS_PER_PLAYER))
+			{
+				playerGridBg.stripe.color = 0xFF4488FF; // 蓝色
 			}
 		}
 
-		var columns:Int = 0;
-		var iconX:Float = gridBg.x;
+
+
+		var gridStripes:Array<Int> = [];
 		var iconY:Float = 50;
+
+		mustHitIndicator = FlxSpriteUtil.drawTriangle(new FlxSprite(0, iconY - 20).makeGraphic(16, 16, FlxColor.TRANSPARENT), 0, 0, 16);
+		mustHitIndicator.scrollFactor.set();
+		mustHitIndicator.flipY = true;
+		mustHitIndicator.offset.x += mustHitIndicator.width/2;
+		add(mustHitIndicator);
+
+		// Event图标（新布局：在Event轨道中心，UI列5.5）
 		if(SHOW_EVENT_COLUMN)
 		{
 			eventIcon = new FlxSprite(0, iconY).loadGraphic(Paths.image('editors/eventIcon'));
@@ -461,29 +618,16 @@ if(_shouldReset) Conductor.songPosition = 0;
 			eventIcon.setGraphicSize(30, 30);
 			eventIcon.updateHitbox();
 			eventIcon.scrollFactor.set();
-			
-			add(eventIcon);
-			eventIcon.x = iconX + (GRID_SIZE * 0.5) - eventIcon.width/2;
-			iconX += GRID_SIZE;
 
-			columns++;
+			add(eventIcon);
+			// Event轨道的起始偏移：GRID_COLUMNS_PER_PLAYER（对手4列），中心点再偏移2列
+			eventIcon.x = gridLayout.eventX + GRID_SIZE * 2 - eventIcon.width/2;
 		}
 
-		mustHitIndicator = FlxSpriteUtil.drawTriangle(new FlxSprite(0, iconY - 20).makeGraphic(16, 16, FlxColor.TRANSPARENT), 0, 0, 16);
-		mustHitIndicator.scrollFactor.set();
-		mustHitIndicator.flipY = true;
-		mustHitIndicator.offset.x += mustHitIndicator.width/2;
-		// 初始化三角形位置到玩家图标上方
-		if(icons.length > 0)
-			mustHitIndicator.x = icons[0].x + icons[0].width/2;
-		add(mustHitIndicator);
-
-		var gridStripes:Array<Int> = [];
+		// 为对手和玩家添加图标（修复后：交换位置）
 		for (i in 0...GRID_PLAYERS)
 		{
-			if(columns > 0) gridStripes.push(columns);
-			columns += GRID_COLUMNS_PER_PLAYER;
-
+			// icons[0]是对手，icons[1]是玩家（顺序不变，仅交换位置）
 			var icon:HealthIcon = new HealthIcon();
 			icon.autoAdjustOffset = false;
 			icon.y = iconY;
@@ -491,17 +635,19 @@ if(_shouldReset) Conductor.songPosition = 0;
 			icon.scrollFactor.set();
 			icon.scale.set(0.3, 0.3);
 			icon.updateHitbox();
-			icon.ID = i+1;
+			icon.ID = i + 1;
 			add(icon);
 			icons.push(icon);
-			
-			icon.x = iconX + GRID_SIZE * (GRID_COLUMNS_PER_PLAYER/2) - icon.width/2;
-			iconX += GRID_SIZE * GRID_COLUMNS_PER_PLAYER;
+			// 修复逻辑：i=0（对手）用玩家偏移，i=1（玩家）用对手偏移
+			var iconStartOffset:Int = (i == 0) ? (GRID_COLUMNS_PER_PLAYER + EVENT_TRACK_COUNT) : 0;
+			icon.x = gridLayout.startX + GRID_SIZE * iconStartOffset + (iconStartOffset > 0 ? TRACK_SPACING * 2 : 0) + GRID_SIZE * (GRID_COLUMNS_PER_PLAYER / 2) - icon.width / 2;
 		}
-		prevGridBg.stripes = nextGridBg.stripes = gridBg.stripes = gridStripes;
-		
-		
-		
+		opponentGridBg.stripes = prevOpponentGridBg.stripes = nextOpponentGridBg.stripes = gridStripes;
+		if(SHOW_EVENT_COLUMN) eventGridBg.stripes = prevEventGridBg.stripes = nextEventGridBg.stripes = gridStripes;
+		playerGridBg.stripes = prevPlayerGridBg.stripes = nextPlayerGridBg.stripes = gridStripes;
+
+
+
 		selectionBox = new FlxSprite().makeGraphic(1, 1, FlxColor.CYAN);
 		selectionBox.alpha = 0.4;
 		selectionBox.blend = ADD;
@@ -703,10 +849,13 @@ if(_shouldReset) Conductor.songPosition = 0;
 		dad.visible = showCharactersCheckBox != null ? chartEditorSave.data.showCharacters : false;
 		
 		// 自定义对手角色位置（覆盖StageData，不影响全局）
-		dad.x = -850;
-		dad.y = 100;
-		
+		dad.x = -700;
+		dad.y = 200;
+
 		add(dad);
+
+		// 定义dad的拖动范围
+		dadDragRange = {minX: -1200, maxX: -200, minY: 50, maxY: 300};
 
 		// 创建玩家角色（右侧）
 		if(boyfriend != null) remove(boyfriend);
@@ -716,15 +865,18 @@ if(_shouldReset) Conductor.songPosition = 0;
 		boyfriend.visible = showCharactersCheckBox != null ? chartEditorSave.data.showCharacters : false;
 		
 		// 自定义玩家角色位置（覆盖StageData，不影响全局）
-		boyfriend.x = 1500;
-		boyfriend.y = 100;
-		
+		boyfriend.x = 1200;
+		boyfriend.y = 200;
+
 		add(boyfriend);
+
+		// 定义boyfriend的拖动范围
+		boyfriendDragRange = {minX: 900, maxX: 1800, minY: 50, maxY: 300};
 
 		charactersLoaded = true;
 		
 		// 设置相机缩放以获得更好的视觉效果
-		camChart.zoom = 0.3;
+		camChart.zoom = 0.4;
 	}
 
 	function updateCharacters()
@@ -745,8 +897,11 @@ if(_shouldReset) Conductor.songPosition = 0;
 			// 自定义对手角色位置（覆盖StageData，不影响全局）
 			dad.x = -850;
 			dad.y = 100;
-			
+
 			add(dad);
+
+			// 定义dad的拖动范围
+			dadDragRange = {minX: -1200, maxX: -200, minY: 50, maxY: 300};
 		}
 
 		// 更新玩家角色
@@ -761,8 +916,67 @@ if(_shouldReset) Conductor.songPosition = 0;
 			// 自定义玩家角色位置（覆盖StageData，不影响全局）
 			boyfriend.x = 1500;
 			boyfriend.y = 100;
-			
+
 			add(boyfriend);
+
+			// 定义boyfriend的拖动范围
+			boyfriendDragRange = {minX: 900, maxX: 1800, minY: 50, maxY: 300};
+		}
+	}
+
+	function drawCharacterDragRange(char:Character, spriteGroup:FlxSpriteGroup, color:FlxColor):Void
+	{
+		if (char == null || !char.visible || !char.isOnScreen(camChart))
+		{
+			// 隐藏所有拖动范围sprite
+			for (spr in spriteGroup.members)
+				spr.visible = false;
+			return;
+		}
+
+		@:privateAccess
+		var lineSize:Int = Std.int(Math.max(2, Math.floor(2 / camChart.zoom)));
+
+		// 以角色当前位置为中心，绘制固定大小的参考框（200x200像素）
+		var refBoxSize:Float = 200;
+		var rangeMinX:Float = char.x - refBoxSize / 2;
+		var rangeMaxX:Float = char.x + refBoxSize / 2;
+		var rangeMinY:Float = char.y - refBoxSize / 2;
+		var rangeMaxY:Float = char.y + refBoxSize / 2;
+
+		var rangeWidth:Float = rangeMaxX - rangeMinX;
+		var rangeHeight:Float = rangeMaxY - rangeMinY;
+
+		// 确保有4个sprite可用（4个边框）
+		while(spriteGroup.members.length < 4)
+		{
+			var spr:FlxSprite = new FlxSprite().makeGraphic(1, 1, color);
+			spr.alpha = 0.5;
+			spr.cameras = [camChart];
+			spriteGroup.add(spr);
+		}
+
+		for (num => sel in spriteGroup.members)
+		{
+			sel.x = rangeMinX;
+			sel.y = rangeMinY;
+			sel.cameras = [camChart];
+			switch(num)
+			{
+				case 0: //Top
+					sel.setGraphicSize(Std.int(rangeWidth), lineSize);
+				case 1: //Bottom
+					sel.setGraphicSize(Std.int(rangeWidth), lineSize);
+					sel.y += rangeHeight - lineSize;
+				case 2: //Left
+					sel.setGraphicSize(lineSize, Std.int(rangeHeight));
+				case 3: //Right
+					sel.setGraphicSize(lineSize, Std.int(rangeHeight));
+					sel.x += rangeWidth - lineSize;
+			}
+			sel.updateHitbox();
+			sel.scrollFactor.set(char.scrollFactor.x, char.scrollFactor.y);
+			sel.visible = true;
 		}
 	}
 
@@ -779,42 +993,49 @@ if(_shouldReset) Conductor.songPosition = 0;
 		}
 	}
 
-	// 处理idle动画的循环播放
-	// 当非循环的idle动画播放完成时，在下一拍重新播放它
-	private function handleIdleAnimationLoop(char:Character, currentBeat:Int, needIdleReplay:Bool):Bool
+	// 处理idle动画的播放
+	// 每拍都检查，使用holdTimer和singDuration来决定何时从sing回到idle
+	// 必须在sing Duration完成后的下一拍才播放idle
+	// 返回类型：Null<Int> - 返回sing完成的beat，或null表示idle已播放
+	private function handleIdleAnimationLoop(char:Character, currentBeat:Int, needIdleReplay:Bool, ?singFinishedBeat:Null<Int>):Null<Int>
 	{
-		if(char == null || !char.visible) return needIdleReplay;
+		if(char == null || !char.visible) return singFinishedBeat;
 
 		var animName:String = char.getAnimationName();
 
-		// 检查是否在播放idle动画（包括idle、danceLeft、danceRight）
-		if(animName.startsWith('idle') || animName.startsWith('dance'))
+		// 检查是否在播放sing动画
+		if(animName.startsWith('sing'))
 		{
-			// 检查idle动画是否播放完成
-			if(char.isAnimationFinished())
+			// 参考PlayState的playerDance逻辑：
+			// if(boyfriend.holdTimer > Conductor.stepCrochet * (0.0011) * boyfriend.singDuration && anim.startsWith('sing'))
+			// 使用holdTimer和singDuration来决定是否回到idle
+			var timeThreshold:Float = Conductor.stepCrochet * (0.0011 #if FLX_PITCH / FlxG.sound.music.pitch #end) * char.singDuration;
+			if(char.holdTimer > timeThreshold)
 			{
-				// 检查是否存在对应的循环版本（例如idle-loop、danceLeft-loop）
-				var loopAnimName:String = animName + '-loop';
-
-				// 如果不存在循环版本，标记需要在下一拍重新播放
-				if(!char.hasAnimation(loopAnimName))
-				{
-					return true;
-				}
+				// holdTimer超过阈值，记录当前beat为sing完成的beat
+				return currentBeat; // 返回当前beat，标记sing在此beat完成
 			}
+			// 还在保持sing动画，不播放idle
+			return singFinishedBeat; // 保持之前的sing完成记录
 		}
 
-		// 如果当前拍不同于上一拍，并且需要重新播放idle动画
-		if(needIdleReplay && currentBeat != lastBeat)
+		// 当前不在sing动画中，检查是否需要在下一拍播放idle
+		if(singFinishedBeat != null && currentBeat > singFinishedBeat)
 		{
-			if(char.hasAnimation('idle'))
-				char.playAnim('idle', false);
-			else if(char.hasAnimation('danceLeft'))
-				char.playAnim(char.danced ? 'danceLeft' : 'danceRight', false);
-			return false; // 已播放，重置标记
+			// sing已完成，且是下一拍，播放idle/dance动画
+			char.dance();
+			return null; // idle已播放，清除sing完成标记
 		}
 
-		return needIdleReplay; // 保持当前状态
+		// 每拍都尝试播放idle动画（正常idle循环）
+		if(currentBeat != lastBeat)
+		{
+			// 播放idle/dance动画
+			char.dance();
+			return singFinishedBeat; // 保持sing完成记录（如果存在）
+		}
+
+		return singFinishedBeat;
 	}
 
 	// 更新角色的holdTimer和动画状态（用于EditorPlayState中手动更新角色）
@@ -867,23 +1088,41 @@ if(_shouldReset) Conductor.songPosition = 0;
 
 		if(theme != oldTheme || theme == CUSTOM)
 		{
-			if(gridBg != null)
+			if(opponentGridBg != null)
 			{
-				gridBg.loadGrid(gridColors[0], gridColors[1]);
-				gridBg.vortexLineEnabled = vortexEnabled;
-				gridBg.vortexLineSpace = GRID_SIZE * 4 * curZoom;
+				opponentGridBg.loadGrid(gridColors[0], gridColors[1]);
+				opponentGridBg.vortexLineEnabled = vortexEnabled;
+				opponentGridBg.vortexLineSpace = GRID_SIZE * 4 * curZoom;
+				prevOpponentGridBg.loadGrid(gridColorsOther[0], gridColorsOther[1]);
+				prevOpponentGridBg.vortexLineEnabled = vortexEnabled;
+				prevOpponentGridBg.vortexLineSpace = GRID_SIZE * 4 * curZoom;
+				nextOpponentGridBg.loadGrid(gridColorsOther[0], gridColorsOther[1]);
+				nextOpponentGridBg.vortexLineEnabled = vortexEnabled;
+				nextOpponentGridBg.vortexLineSpace = GRID_SIZE * 4 * curZoom;
 			}
-			if(prevGridBg != null)
+			if(SHOW_EVENT_COLUMN && eventGridBg != null)
 			{
-				prevGridBg.loadGrid(gridColorsOther[0], gridColorsOther[1]);
-				prevGridBg.vortexLineEnabled = vortexEnabled;
-				prevGridBg.vortexLineSpace = GRID_SIZE * 4 * curZoom;
+				eventGridBg.loadGrid(gridColors[0], gridColors[1]);
+				eventGridBg.vortexLineEnabled = vortexEnabled;
+				eventGridBg.vortexLineSpace = GRID_SIZE * 4 * curZoom;
+				prevEventGridBg.loadGrid(gridColorsOther[0], gridColorsOther[1]);
+				prevEventGridBg.vortexLineEnabled = vortexEnabled;
+				prevEventGridBg.vortexLineSpace = GRID_SIZE * 4 * curZoom;
+				nextEventGridBg.loadGrid(gridColorsOther[0], gridColorsOther[1]);
+				nextEventGridBg.vortexLineEnabled = vortexEnabled;
+				nextEventGridBg.vortexLineSpace = GRID_SIZE * 4 * curZoom;
 			}
-			if(nextGridBg != null)
+			if(playerGridBg != null)
 			{
-				nextGridBg.loadGrid(gridColorsOther[0], gridColorsOther[1]);
-				nextGridBg.vortexLineEnabled = vortexEnabled;
-				nextGridBg.vortexLineSpace = GRID_SIZE * 4 * curZoom;
+				playerGridBg.loadGrid(gridColors[0], gridColors[1]);
+				playerGridBg.vortexLineEnabled = vortexEnabled;
+				playerGridBg.vortexLineSpace = GRID_SIZE * 4 * curZoom;
+				prevPlayerGridBg.loadGrid(gridColorsOther[0], gridColorsOther[1]);
+				prevPlayerGridBg.vortexLineEnabled = vortexEnabled;
+				prevPlayerGridBg.vortexLineSpace = GRID_SIZE * 4 * curZoom;
+				nextPlayerGridBg.loadGrid(gridColorsOther[0], gridColorsOther[1]);
+				nextPlayerGridBg.vortexLineEnabled = vortexEnabled;
+				nextPlayerGridBg.vortexLineSpace = GRID_SIZE * 4 * curZoom;
 			}
 		}
 	}
@@ -1292,8 +1531,81 @@ if(_shouldReset) Conductor.songPosition = 0;
 			updateScrollY();
 		}
 
+		// 角色拖动逻辑
+		if(dragCharactersCheckBox != null && dragCharactersCheckBox.checked && PsychUIInputText.focusOn == null && !ignoreClickForThisFrame)
+		{
+			// 检测鼠标左键按下
+			if(FlxG.mouse.justPressed)
+			{
+				// 检查是否点击到角色
+				if(dad != null && dad.visible && FlxG.mouse.overlaps(dad, camChart))
+				{
+					isDraggingCharacter = true;
+					draggedCharacter = dad;
+					dragOffsetX = FlxG.mouse.getWorldPosition(camChart).x - dad.x;
+					dragOffsetY = FlxG.mouse.getWorldPosition(camChart).y - dad.y;
+				}
+				else if(boyfriend != null && boyfriend.visible && FlxG.mouse.overlaps(boyfriend, camChart))
+				{
+					isDraggingCharacter = true;
+					draggedCharacter = boyfriend;
+					dragOffsetX = FlxG.mouse.getWorldPosition(camChart).x - boyfriend.x;
+					dragOffsetY = FlxG.mouse.getWorldPosition(camChart).y - boyfriend.y;
+				}
+			}
+
+			// 拖动角色
+			if(isDraggingCharacter && draggedCharacter != null)
+			{
+				var mousePos = FlxG.mouse.getWorldPosition(camChart);
+				var newX = mousePos.x - dragOffsetX;
+				var newY = mousePos.y - dragOffsetY;
+
+				// 移除范围限制，允许自由拖拽角色
+				draggedCharacter.x = newX;
+				draggedCharacter.y = newY;
+			}
+
+			// 检测鼠标释放
+			if(FlxG.mouse.justReleased)
+			{
+				isDraggingCharacter = false;
+				draggedCharacter = null;
+			}
+		}
+
 		super.update(elapsed);
-		
+
+		// 绘制角色碰撞箱
+		if(showHitboxCheckBox != null && showHitboxCheckBox.checked)
+		{
+			drawCharacterHitbox(dad, dadHitboxSprites, FlxColor.RED);
+			drawCharacterHitbox(boyfriend, boyfriendHitboxSprites, FlxColor.BLUE);
+		}
+		else
+		{
+			// 隐藏碰撞箱
+			if(dadHitboxSprites != null)
+				for(spr in dadHitboxSprites.members) spr.visible = false;
+			if(boyfriendHitboxSprites != null)
+				for(spr in boyfriendHitboxSprites.members) spr.visible = false;
+		}
+
+		// 绘制角色拖动范围
+		if(showDragRangeCheckBox != null && showDragRangeCheckBox.checked && dragCharactersCheckBox != null && dragCharactersCheckBox.checked)
+		{
+			drawCharacterDragRange(dad, dadDragRangeSprites, 0xFFFF4444);
+			drawCharacterDragRange(boyfriend, boyfriendDragRangeSprites, 0xFF4444FF);
+		}
+		else
+		{
+			// 隐藏拖动范围
+			if(dadDragRangeSprites != null)
+				for(spr in dadDragRangeSprites.members) spr.visible = false;
+			if(boyfriendDragRangeSprites != null)
+				for(spr in boyfriendDragRangeSprites.members) spr.visible = false;
+		}
+
 		if(songFinished)
 		{
 			onSongComplete();
@@ -1537,8 +1849,13 @@ if(_shouldReset) Conductor.songPosition = 0;
 			updateSelectionBox();
 		}
 
-		var minX:Float = gridBg.x;
-		if(SHOW_EVENT_COLUMN && lockedEvents) minX += GRID_SIZE;
+
+
+
+		var gridLayout = getGridLayout();
+		var minX:Float = gridLayout.startX;
+		// 新布局：Event在中间（UI列4-7），不改变minX逻辑
+		if(SHOW_EVENT_COLUMN && lockedEvents) minX = gridLayout.startX;
 
 		if (controls.mobileC)
 		{
@@ -1546,38 +1863,56 @@ if(_shouldReset) Conductor.songPosition = 0;
 			{
 				if(touch.justPressed && (touch.overlaps(mainBox.bg) || touch.overlaps(infoBox.bg)))
 					ignoreClickForThisFrame = true;
-		
+
 				if(isMovingNotes && touch.justReleased)
 					stopMovingNotes();
-		
-				if(touch.x >= minX && touch.x < gridBg.x + gridBg.width)
-				{
-					var diffX:Float = touch.x - gridBg.x;
-					var diffY:Float = touch.y - gridBg.y;
+
+			var trackInfo = getTrackAtPosition(touch.x, touch.y);
+			if(trackInfo != null)
+			{
+					var diffX:Float = touch.x - trackInfo.trackX;
+					var diffY:Float = touch.y - trackInfo.grid.y;
 					if(!touchPad.buttonY.pressed)
 						diffY -= diffY % (GRID_SIZE / (curQuant/16));
-		
-					if(nextGridBg.visible) diffY = Math.min(diffY, gridBg.height + nextGridBg.height);
-					else diffY = Math.min(diffY, gridBg.height);
-		
-					if(prevGridBg.visible) diffY = Math.max(diffY, -prevGridBg.height);
+
+					if(trackInfo.nextGrid.visible) diffY = Math.min(diffY, trackInfo.grid.height + trackInfo.nextGrid.height);
+					else diffY = Math.min(diffY, trackInfo.grid.height);
+
+					if(trackInfo.prevGrid.visible) diffY = Math.max(diffY, -trackInfo.prevGrid.height);
 					else diffY = Math.max(diffY, 0);
-		
-					var noteData:Int = Math.floor(diffX / GRID_SIZE);
+
+					// 根据UI列计算noteData（新布局：对手(0-3) → Event(4-7) → 玩家(8-11)）
+					var uiColumn:Int = Math.floor(diffX / GRID_SIZE);
+
+					// 根据轨道类型调整UI列偏移
+					if(trackInfo.trackType == 'event') uiColumn += GRID_COLUMNS_PER_PLAYER;
+					else if(trackInfo.trackType == 'player') uiColumn += GRID_COLUMNS_PER_PLAYER + EVENT_TRACK_COUNT;
+
+					var noteData:Int = uiColumnToNoteData(uiColumn);
 					dummyArrow.visible = !selectionBox.visible;
-					dummyArrow.x = gridBg.x + noteData * GRID_SIZE;
-					if(SHOW_EVENT_COLUMN)
-						noteData--;
-		
-					if(touchPad.buttonY.pressed || touch.y >= gridBg.y || !prevGridBg.visible)
-						dummyArrow.y = gridBg.y + diffY;
+
+					// 计算最终的UI列并应用间距偏移
+					var finalUIColumn:Int = noteDataToUIColumn(noteData);
+					var spacingOffset:Float = 0;
+					if (finalUIColumn >= GRID_COLUMNS_PER_PLAYER)
+					{
+						spacingOffset += TRACK_SPACING; // Event轨道后的间距
+					}
+					if (finalUIColumn >= GRID_COLUMNS_PER_PLAYER + EVENT_TRACK_COUNT)
+					{
+						spacingOffset += TRACK_SPACING; // 玩家轨道前的间距
+					}
+					dummyArrow.x = gridLayout.startX + finalUIColumn * GRID_SIZE + spacingOffset;
+
+					if(touchPad.buttonY.pressed || touch.y >= trackInfo.grid.y || !trackInfo.prevGrid.visible)
+						dummyArrow.y = trackInfo.grid.y + diffY;
 					else
 					{
 						var t:Float = (diffY - (GRID_SIZE / (curQuant/16)));
-						if(touch.y >= gridBg.y) t *= curZoom;
-						dummyArrow.y = gridBg.y + t;
+						if(touch.y >= trackInfo.grid.y) t *= curZoom;
+						dummyArrow.y = trackInfo.grid.y + t;
 					}
-		
+
 					if(isMovingNotes)
 					{
 						// Move note data
@@ -1648,7 +1983,7 @@ if(_shouldReset) Conductor.songPosition = 0;
 							else
 								showOutput('You must select notes to move them!', true);
 						}
-						else if(touch.x >= gridBg.x && touch.x < gridBg.x + gridBg.width)
+						else if(touch.x >= gridLayout.startX && touch.x < gridLayout.startX + gridLayout.totalWidth)
 						{
 							var closeNotes:Array<MetaNote> = curRenderedNotes.members.filter(function(note:MetaNote)
 							{
@@ -1656,7 +1991,7 @@ if(_shouldReset) Conductor.songPosition = 0;
 								return ((note.isEvent && noteData < 0) || (!note.isEvent && note.songData[1] == noteData)) && chartY >= 0 && chartY < GRID_SIZE;
 							});
 							closeNotes.sort(function(a:MetaNote, b:MetaNote) return Math.abs(a.strumTime - touch.y) < Math.abs(b.strumTime - touch.y) ? 1 : -1);
-		
+
 							var closest = closeNotes[0];
 							if(closest != null && (!closest.isEvent || !lockedEvents))
 							{
@@ -1693,7 +2028,7 @@ if(_shouldReset) Conductor.songPosition = 0;
 								if(selectedNotes.length == 1) onSelectNote();
 								forceDataUpdate = true;
 							}
-							else if(!holdingAlt && touch.y >= gridBg.y && touch.y < gridBg.y + gridBg.height) // Add note
+							else if(!holdingAlt && touch.y >= trackInfo.grid.y && touch.y < trackInfo.grid.y + trackInfo.grid.height) // Add note
 							{
 								var strumTime:Float = (diffY / GRID_SIZE * Conductor.stepCrochet / curZoom) + cachedSectionTimes[curSec];
 								if(noteData >= 0)
@@ -1766,38 +2101,56 @@ if(_shouldReset) Conductor.songPosition = 0;
 		} else {
 			if(FlxG.mouse.justPressed && (FlxG.mouse.overlaps(mainBox.bg) || FlxG.mouse.overlaps(infoBox.bg)))
 				ignoreClickForThisFrame = true;
-	
+
 			if(isMovingNotes && FlxG.mouse.justReleased)
 				stopMovingNotes();
-	
-			if(FlxG.mouse.x >= minX && FlxG.mouse.x < gridBg.x + gridBg.width)
+
+			var mouseTrackInfo = getTrackAtPosition(FlxG.mouse.x, FlxG.mouse.y);
+			if(mouseTrackInfo != null)
 			{
-				var diffX:Float = FlxG.mouse.x - gridBg.x;
-				var diffY:Float = FlxG.mouse.y - gridBg.y;
+				var diffX:Float = FlxG.mouse.x - mouseTrackInfo.trackX;
+				var diffY:Float = FlxG.mouse.y - mouseTrackInfo.grid.y;
 				if(!FlxG.keys.pressed.SHIFT)
 					diffY -= diffY % (GRID_SIZE / (curQuant/16));
-	
-				if(nextGridBg.visible) diffY = Math.min(diffY, gridBg.height + nextGridBg.height);
-				else diffY = Math.min(diffY, gridBg.height);
-	
-				if(prevGridBg.visible) diffY = Math.max(diffY, -prevGridBg.height);
+
+				if(mouseTrackInfo.nextGrid.visible) diffY = Math.min(diffY, mouseTrackInfo.grid.height + mouseTrackInfo.nextGrid.height);
+				else diffY = Math.min(diffY, mouseTrackInfo.grid.height);
+
+				if(mouseTrackInfo.prevGrid.visible) diffY = Math.max(diffY, -mouseTrackInfo.prevGrid.height);
 				else diffY = Math.max(diffY, 0);
-	
-				var noteData:Int = Math.floor(diffX / GRID_SIZE);
+
+				// 根据UI列计算noteData（新布局：对手(0-3) → Event(4-7) → 玩家(8-11)）
+				var uiColumn:Int = Math.floor(diffX / GRID_SIZE);
+
+				// 根据轨道类型调整UI列偏移
+				if(mouseTrackInfo.trackType == 'event') uiColumn += GRID_COLUMNS_PER_PLAYER;
+				else if(mouseTrackInfo.trackType == 'player') uiColumn += GRID_COLUMNS_PER_PLAYER + EVENT_TRACK_COUNT;
+
+				var noteData:Int = uiColumnToNoteData(uiColumn);
 				dummyArrow.visible = !selectionBox.visible;
-				dummyArrow.x = gridBg.x + noteData * GRID_SIZE;
-				if(SHOW_EVENT_COLUMN)
-					noteData--;
-	
-				if(FlxG.keys.pressed.SHIFT || FlxG.mouse.y >= gridBg.y || !prevGridBg.visible)
-					dummyArrow.y = gridBg.y + diffY;
+				
+				// 计算最终的UI列并应用间距偏移
+				var finalUIColumn:Int = noteDataToUIColumn(noteData);
+				var spacingOffset:Float = 0;
+				if (finalUIColumn >= GRID_COLUMNS_PER_PLAYER)
+				{
+					spacingOffset += TRACK_SPACING; // Event轨道后的间距
+				}
+				if (finalUIColumn >= GRID_COLUMNS_PER_PLAYER + EVENT_TRACK_COUNT)
+				{
+					spacingOffset += TRACK_SPACING; // 玩家轨道前的间距
+				}
+				dummyArrow.x = gridLayout.startX + finalUIColumn * GRID_SIZE + spacingOffset;
+
+				if(FlxG.keys.pressed.SHIFT || FlxG.mouse.y >= mouseTrackInfo.grid.y || !mouseTrackInfo.prevGrid.visible)
+					dummyArrow.y = mouseTrackInfo.grid.y + diffY;
 				else
 				{
 					var t:Float = (diffY - (GRID_SIZE / (curQuant/16)));
-					if(FlxG.mouse.y >= gridBg.y) t *= curZoom;
-					dummyArrow.y = gridBg.y + t;
+					if(FlxG.mouse.y >= mouseTrackInfo.grid.y) t *= curZoom;
+					dummyArrow.y = mouseTrackInfo.grid.y + t;
 				}
-	
+
 				if(isMovingNotes)
 				{
 					// Move note data
@@ -1810,13 +2163,13 @@ if(_shouldReset) Conductor.songPosition = 0;
 						for (note in selectedNotes) //Find boundaries first
 						{
 							if(note == null || note.isEvent) continue;
-		
+
 							var data:Int = note.songData[1];
 							if(isFirst || data < movingNotesMinData) movingNotesMinData = data;
 							if(data > movingNotesMaxData) movingNotesMaxData = data;
 							isFirst = false;
 						}
-	
+
 						var diff:Int = nData - movingNotesLastData;
 						var maxn:Int = (GRID_PLAYERS * GRID_COLUMNS_PER_PLAYER) - 1;
 						movingNotesMinData += diff;
@@ -1868,7 +2221,7 @@ if(_shouldReset) Conductor.songPosition = 0;
 						else
 							showOutput('You must select notes to move them!', true);
 					}
-					else if(FlxG.mouse.x >= gridBg.x && FlxG.mouse.x < gridBg.x + gridBg.width)
+					else if(FlxG.mouse.x >= gridLayout.startX && FlxG.mouse.x < gridLayout.startX + gridLayout.totalWidth)
 					{
 						var closeNotes:Array<MetaNote> = curRenderedNotes.members.filter(function(note:MetaNote)
 						{
@@ -1876,7 +2229,7 @@ if(_shouldReset) Conductor.songPosition = 0;
 							return ((note.isEvent && noteData < 0) || (!note.isEvent && note.songData[1] == noteData)) && chartY >= 0 && chartY < GRID_SIZE;
 						});
 						closeNotes.sort(function(a:MetaNote, b:MetaNote) return Math.abs(a.strumTime - FlxG.mouse.y) < Math.abs(b.strumTime - FlxG.mouse.y) ? 1 : -1);
-	
+
 						var closest = closeNotes[0];
 						if(closest != null && (!closest.isEvent || !lockedEvents))
 						{
@@ -1913,14 +2266,14 @@ if(_shouldReset) Conductor.songPosition = 0;
 							if(selectedNotes.length == 1) onSelectNote();
 							forceDataUpdate = true;
 						}
-						else if(!holdingAlt && FlxG.mouse.y >= gridBg.y && FlxG.mouse.y < gridBg.y + gridBg.height) // Add note
+						else if(!holdingAlt && FlxG.mouse.y >= mouseTrackInfo.grid.y && FlxG.mouse.y < mouseTrackInfo.grid.y + mouseTrackInfo.grid.height) // Add note
 						{
 							var strumTime:Float = (diffY / GRID_SIZE * Conductor.stepCrochet / curZoom) + cachedSectionTimes[curSec];
 							if(noteData >= 0)
 							{
 								trace('Added note at time: $strumTime');
 								var didAdd:Bool = false;
-	
+
 								var noteSetupData:Array<Dynamic> = [strumTime, noteData, 0];
 								var typeSelected:String = noteTypes[noteTypeDropDown.selectedIndex].trim();
 								if(typeSelected != null && typeSelected.length > 0)
@@ -2053,9 +2406,10 @@ if(_shouldReset) Conductor.songPosition = 0;
 		if(dadInSustain && dad.getAnimationName().startsWith('sing'))
 			dad.holdTimer = 0;
 
-		// 处理idle动画的循环播放（非循环的idle动画在下一拍重新播放）
-		boyfriendNeedIdleReplay = handleIdleAnimationLoop(boyfriend, curBeatPure, boyfriendNeedIdleReplay);
-		dadNeedIdleReplay = handleIdleAnimationLoop(dad, curBeatPure, dadNeedIdleReplay);
+		// 处理idle动画的播放：每拍尝试播放idle动画
+		// sing Duration完成后在下一拍才播放idle
+		boyfriendSingFinishedBeat = handleIdleAnimationLoop(boyfriend, curBeatPure, boyfriendNeedIdleReplay, boyfriendSingFinishedBeat);
+		dadSingFinishedBeat = handleIdleAnimationLoop(dad, curBeatPure, dadNeedIdleReplay, dadSingFinishedBeat);
 
 		// 更新上一拍的记录
 		lastBeat = curBeatPure;
@@ -2083,7 +2437,7 @@ if(_shouldReset) Conductor.songPosition = 0;
 		songBeatNoOffset = curBeatPure;
 		
 		// Add icon bounce effect on every beat（使用不受offset影响的节拍）
-		if (songBeatNoOffset != lastBeatHit) {
+		if (iconBopEnabled && songBeatNoOffset != lastBeatHit) {
 			var mustHitSection:Bool = (PlayState.SONG.notes[curSec] != null && PlayState.SONG.notes[curSec].mustHitSection);
 			if(iconbopTween != null)
 				iconbopTween.cancel();
@@ -2097,6 +2451,22 @@ if(_shouldReset) Conductor.songPosition = 0;
 						}});
 			}
 			}
+		}
+
+		// Add background bounce effect on every beat
+		if (bgBopEnabled && songBeatNoOffset != lastBeatHit) {
+			if(bgBopTween != null)
+				bgBopTween.cancel();
+			// 立即设置放大效果
+			bg.scale.set(1.02, 1.02);
+			// 快速缩小至默认大小
+			bgBopTween = FlxTween.tween(bg.scale, {x: 1.0, y: 1.0}, 0.1, {
+				ease: FlxEase.quadOut,
+				onComplete: function(twn:FlxTween) {
+					bgBopTween = null;
+				}
+			});
+
 		}
 
 		if(Conductor.songPosition != lastTime || forceDataUpdate)
@@ -2431,40 +2801,202 @@ var vortexPlaying:Bool = (vortexEnabled && FlxG.sound.music != null && FlxG.soun
 	{
 		var destroyed:Bool = false;
 		var stripes:Array<Int> = null;
-		if(prevGridBg != null)
+		if(opponentGridBg != null)
 		{
-			stripes = prevGridBg.stripes;
-			remove(prevGridBg);
-			remove(gridBg);
-			remove(nextGridBg);
-			prevGridBg = FlxDestroyUtil.destroy(prevGridBg);
-			gridBg = FlxDestroyUtil.destroy(gridBg);
-			nextGridBg = FlxDestroyUtil.destroy(nextGridBg);
+			stripes = opponentGridBg.stripes;
+			remove(prevOpponentGridBg);
+			remove(prevEventGridBg);
+			remove(prevPlayerGridBg);
+			remove(opponentGridBg);
+			remove(eventGridBg);
+			remove(playerGridBg);
+			remove(nextOpponentGridBg);
+			remove(nextEventGridBg);
+			remove(nextPlayerGridBg);
+			prevOpponentGridBg = FlxDestroyUtil.destroy(prevOpponentGridBg);
+			prevEventGridBg = FlxDestroyUtil.destroy(prevEventGridBg);
+			prevPlayerGridBg = FlxDestroyUtil.destroy(prevPlayerGridBg);
+			opponentGridBg = FlxDestroyUtil.destroy(opponentGridBg);
+			eventGridBg = FlxDestroyUtil.destroy(eventGridBg);
+			playerGridBg = FlxDestroyUtil.destroy(playerGridBg);
+			nextOpponentGridBg = FlxDestroyUtil.destroy(nextOpponentGridBg);
+			nextEventGridBg = FlxDestroyUtil.destroy(nextEventGridBg);
+			nextPlayerGridBg = FlxDestroyUtil.destroy(nextPlayerGridBg);
 			destroyed = true;
 		}
 
-		var columnCount:Int = (GRID_COLUMNS_PER_PLAYER * GRID_PLAYERS) + (SHOW_EVENT_COLUMN ? 1 : 0);
-		gridBg = new ChartingGridSprite(columnCount, gridColors[0], gridColors[1]);
-		gridBg.screenCenter(X);
+		// 创建三个独立的轨道网格
+		var startX:Float = FlxG.width / 2;
+		
+		// 计算总宽度并居中
+		var opponentWidth:Float = GRID_SIZE * GRID_COLUMNS_PER_PLAYER;
+		var eventWidth:Float = SHOW_EVENT_COLUMN ? GRID_SIZE * EVENT_TRACK_COUNT : 0;
+		var playerWidth:Float = GRID_SIZE * GRID_COLUMNS_PER_PLAYER;
+		var spacingWidth:Float = TRACK_SPACING * (SHOW_EVENT_COLUMN ? 2 : 1);
+		var totalWidth:Float = opponentWidth + eventWidth + playerWidth + spacingWidth;
+		
+		startX = (FlxG.width - totalWidth) / 2;
 
-		prevGridBg = new ChartingGridSprite(columnCount, gridColorsOther[0], gridColorsOther[1]);
-		nextGridBg = new ChartingGridSprite(columnCount, gridColorsOther[0], gridColorsOther[1]);
-		prevGridBg.x = nextGridBg.x = gridBg.x;
-		prevGridBg.stripes = nextGridBg.stripes = gridBg.stripes = stripes;
+		// 对手轨道网格
+		opponentGridBg = new ChartingGridSprite(GRID_COLUMNS_PER_PLAYER, gridColors[0], gridColors[1]);
+		opponentGridBg.x = startX;
+		opponentGridBg.y = FlxG.height / 2;
+		
+		// Event轨道网格
+		if(SHOW_EVENT_COLUMN)
+		{
+			eventGridBg = new ChartingGridSprite(EVENT_TRACK_COUNT, gridColors[0], gridColors[1]);
+			eventGridBg.x = startX + opponentWidth + TRACK_SPACING;
+			eventGridBg.y = opponentGridBg.y;
+		}
+		
+		// 玩家轨道网格
+		playerGridBg = new ChartingGridSprite(GRID_COLUMNS_PER_PLAYER, gridColors[0], gridColors[1]);
+		playerGridBg.x = startX + opponentWidth + eventWidth + TRACK_SPACING * (SHOW_EVENT_COLUMN ? 2 : 1);
+		playerGridBg.y = opponentGridBg.y;
+
+		// 创建前一节和下一节的网格
+		prevOpponentGridBg = new ChartingGridSprite(GRID_COLUMNS_PER_PLAYER, gridColorsOther[0], gridColorsOther[1]);
+		prevOpponentGridBg.x = opponentGridBg.x;
+		prevOpponentGridBg.y = opponentGridBg.y;
+		prevOpponentGridBg.stripes = opponentGridBg.stripes = stripes;
+		
+		nextOpponentGridBg = new ChartingGridSprite(GRID_COLUMNS_PER_PLAYER, gridColorsOther[0], gridColorsOther[1]);
+		nextOpponentGridBg.x = opponentGridBg.x;
+		nextOpponentGridBg.y = opponentGridBg.y;
+		nextOpponentGridBg.stripes = opponentGridBg.stripes;
+		
+		if(SHOW_EVENT_COLUMN)
+		{
+			prevEventGridBg = new ChartingGridSprite(EVENT_TRACK_COUNT, gridColorsOther[0], gridColorsOther[1]);
+			prevEventGridBg.x = eventGridBg.x;
+			prevEventGridBg.y = eventGridBg.y;
+			prevEventGridBg.stripes = eventGridBg.stripes = stripes;
+			
+			nextEventGridBg = new ChartingGridSprite(EVENT_TRACK_COUNT, gridColorsOther[0], gridColorsOther[1]);
+			nextEventGridBg.x = eventGridBg.x;
+			nextEventGridBg.y = eventGridBg.y;
+			nextEventGridBg.stripes = eventGridBg.stripes;
+		}
+		
+		prevPlayerGridBg = new ChartingGridSprite(GRID_COLUMNS_PER_PLAYER, gridColorsOther[0], gridColorsOther[1]);
+		prevPlayerGridBg.x = playerGridBg.x;
+		prevPlayerGridBg.y = playerGridBg.y;
+		prevPlayerGridBg.stripes = playerGridBg.stripes = stripes;
+		
+		nextPlayerGridBg = new ChartingGridSprite(GRID_COLUMNS_PER_PLAYER, gridColorsOther[0], gridColorsOther[1]);
+		nextPlayerGridBg.x = playerGridBg.x;
+		nextPlayerGridBg.y = playerGridBg.y;
+		nextPlayerGridBg.stripes = playerGridBg.stripes;
 		
 		if(destroyed)
 		{
-			insert(getFirstNull(), prevGridBg);
-			insert(getFirstNull(), nextGridBg);
-			insert(getFirstNull(), gridBg);
+			insert(getFirstNull(), prevOpponentGridBg);
+			insert(getFirstNull(), nextOpponentGridBg);
+			insert(getFirstNull(), opponentGridBg);
+			if(SHOW_EVENT_COLUMN)
+			{
+				insert(getFirstNull(), prevEventGridBg);
+				insert(getFirstNull(), nextEventGridBg);
+				insert(getFirstNull(), eventGridBg);
+			}
+			insert(getFirstNull(), prevPlayerGridBg);
+			insert(getFirstNull(), nextPlayerGridBg);
+			insert(getFirstNull(), playerGridBg);
 			loadSection();
 		}
 		else
 		{
-			add(prevGridBg);
-			add(nextGridBg);
-			add(gridBg);
+			add(prevOpponentGridBg);
+			add(nextOpponentGridBg);
+			add(opponentGridBg);
+			if(SHOW_EVENT_COLUMN)
+			{
+				add(prevEventGridBg);
+				add(nextEventGridBg);
+				add(eventGridBg);
+			}
+			add(prevPlayerGridBg);
+			add(nextPlayerGridBg);
+			add(playerGridBg);
 		}
+	}
+
+	// 根据UI列获取对应的网格
+	function getGridByUIColumn(uiColumn:Int):ChartingGridSprite
+	{
+		if(uiColumn < GRID_COLUMNS_PER_PLAYER)
+		{
+			return opponentGridBg;
+		}
+		else if(SHOW_EVENT_COLUMN && uiColumn < GRID_COLUMNS_PER_PLAYER + EVENT_TRACK_COUNT)
+		{
+			return eventGridBg;
+		}
+		else
+		{
+			return playerGridBg;
+		}
+	}
+
+	// 获取所有轨道的总宽度和起始位置
+	function getGridLayout():{startX:Float, opponentX:Float, eventX:Float, playerX:Float, totalWidth:Float}
+	{
+		var opponentWidth:Float = GRID_SIZE * GRID_COLUMNS_PER_PLAYER;
+		var eventWidth:Float = SHOW_EVENT_COLUMN ? GRID_SIZE * EVENT_TRACK_COUNT : 0;
+		var playerWidth:Float = GRID_SIZE * GRID_COLUMNS_PER_PLAYER;
+		var spacingWidth:Float = TRACK_SPACING * (SHOW_EVENT_COLUMN ? 2 : 1);
+		var totalWidth:Float = opponentWidth + eventWidth + playerWidth + spacingWidth;
+		var startX:Float = (FlxG.width - totalWidth) / 2;
+		
+		return {
+			startX: startX,
+			opponentX: startX,
+			eventX: startX + opponentWidth + TRACK_SPACING,
+			playerX: startX + opponentWidth + eventWidth + TRACK_SPACING * (SHOW_EVENT_COLUMN ? 2 : 1),
+			totalWidth: totalWidth
+		};
+	}
+
+	// 获取指定位置的轨道信息和网格
+	function getTrackAtPosition(x:Float, y:Float):{grid:ChartingGridSprite, prevGrid:ChartingGridSprite, nextGrid:ChartingGridSprite, trackX:Float, trackType:String}
+	{
+		var gridLayout = getGridLayout();
+		var opponentWidth:Float = GRID_SIZE * GRID_COLUMNS_PER_PLAYER;
+		var eventWidth:Float = SHOW_EVENT_COLUMN ? GRID_SIZE * EVENT_TRACK_COUNT : 0;
+
+		if(x >= gridLayout.opponentX && x < gridLayout.opponentX + opponentWidth)
+		{
+			return {
+				grid: opponentGridBg,
+				prevGrid: prevOpponentGridBg,
+				nextGrid: nextOpponentGridBg,
+				trackX: gridLayout.opponentX,
+				trackType: 'opponent'
+			};
+		}
+		else if(SHOW_EVENT_COLUMN && x >= gridLayout.eventX && x < gridLayout.eventX + eventWidth)
+		{
+			return {
+				grid: eventGridBg,
+				prevGrid: prevEventGridBg,
+				nextGrid: nextEventGridBg,
+				trackX: gridLayout.eventX,
+				trackType: 'event'
+			};
+		}
+		else if(x >= gridLayout.playerX && x < gridLayout.playerX + opponentWidth)
+		{
+			return {
+				grid: playerGridBg,
+				prevGrid: prevPlayerGridBg,
+				nextGrid: nextPlayerGridBg,
+				trackX: gridLayout.playerX,
+				trackType: 'player'
+			};
+		}
+
+		return null;
 	}
 
 	var cachedSectionRow:Array<Int>;
@@ -2674,9 +3206,22 @@ var vortexPlaying:Bool = (vortexEnabled && FlxG.sound.music != null && FlxG.soun
 	function createEvent(event:Dynamic)
 	{
 		var daStrumTime:Float = event[0];
-		var swagEvent:EventMetaNote = new EventMetaNote(daStrumTime, event);
-		swagEvent.x = gridBg.x;
-		swagEvent.eventText.x = swagEvent.x - swagEvent.eventText.width - 10;
+
+		// 检查同一时间点已有的events数量，分配到合适的轨道
+		var trackIndex:Int = 0;
+		var eventsAtTime:Int = 0;
+		for (existingEvent in events)
+		{
+			if (Math.abs(existingEvent.strumTime - daStrumTime) < 0.0001)
+			{
+				eventsAtTime++;
+			}
+		}
+
+		// 分配到可用轨道（0-3），如果超过4个则允许重叠
+		trackIndex = eventsAtTime % EVENT_TRACK_COUNT;
+
+		var swagEvent:EventMetaNote = new EventMetaNote(daStrumTime, event, trackIndex);
 		swagEvent.scrollFactor.x = 0;
 		swagEvent.active = false;
 
@@ -2687,7 +3232,23 @@ var vortexPlaying:Bool = (vortexEnabled && FlxG.sound.music != null && FlxG.soun
 			secNum++;
 		}
 		positionNoteYOnTime(swagEvent, secNum);
+		positionEventOnTrack(swagEvent, trackIndex);
 		return swagEvent;
+	}
+
+	function positionEventOnTrack(event:EventMetaNote, trackIndex:Int)
+	{
+		// 轨道布局：对手(0-3) → Event(4-7) → 玩家(8-11)
+		// Event轨道的起始偏移：GRID_COLUMNS_PER_PLAYER（对手4列）+ TRACK_SPACING
+		var eventTrackOffset:Int = GRID_COLUMNS_PER_PLAYER;
+		var gridLayout = getGridLayout();
+
+		var eventX:Float = gridLayout.startX + (GRID_SIZE - event.width) / 2;
+		eventX += GRID_SIZE * eventTrackOffset;
+		eventX += TRACK_SPACING; // Event轨道的间距偏移
+		eventX += GRID_SIZE * trackIndex;
+		event.x = eventX;
+		event.eventText.x = event.x - event.eventText.width - 10;
 	}
 
 	function _cacheSections()
@@ -2811,42 +3372,87 @@ var vortexPlaying:Bool = (vortexEnabled && FlxG.sound.music != null && FlxG.soun
 		Conductor.bpm = cachedSectionBPMs[curSec];
 
 		var hei:Float = 0;
+
+		// 更新对手轨道网格
 		if(curSec > 0)
 		{
-			prevGridBg.y = cachedSectionRow[curSec-1] * GRID_SIZE * curZoom;
-			prevGridBg.rows = 4 * PlayState.SONG.notes[curSec-1].sectionBeats * curZoom;
-			prevGridBg.visible = showPreviousSection;
-			hei += prevGridBg.height;
-			eventLockOverlay.y = prevGridBg.y;
+			prevOpponentGridBg.y = cachedSectionRow[curSec-1] * GRID_SIZE * curZoom;
+			prevOpponentGridBg.rows = 4 * PlayState.SONG.notes[curSec-1].sectionBeats * curZoom;
+			prevOpponentGridBg.visible = showPreviousSection;
+			hei += prevOpponentGridBg.height;
+			eventLockOverlay.y = prevOpponentGridBg.y;
 		}
-		else prevGridBg.visible = false;
+		else prevOpponentGridBg.visible = false;
 
 		if(curSec < PlayState.SONG.notes.length - 1)
 		{
-			nextGridBg.y = cachedSectionRow[curSec+1] * GRID_SIZE * curZoom;
-			nextGridBg.rows = 4 * PlayState.SONG.notes[curSec+1].sectionBeats * curZoom;
-			nextGridBg.visible = showNextSection;
-			hei += nextGridBg.height;
+			nextOpponentGridBg.y = cachedSectionRow[curSec+1] * GRID_SIZE * curZoom;
+			nextOpponentGridBg.rows = 4 * PlayState.SONG.notes[curSec+1].sectionBeats * curZoom;
+			nextOpponentGridBg.visible = showNextSection;
+			hei += nextOpponentGridBg.height;
 		}
-		else nextGridBg.visible = false;
+		else nextOpponentGridBg.visible = false;
 
-		gridBg.y = cachedSectionRow[curSec] * GRID_SIZE * curZoom;
-		gridBg.rows = 4 * PlayState.SONG.notes[curSec].sectionBeats * curZoom;
-		hei += gridBg.height;
-		
+		opponentGridBg.y = cachedSectionRow[curSec] * GRID_SIZE * curZoom;
+		opponentGridBg.rows = 4 * PlayState.SONG.notes[curSec].sectionBeats * curZoom;
+		hei += opponentGridBg.height;
+
+		// 更新Event轨道网格
+		if(SHOW_EVENT_COLUMN)
+		{
+			if(curSec > 0)
+			{
+				prevEventGridBg.y = cachedSectionRow[curSec-1] * GRID_SIZE * curZoom;
+				prevEventGridBg.rows = 4 * PlayState.SONG.notes[curSec-1].sectionBeats * curZoom;
+				prevEventGridBg.visible = showPreviousSection;
+			}
+			else prevEventGridBg.visible = false;
+
+			if(curSec < PlayState.SONG.notes.length - 1)
+			{
+				nextEventGridBg.y = cachedSectionRow[curSec+1] * GRID_SIZE * curZoom;
+				nextEventGridBg.rows = 4 * PlayState.SONG.notes[curSec+1].sectionBeats * curZoom;
+				nextEventGridBg.visible = showNextSection;
+			}
+			else nextEventGridBg.visible = false;
+
+			eventGridBg.y = cachedSectionRow[curSec] * GRID_SIZE * curZoom;
+			eventGridBg.rows = 4 * PlayState.SONG.notes[curSec].sectionBeats * curZoom;
+		}
+
+		// 更新玩家轨道网格
+		if(curSec > 0)
+		{
+			prevPlayerGridBg.y = cachedSectionRow[curSec-1] * GRID_SIZE * curZoom;
+			prevPlayerGridBg.rows = 4 * PlayState.SONG.notes[curSec-1].sectionBeats * curZoom;
+			prevPlayerGridBg.visible = showPreviousSection;
+		}
+		else prevPlayerGridBg.visible = false;
+
+		if(curSec < PlayState.SONG.notes.length - 1)
+		{
+			nextPlayerGridBg.y = cachedSectionRow[curSec+1] * GRID_SIZE * curZoom;
+			nextPlayerGridBg.rows = 4 * PlayState.SONG.notes[curSec+1].sectionBeats * curZoom;
+			nextPlayerGridBg.visible = showNextSection;
+		}
+		else nextPlayerGridBg.visible = false;
+
+		playerGridBg.y = cachedSectionRow[curSec] * GRID_SIZE * curZoom;
+		playerGridBg.rows = 4 * PlayState.SONG.notes[curSec].sectionBeats * curZoom;
+
 		// 更新轨道颜色覆盖层的高度，添加额外缓冲消除底部空隙
 		if(playerTrackOverlay != null && opponentTrackOverlay != null)
 		{
-			var extraHeight:Int = 200; // 增加200像素缓冲
-			playerTrackOverlay.height = Std.int(gridBg.height) + extraHeight;
-			opponentTrackOverlay.height = Std.int(gridBg.height) + extraHeight;
-			if(eventTrackOverlay != null) 
+			var extraHeight:Int = 500; // 增加500像素缓冲确保覆盖整个网格区域
+			playerTrackOverlay.height = Std.int(opponentGridBg.height) + extraHeight;
+			opponentTrackOverlay.height = Std.int(opponentGridBg.height) + extraHeight;
+			if(eventTrackOverlay != null)
 			{
-				eventTrackOverlay.height = Std.int(gridBg.height) + extraHeight;
+				eventTrackOverlay.height = Std.int(opponentGridBg.height) + extraHeight;
 			}
 		}
 
-		if(!prevGridBg.visible) eventLockOverlay.y = gridBg.y;
+		if(!prevOpponentGridBg.visible) eventLockOverlay.y = opponentGridBg.y;
 		eventLockOverlay.scale.y = hei;
 		eventLockOverlay.updateHitbox();
 
@@ -2869,8 +3475,23 @@ var vortexPlaying:Bool = (vortexEnabled && FlxG.sound.music != null && FlxG.soun
 			if(selectedNotes.length > 1) susLengthStepper.min = -susLengthStepper.max;
 			else susLengthStepper.min = 0;
 		}
-		prevGridBg.vortexLineEnabled = gridBg.vortexLineEnabled = nextGridBg.vortexLineEnabled = vortexEnabled;
-		prevGridBg.vortexLineSpace = gridBg.vortexLineSpace = nextGridBg.vortexLineSpace = GRID_SIZE * 4 * curZoom;
+		opponentGridBg.vortexLineEnabled = playerGridBg.vortexLineEnabled = vortexEnabled;
+		prevOpponentGridBg.vortexLineEnabled = prevPlayerGridBg.vortexLineEnabled = vortexEnabled;
+		nextOpponentGridBg.vortexLineEnabled = nextPlayerGridBg.vortexLineEnabled = vortexEnabled;
+		opponentGridBg.vortexLineSpace = playerGridBg.vortexLineSpace = GRID_SIZE * 4 * curZoom;
+		prevOpponentGridBg.vortexLineSpace = prevPlayerGridBg.vortexLineSpace = GRID_SIZE * 4 * curZoom;
+		nextOpponentGridBg.vortexLineSpace = nextPlayerGridBg.vortexLineSpace = GRID_SIZE * 4 * curZoom;
+
+		if(SHOW_EVENT_COLUMN)
+		{
+			eventGridBg.vortexLineEnabled = vortexEnabled;
+			prevEventGridBg.vortexLineEnabled = vortexEnabled;
+			nextEventGridBg.vortexLineEnabled = vortexEnabled;
+			eventGridBg.vortexLineSpace = GRID_SIZE * 4 * curZoom;
+			prevEventGridBg.vortexLineSpace = GRID_SIZE * 4 * curZoom;
+			nextEventGridBg.vortexLineSpace = GRID_SIZE * 4 * curZoom;
+		}
+
 		updateWaveform();
 	}
 
@@ -2925,8 +3546,8 @@ var vortexPlaying:Bool = (vortexEnabled && FlxG.sound.music != null && FlxG.soun
 				var nextMaxTime:Float = getMaxNoteTime(curSec+1);
 				function otherSecFilter(note:MetaNote)
 				{
-					return (prevGridBg.visible && (note.strumTime >= prevMinTime && note.strumTime < prevMaxTime)) ||
-						(nextGridBg.visible && (note.strumTime >= nextMinTime && note.strumTime < nextMaxTime));
+					return (prevOpponentGridBg.visible && (note.strumTime >= prevMinTime && note.strumTime < prevMaxTime)) ||
+						(nextOpponentGridBg.visible && (note.strumTime >= nextMinTime && note.strumTime < nextMaxTime));
 				}
 	
 				for(note in notes.filter(otherSecFilter))
@@ -2965,16 +3586,86 @@ var vortexPlaying:Bool = (vortexEnabled && FlxG.sound.music != null && FlxG.soun
 		return maxTime;
 	}
 
+	function uiColumnToNoteData(uiColumn:Int):Int
+	{
+		// 新布局：对手(0-3) → Event(4-7) → 玩家(8-11)
+		if (uiColumn < 4)
+		{
+			return uiColumn + 4; // 对手轨道（noteData 4-7）
+		}
+		else if (uiColumn < 8 && SHOW_EVENT_COLUMN)
+		{
+			return -1; // Event轨道（noteData -1，通过eventTrackIndex区分）
+		}
+		else
+		{
+			return uiColumn - 8; // 玩家轨道（noteData 0-3）
+		}
+	}
+
+	function noteDataToUIColumn(noteData:Int):Int
+	{
+		// 新布局：对手(0-3) → Event(4-7) → 玩家(8-11)
+		if (noteData >= 4 && noteData < 8)
+		{
+			return noteData - 4; // 对手轨道（UI列0-3）
+		}
+		else if (noteData < 0 && SHOW_EVENT_COLUMN)
+		{
+			return GRID_COLUMNS_PER_PLAYER; // Event轨道（UI列4-7，这里返回起始位置，具体位置由eventTrackIndex决定）
+		}
+		else
+		{
+			return noteData + GRID_COLUMNS_PER_PLAYER + EVENT_TRACK_COUNT; // 玩家轨道（UI列8-11）
+		}
+	}
+
 	function positionNoteXByData(note:MetaNote, ?data:Null<Int> = null)
 	{
 		if(data == null) data = note.songData[1];
+		var gridLayout = getGridLayout();
 
-		var noteX:Float = gridBg.x + (GRID_SIZE - note.width) / 2;
-		if(SHOW_EVENT_COLUMN) noteX += GRID_SIZE;
+		var noteX:Float = gridLayout.startX + (GRID_SIZE - note.width) / 2;
 
-		noteX += GRID_SIZE * data;
+		// 区分event和普通note，使用不同的轨道布局
+		if (note.isEvent)
+		{
+			// Event使用专用方法，根据eventTrackIndex定位
+			var eventNote:EventMetaNote = cast note;
+			positionEventOnTrack(eventNote, eventNote.eventTrackIndex);
+			return;
+		}
+
+		// 普通note的轨道布局：对手(0-3) → Event(4-7) → 玩家(8-11)
+		// noteData映射：
+		// 4-7（对手）→ UI列0-3
+		// 0-3（玩家）→ UI列8-11
+		var uiColumn:Int = 0;
+		if (data >= 4)
+		{
+			// 对手轨道（noteData 4-7）
+			uiColumn = data - 4;
+		}
+		else
+		{
+			// 玩家轨道（noteData 0-3）
+			uiColumn = data + GRID_COLUMNS_PER_PLAYER + EVENT_TRACK_COUNT;
+		}
+
+		// 根据逻辑列号计算额外的间距偏移
+		var spacingOffset:Float = 0;
+		if (uiColumn >= GRID_COLUMNS_PER_PLAYER)
+		{
+			spacingOffset += TRACK_SPACING; // Event轨道后的间距
+		}
+		if (uiColumn >= GRID_COLUMNS_PER_PLAYER + EVENT_TRACK_COUNT)
+		{
+			spacingOffset += TRACK_SPACING; // 玩家轨道前的间距
+		}
+
+		noteX += GRID_SIZE * uiColumn + spacingOffset;
 		note.x = noteX;
-		//trace(gridBg.x, noteX);
+		//trace(gridLayout.startX, noteX);
 	}
 
 	function positionNoteYOnTime(note:MetaNote, section:Int)
@@ -3048,11 +3739,11 @@ for (i in 0...GRID_PLAYERS)
 
 	if(icons.length > 1)
 	{
-		var iconP1:HealthIcon = icons[0];
-		var iconP2:HealthIcon = icons[1];
+		var iconP1:HealthIcon = icons[0]; // 对手图标
+		var iconP2:HealthIcon = icons[1]; // 玩家图标
 		var mustHitSection:Bool = (curSecData != null && curSecData.mustHitSection == true);
-		
-		// GF Section时的颜色调整
+
+		// GF Section时的颜色调整（新布局：对手和玩家轨道）
 		if (isGfSection)
 		{
 			if (mustHitSection)
@@ -3072,31 +3763,31 @@ for (i in 0...GRID_PLAYERS)
 		}
 		else
 		{
-			// 非GF Section，恢复默认颜色：玩家浅蓝，对手浅紫
+			// 非GF Section，恢复默认颜色：对手浅红，玩家浅蓝
 			if(playerTrackOverlay != null) playerTrackOverlay.color = 0xFF88CCFF; // 浅蓝色
 			if(opponentTrackOverlay != null) opponentTrackOverlay.color = 0xFFCC88FF; // 浅紫色
 		}
-
 			// 只在mustHitSection状态改变时执行Tween动画（使用之前记录的mustHitChanged）
-			if(mustHitChanged)
+			// 修复后：交换iconP1和iconP2的目标，匹配图标显示位置
+			if (mustHitChanged && mustHitTweenEnabled)
 			{
-				if(mustHitSection)
+				if (mustHitSection)
 				{
-					// 使用更强的缓动动画移动到玩家图标 - 先取消之前的Tween
+					// 指示器移动到玩家图标（现在对应iconP1的显示位置）
 					FlxTween.cancelTweensOf(mustHitIndicator);
-					FlxTween.tween(mustHitIndicator, {x: iconP1.x + iconP1.width/2}, 0.3, {ease: FlxEase.backOut});
+					FlxTween.tween(mustHitIndicator, {x: iconP1.x + iconP1.width / 2}, 0.3, {ease: FlxEase.backOut});
 				}
 				else
 				{
-					// 使用更强的缓动动画移动到对手图标 - 先取消之前的Tween
+					// 指示器移动到对手图标（现在对应iconP2的显示位置）
 					FlxTween.cancelTweensOf(mustHitIndicator);
-					FlxTween.tween(mustHitIndicator, {x: iconP2.x + iconP2.width/2}, 0.3, {ease: FlxEase.backOut});
+					FlxTween.tween(mustHitIndicator, {x: iconP2.x + iconP2.width / 2}, 0.3, {ease: FlxEase.backOut});
 				}
 			}
 		}
-	_lastGfSection = isGfSection;
-	_lastSec = curSec;
-}
+		_lastGfSection = isGfSection;
+		_lastSec = curSec;
+	}
 
 	var playbackSlider:PsychUISlider;
 
@@ -3112,6 +3803,9 @@ for (i in 0...GRID_PLAYERS)
 	var playerMuteCheckBox:PsychUICheckBox;
 	var opponentVolumeStepper:PsychUINumericStepper;
 	var opponentMuteCheckBox:PsychUICheckBox;
+
+	var dragCharactersCheckBox:PsychUICheckBox;
+	var showHitboxCheckBox:PsychUICheckBox;
 	function addChartingTab()
 	{
 		var tab_group = mainBox.getTab(Language.get('charting_charting_text')).menu;
@@ -3152,6 +3846,19 @@ for (i in 0...GRID_PLAYERS)
 		playerMuteCheckBox = new PsychUICheckBox(objX + 100, objY, Language.get('charting_mute_text'), 60, updateAudioVolume);
 		opponentMuteCheckBox = new PsychUICheckBox(objX + 200, objY, Language.get('charting_mute_text'), 60, updateAudioVolume);
 
+		objY += 50;
+		dragCharactersCheckBox = new PsychUICheckBox(objX, objY, '允许拖动角色', 120, function() chartEditorSave.data.allowDragCharacters = dragCharactersCheckBox.checked);
+		if(chartEditorSave.data.allowDragCharacters == null) chartEditorSave.data.allowDragCharacters = false;
+		dragCharactersCheckBox.checked = chartEditorSave.data.allowDragCharacters;
+
+		showHitboxCheckBox = new PsychUICheckBox(objX + 150, objY, '显示碰撞箱', 120, function() chartEditorSave.data.showCharacterHitboxes = showHitboxCheckBox.checked);
+		if(chartEditorSave.data.showCharacterHitboxes == null) chartEditorSave.data.showCharacterHitboxes = false;
+		showHitboxCheckBox.checked = chartEditorSave.data.showCharacterHitboxes;
+
+		showDragRangeCheckBox = new PsychUICheckBox(objX + 300, objY, '显示拖动范围', 120, function() chartEditorSave.data.showCharacterDragRange = showDragRangeCheckBox.checked);
+		if(chartEditorSave.data.showCharacterDragRange == null) chartEditorSave.data.showCharacterDragRange = false;
+		showDragRangeCheckBox.checked = chartEditorSave.data.showCharacterDragRange;
+
 		tab_group.add(playbackSlider);
 		tab_group.add(mouseSnapCheckBox);
 		tab_group.add(ignoreProgressCheckBox);
@@ -3172,6 +3879,10 @@ for (i in 0...GRID_PLAYERS)
 		tab_group.add(playerMuteCheckBox);
 		tab_group.add(opponentVolumeStepper);
 		tab_group.add(opponentMuteCheckBox);
+
+		tab_group.add(dragCharactersCheckBox);
+		tab_group.add(showHitboxCheckBox);
+		tab_group.add(showDragRangeCheckBox);
 	}
 
 	var gameOverCharDropDown:PsychUIDropDownMenu;
@@ -5084,12 +5795,21 @@ for (i in 0...GRID_PLAYERS)
 				note.playAnim('static');
 				note.resetAnim = 0;
 			}
-			prevGridBg.vortexLineEnabled = gridBg.vortexLineEnabled = nextGridBg.vortexLineEnabled = vortexEnabled;
+			opponentGridBg.vortexLineEnabled = playerGridBg.vortexLineEnabled = vortexEnabled;
+			prevOpponentGridBg.vortexLineEnabled = prevPlayerGridBg.vortexLineEnabled = vortexEnabled;
+			nextOpponentGridBg.vortexLineEnabled = nextPlayerGridBg.vortexLineEnabled = vortexEnabled;
+			if(SHOW_EVENT_COLUMN)
+			{
+				eventGridBg.vortexLineEnabled = vortexEnabled;
+				prevEventGridBg.vortexLineEnabled = vortexEnabled;
+				nextEventGridBg.vortexLineEnabled = vortexEnabled;
+			}
 		}, btnWid);
 		vortexEditorButton.text.alignment = LEFT;
 		tab_group.add(vortexEditorButton);
-		
+
 		btnY++;
+
 		btnY += 20;
 		var btn:PsychUIButton = new PsychUIButton(btnX, btnY, Language.get('charting_waveform_tab3'), function()
 		{
@@ -5374,28 +6094,166 @@ for (i in 0...GRID_PLAYERS)
 						changeTheme(CUSTOM);
 					}
 					state.add(input);
-					
-					// 添加轨道颜色标识显示开关
-					btnY += 60;
-					if(chartEditorSave.data.showTrackColors == null) chartEditorSave.data.showTrackColors = true;
-					
-trackColorsCheckBox = new PsychUICheckBox(state.bg.x + 20, btnY, Language.get('charting_showtrackcolors_text'), 180, function()
+
+				}
+			));
+		}, btnWid);
+		btn.text.alignment = LEFT;
+		tab_group.add(btn);
+
+		btnY++;
+		btnY += 20;
+		var btn:PsychUIButton = new PsychUIButton(btnX, btnY, Language.get('charting_visualeffects_tab3'), function()
+		{
+			if(!fileDialog.completed) return;
+			upperBox.isMinimized = true;
+			upperBox.bg.visible = false;
+
+			openSubState(new BasePrompt(450, 400, Language.get('prompt_visualeffects_tab'),
+				function(state:BasePrompt)
 				{
-					chartEditorSave.data.showTrackColors = trackColorsCheckBox.checked;
-					chartEditorSave.flush();
-					// 更新覆盖层可见性
-					if(playerTrackOverlay != null) playerTrackOverlay.visible = trackColorsCheckBox.checked;
-					if(opponentTrackOverlay != null) opponentTrackOverlay.visible = trackColorsCheckBox.checked;
-					if(eventTrackOverlay != null) eventTrackOverlay.visible = trackColorsCheckBox.checked;
-					// 更新分隔线可见性
-					for (separator in trackSeparators)
+					var btn:PsychUIButton = new PsychUIButton(state.bg.x + state.bg.width - 40, state.bg.y, 'X', state.close, 40);
+					btn.cameras = state.cameras;
+					state.add(btn);
+
+					// 初始化变量（从保存数据中读取）
+					if(chartEditorSave.data.iconBopEnabled != null)
+						iconBopEnabled = chartEditorSave.data.iconBopEnabled;
+					if(chartEditorSave.data.bgBopEnabled != null)
+						bgBopEnabled = chartEditorSave.data.bgBopEnabled;
+					if(chartEditorSave.data.mustHitTweenEnabled != null)
+						mustHitTweenEnabled = chartEditorSave.data.mustHitTweenEnabled;
+					if(chartEditorSave.data.showTrackColors == null)
+						chartEditorSave.data.showTrackColors = true;
+					if(chartEditorSave.data.showTrackSeparators == null)
+						chartEditorSave.data.showTrackSeparators = true;
+
+
+					var checkY = 100;
+
+					// 小图标跳动
+					var iconBopCheckBox:PsychUICheckBox = new PsychUICheckBox(state.bg.x + 20, checkY, Language.get('visualeffect_iconbop'), 200);
+					iconBopCheckBox.checked = iconBopEnabled;
+					iconBopCheckBox.onClick = function()
 					{
-						if(separator != null) separator.visible = trackColorsCheckBox.checked;
-					}
-				});
-					trackColorsCheckBox.checked = chartEditorSave.data.showTrackColors;
-					trackColorsCheckBox.cameras = state.cameras;
-					state.add(trackColorsCheckBox);
+						iconBopEnabled = chartEditorSave.data.iconBopEnabled = iconBopCheckBox.checked;
+						chartEditorSave.flush();
+					};
+					iconBopCheckBox.cameras = state.cameras;
+					state.add(iconBopCheckBox);
+					checkY += 30;
+
+					// 背景跳动
+					var bgBopCheckBox:PsychUICheckBox = new PsychUICheckBox(state.bg.x + 20, checkY, Language.get('visualeffect_bgbop'), 200);
+					bgBopCheckBox.checked = bgBopEnabled;
+					bgBopCheckBox.onClick = function()
+					{
+						bgBopEnabled = chartEditorSave.data.bgBopEnabled = bgBopCheckBox.checked;
+						chartEditorSave.flush();
+						if(!bgBopEnabled && bgBopTween != null)
+						{
+							bgBopTween.cancel();
+							bgBopTween = null;
+							bg.scale.set(1.0, 1.0);
+						}
+					};
+					bgBopCheckBox.cameras = state.cameras;
+					state.add(bgBopCheckBox);
+					checkY += 30;
+
+					// 倒三角tween
+					var mustHitTweenCheckBox:PsychUICheckBox = new PsychUICheckBox(state.bg.x + 20, checkY, Language.get('visualeffect_musthittween'), 200);
+					mustHitTweenCheckBox.checked = mustHitTweenEnabled;
+					mustHitTweenCheckBox.onClick = function()
+					{
+						mustHitTweenEnabled = chartEditorSave.data.mustHitTweenEnabled = mustHitTweenCheckBox.checked;
+						chartEditorSave.flush();
+						if(!mustHitTweenEnabled)
+							FlxTween.cancelTweensOf(mustHitIndicator);
+					};
+					mustHitTweenCheckBox.cameras = state.cameras;
+					state.add(mustHitTweenCheckBox);
+					checkY += 30;
+
+					// 轨道颜色
+					var trackColorsCheckBox2:PsychUICheckBox = new PsychUICheckBox(state.bg.x + 20, checkY, Language.get('visualeffect_trackcolors'), 200);
+					trackColorsCheckBox2.checked = chartEditorSave.data.showTrackColors;
+					trackColorsCheckBox2.onClick = function()
+					{
+						chartEditorSave.data.showTrackColors = trackColorsCheckBox2.checked;
+						chartEditorSave.flush();
+						// 立即应用设置
+						if(playerTrackOverlay != null) playerTrackOverlay.visible = trackColorsCheckBox2.checked;
+						if(opponentTrackOverlay != null) opponentTrackOverlay.visible = trackColorsCheckBox2.checked;
+						if(eventTrackOverlay != null) eventTrackOverlay.visible = trackColorsCheckBox2.checked;
+					};
+					trackColorsCheckBox2.cameras = state.cameras;
+					state.add(trackColorsCheckBox2);
+					checkY += 30;
+
+					// 轨道分隔线
+					var trackSeparatorsCheckBox:PsychUICheckBox = new PsychUICheckBox(state.bg.x + 20, checkY, Language.get('charting_showseparators_text'), 200);
+					trackSeparatorsCheckBox.checked = chartEditorSave.data.showTrackSeparators;
+					trackSeparatorsCheckBox.onClick = function()
+					{
+						chartEditorSave.data.showTrackSeparators = trackSeparatorsCheckBox.checked;
+						chartEditorSave.flush();
+						// 立即应用设置
+						for (separator in trackSeparators)
+						{
+							if(separator != null) separator.visible = trackSeparatorsCheckBox.checked;
+						}
+					};
+					trackSeparatorsCheckBox.cameras = state.cameras;
+					state.add(trackSeparatorsCheckBox);
+					checkY += 30;
+
+
+					// 显示角色
+					var showCharacterCheckBox:PsychUICheckBox = new PsychUICheckBox(state.bg.x + 20, checkY, Language.get('visualeffect_showcharacter'), 200);
+					showCharacterCheckBox.checked = showCharactersCheckBox.checked;
+					showCharacterCheckBox.onClick = function()
+					{
+						if(dad != null) dad.visible = showCharacterCheckBox.checked;
+						if(boyfriend != null) boyfriend.visible = showCharacterCheckBox.checked;
+						if(showHitboxCheckBox != null)
+						{
+							dadHitboxSprites.visible = showHitboxCheckBox.checked && showCharacterCheckBox.checked;
+							boyfriendHitboxSprites.visible = showHitboxCheckBox.checked && showCharacterCheckBox.checked;
+						}
+					};
+					showCharacterCheckBox.cameras = state.cameras;
+					state.add(showCharacterCheckBox);
+					checkY += 30;
+
+					// 碰撞箱
+					var showHitboxCheckBox2:PsychUICheckBox = new PsychUICheckBox(state.bg.x + 20, checkY, Language.get('visualeffect_hitbox'), 200);
+					showHitboxCheckBox2.checked = showHitboxCheckBox.checked;
+					showHitboxCheckBox2.onClick = function()
+					{
+						showHitboxCheckBox.checked = showHitboxCheckBox2.checked;
+						dadHitboxSprites.visible = showHitboxCheckBox.checked && dad.visible;
+						boyfriendHitboxSprites.visible = showHitboxCheckBox.checked && boyfriend.visible;
+					};
+					showHitboxCheckBox2.cameras = state.cameras;
+					state.add(showHitboxCheckBox2);
+					checkY += 30;
+
+					// 可拖动角色
+					var dragCharacterCheckBox2:PsychUICheckBox = new PsychUICheckBox(state.bg.x + 20, checkY, Language.get('visualeffect_dragcharacter'), 200);
+					dragCharacterCheckBox2.checked = dragCharactersCheckBox.checked;
+					dragCharacterCheckBox2.onClick = function()
+					{
+						dragCharactersCheckBox.checked = dragCharacterCheckBox2.checked;
+					};
+					dragCharacterCheckBox2.cameras = state.cameras;
+					state.add(dragCharacterCheckBox2);
+
+					var btnY = 350;
+					var btn:PsychUIButton = new PsychUIButton(0, btnY, 'OK', state.close);
+					btn.screenCenter(X);
+					btn.cameras = state.cameras;
+					state.add(btn);
 				}
 			));
 		}, btnWid);
@@ -5516,9 +6374,16 @@ trackColorsCheckBox = new PsychUICheckBox(state.bg.x + 20, btnY, Language.get('c
 		showLastGridButton.text.text = showPreviousSection	? Language.get('charting_hidelastsec_tab3') :  Language.get('charting_showlastsec_tab3');
 		showNextGridButton.text.text = showNextSection		? Language.get('charting_hidenextsec_tab3') :  Language.get('charting_shownextsec_tab3');
 
-		prevGridBg.visible = (curSec > 0 && showPreviousSection);
-		nextGridBg.visible = (curSec < PlayState.SONG.notes.length - 1 && showNextSection);
-		
+		prevOpponentGridBg.visible = (curSec > 0 && showPreviousSection);
+		nextOpponentGridBg.visible = (curSec < PlayState.SONG.notes.length - 1 && showNextSection);
+		if(SHOW_EVENT_COLUMN)
+		{
+			prevEventGridBg.visible = (curSec > 0 && showPreviousSection);
+			nextEventGridBg.visible = (curSec < PlayState.SONG.notes.length - 1 && showNextSection);
+		}
+		prevPlayerGridBg.visible = (curSec > 0 && showPreviousSection);
+		nextPlayerGridBg.visible = (curSec < PlayState.SONG.notes.length - 1 && showNextSection);
+
 		noteTypeLabelsButton.text.text = showNoteTypeLabels ? Language.get('charting_hidenlab_tab3') : Language.get('charting_shownlab_tab3');
 		for (num => text in MetaNote.noteTypeTexts)
 			text.visible = showNoteTypeLabels;
@@ -5529,7 +6394,7 @@ trackColorsCheckBox = new PsychUICheckBox(state.bg.x + 20, btnY, Language.get('c
 	{
 		undoActions = [];
 		setSongPlaying(false);
-		var gridLerp:Float = FlxMath.bound((scrollY + FlxG.height/2 - gridBg.y) / gridBg.height, 0.000001, 0.999999);
+		var gridLerp:Float = FlxMath.bound((scrollY + FlxG.height/2 - opponentGridBg.y) / opponentGridBg.height, 0.000001, 0.999999);
 		notes.sort(PlayState.sortByTime);
 		_cacheSections();
 
@@ -5988,15 +6853,18 @@ trackColorsCheckBox = new PsychUICheckBox(state.bg.x + 20, btnY, Language.get('c
 			return;
 		}
 
+
 		waveformSprite.visible = true;
-		waveformSprite.y = gridBg.y;
-		var width:Int = Std.int(GRID_SIZE * GRID_COLUMNS_PER_PLAYER * GRID_PLAYERS);
-		var height:Int = Std.int(gridBg.height);
+		waveformSprite.y = opponentGridBg.y;
+		var gridLayout = getGridLayout();
+		var width:Int = Std.int(gridLayout.totalWidth);
+		var height:Int = Std.int(opponentGridBg.height);
 		if(Std.int(waveformSprite.height) != height && waveformSprite.pixels != null)
 		{
 			waveformSprite.pixels.dispose();
 			waveformSprite.pixels.disposeImage();
 			waveformSprite.makeGraphic(width, height, 0x00FFFFFF);
+
 		}
 		waveformSprite.pixels.fillRect(new Rectangle(0, 0, width, height), 0x00FFFFFF);
 

@@ -138,10 +138,12 @@ class MetaNote extends Note
 class EventMetaNote extends MetaNote
 {
 	public var eventText:FlxText;
-	public function new(time:Float, eventData:Dynamic)
+	public var eventTrackIndex:Int = 0; // Event所在轨道索引(0-3)，用于分散同一时间点的多个event
+	public function new(time:Float, eventData:Dynamic, ?trackIndex:Int = 0)
 	{
 		super(time, -1, eventData);
 		this.isEvent = true;
+		this.eventTrackIndex = trackIndex; // 设置轨道索引
 		events = eventData[1];
 		//trace('events: $events');
 		

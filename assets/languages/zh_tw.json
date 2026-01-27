@@ -136,6 +136,7 @@
     "charting_waveform_tab3": "  頻譜設定...",
     "charting_go2time_tab3": "  快捷跳轉...",
     "charting_theme_tab3": "  主題設定...",
+    "charting_visualeffects_tab3": "  視覺效果設定...",
     "charting_resetuibox_tab3": "  重設UI框架",
 
     "prompt_new_text": "還有未儲存的進度，\n你確定要退出嗎？",
@@ -147,6 +148,7 @@
     "prompt_go2time_tab": "快捷跳轉時間/小節",
     "prompt_waveform_tab": "頻譜設定",
     "prompt_theme_tab": "主題設定",
+    "prompt_visualeffects_tab": "視覺效果設定",
 
     "ok_text": "確定",
     "cancel_text": "取消",
@@ -166,6 +168,16 @@
     "theme_bgcolor": "背景色",
     "theme_gridcolor": "網格顏色",
     "theme_ngridcolor": "下一小節的網格色",
+
+    "visualeffect_iconbop": "小圖示彈跳",
+    "visualeffect_bgbop": "背景彈跳",
+    "visualeffect_musthittween": "倒三角tween",
+    "visualeffect_trackcolors": "軌道顏色",
+    "charting_showtrackcolors_text": "顯示軌道顏色",
+    "charting_showseparators_text": "顯示軌道分隔線",
+    "visualeffect_showcharacter": "顯示角色",
+    "visualeffect_hitbox": "碰撞箱",
+    "visualeffect_dragcharacter": "可拖動角色",
 
     "go2time_time": "時間（以秒為單位）：",
     "go2time_section": "小節：",
