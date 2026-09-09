@@ -5,6 +5,7 @@ import flixel.input.keyboard.FlxKey;
 import flixel.input.gamepad.FlxGamepadInputID;
 
 import states.TitleState;
+import states.MainMenuState;
 import openfl.display.StageQuality;
 
 // Add a variable here and it will get automatically saved
@@ -346,6 +347,9 @@ import openfl.display.StageQuality;
 	public var fakeWindowTitlePreset:String = "Kathy Engine";
 	public var fakeOSVersion:String = "1.5.1";
 
+	// Fake Psych 版本伪装
+	public var fakePsychVersion:String = "1.0.4";
+
 	// 动态窗口标题（Dynamic Window Title）
 	public var dynamicWindowTitle:Bool = false; // 启用动态窗口标题（显示当前界面/模组/曲目信息）
 	public var windowTitleShowState:Bool = true; // 标题中显示当前界面/状态名称
@@ -411,7 +415,7 @@ import openfl.display.StageQuality;
 
 class ClientPrefs {
 	public static var data:SaveVariables = {};
-	public static var defaultData:SaveVariables = {}
+	public static var defaultData:SaveVariables = {};
 
 	/**
 	 * 把 stageQuality 字符串映射成 openfl.display.StageQuality。
@@ -583,6 +587,16 @@ class ClientPrefs {
 	public static function loadPrefs() {
 		#if ACHIEVEMENTS_ALLOWED Achievements.load(); #end
 
+		// @:structInit 类不支持 new，手动补全 SaveVariables 字段的默认值
+		if (Reflect.fields(defaultData).length == 0) {
+			defaultData.fakeOSVersion = '1.5.1';
+			defaultData.fakePsychVersion = '1.0.4';
+			defaultData.enableLegacyClassAlias = true;
+			defaultData.fakeOSMode = false;
+			defaultData.fakeWindowTitle = 'Kathy Engine';
+			defaultData.fakeWindowTitlePreset = 'Kathy Engine';
+		}
+
 		// Corruption detection & auto-restore: if the main save is truncated/corrupted (zero fields),
 		// but the backup still holds data, restore the main save from it and self-heal via flush.
 		// On first run both are empty, so we fall through to defaults; no false trigger.
@@ -683,6 +697,10 @@ class ClientPrefs {
 		if (data.fakeWindowTitlePreset != null) {
 			data.fakeWindowTitle = data.fakeWindowTitlePreset;
 		}
+
+		// 从存档恢复 Fake OS / Psych 版本号，覆盖源码默认值
+		MainMenuState.psychEngineVersion = data.fakePsychVersion;
+		MainMenuState.osEngineVersion = data.fakeOSVersion;
 
 		// 确保 FlxG 完全初始化后再应用设置
 		if (FlxG.game != null) {

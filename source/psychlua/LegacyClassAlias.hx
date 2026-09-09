@@ -37,17 +37,41 @@ class LegacyClassAlias
 		'BGSprite' => 'objects.BGSprite',
 		'AttachedSprite' => 'objects.AttachedSprite',
 		'AttachedText' => 'objects.AttachedText',
+		// 旧版常用但 KG 放在 objects/ 下的辅助类
+		'Bar' => 'objects.Bar',
+		'MenuItem' => 'objects.MenuItem',
+		'MenuCharacter' => 'objects.MenuCharacter',
+		'MusicPlayer' => 'objects.MusicPlayer',
+		'TypedAlphabet' => 'objects.TypedAlphabet',
+		'CheckboxThingie' => 'objects.CheckboxThingie',
+		'AchievementPopup' => 'objects.AchievementPopup',
 
 		// ---- states 包 ----
 		'PlayState' => 'states.PlayState',
 		'TitleState' => 'states.TitleState',
+		'MainMenuState' => 'states.MainMenuState',
 		'StoryMenuState' => 'states.StoryMenuState',
 		'FreeplayState' => 'states.FreeplayState',
+		'AchievementsMenuState' => 'states.AchievementsMenuState',
+		'CreditsState' => 'states.CreditsState',
+		'FlashingState' => 'states.FlashingState',
+		'LoadingState' => 'states.LoadingState',
+		'ModsMenuState' => 'states.ModsMenuState',
 		// 0.6.3 的旧 ChartingState 被移入 `states.editors.ChartingState`
 		'ChartingState' => 'states.editors.ChartingState',
 
 		// ---- substates 包 ----
 		'GameOverSubstate' => 'substates.GameOverSubstate',
+		'PauseSubState' => 'substates.PauseSubState',
+		'ResetScoreSubState' => 'substates.ResetScoreSubState',
+		// 旧版 OutdatedState 在 KG 中重命名为 OutdatedSubState
+		'OutdatedState' => 'substates.OutdatedSubState',
+
+		// ---- options 包 ----
+		// GameplayChangersSubstate 旧版在 substates/，KG 移到了 options/
+		'GameplayChangersSubstate' => 'options.GameplayChangersSubstate',
+		'OptionsState' => 'options.OptionsState',
+		'BaseOptionsMenu' => 'options.BaseOptionsMenu',
 
 		// ---- backend 包 ----
 		'Conductor' => 'backend.Conductor',
@@ -60,10 +84,25 @@ class LegacyClassAlias
 		'WeekData' => 'backend.WeekData',
 		'Song' => 'backend.Song',
 		'BaseStage' => 'backend.BaseStage',
+		// 旧版常用但原不在别名表中的 backend 类
+		'Achievements' => 'backend.Achievements',
+		'Controls' => 'backend.Controls',
+		'Highscore' => 'backend.Highscore',
+		'Difficulty' => 'backend.Difficulty',
+		'Rating' => 'backend.Rating',
+		'StageData' => 'backend.StageData',
+		'MusicBeatSubstate' => 'backend.MusicBeatSubstate',   // 区别于 MusicBeatState
+		'DiscordClient' => 'backend.Discord',                // KG 中类名是 DiscordClient
+		'CustomFadeTransition' => 'backend.CustomFadeTransition',
+		'InputFormatter' => 'backend.InputFormatter',
+		'PsychAnimationController' => 'backend.animation.PsychAnimationController',
 
 		// ---- shaders 包 ----
 		'ColorSwap' => 'shaders.ColorSwap',
-		'PsychCamera' => 'backend.PsychCamera'
+		'PsychCamera' => 'backend.PsychCamera',
+		'WiggleEffect' => 'shaders.WiggleEffect',
+		'OverlayShader' => 'shaders.OverlayShader',
+		'BlendModeEffect' => 'shaders.BlendModeEffect'
 	];
 
 	/**
@@ -77,12 +116,16 @@ class LegacyClassAlias
 		if (c != null)
 			return c;
 
-		var alias:String = aliases.get(name);
-		if (alias != null)
+		// 旧版短类名兼容层：可通过设置中「旧版短类名兼容」选项关闭
+		if (backend.ClientPrefs.data.enableLegacyClassAlias)
 		{
-			c = Type.resolveClass(alias);
-			if (c != null)
-				return c;
+			var alias:String = aliases.get(name);
+			if (alias != null)
+			{
+				c = Type.resolveClass(alias);
+				if (c != null)
+					return c;
+			}
 		}
 		return null;
 	}
@@ -108,6 +151,13 @@ class LegacyClassAlias
  *
  * Splash
  *   旧版独立 `Splash` 类对应 `objects.NoteSplash`，旧写法需改写。
+ *
+ * Prompt
+ *   旧版 `Prompt` 是独立顶层类；KG 中 `Prompt` 被移入 `states.editors.content.Prompt`，不再是顶层类，
+ *   无法通过 `Type.resolveClass('Prompt')` 解析，旧脚本需改用完整路径。
+ *
+ * GameOverSubstate（0.7.3）
+ *   0.7.3 中 `GameOverSubstate` 从顶层移入 `substates/`；KG 保留了该路径所以别名可直接生效。
  *
  * FlxTrail / FlxRuntimeShader / FlxCamera 等
  *   属于 flixel 核心库（如 `flixel.addons.effects.FlxTrail` / `flixel.addons.display.FlxRuntimeShader`），

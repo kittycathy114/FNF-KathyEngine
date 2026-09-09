@@ -4,7 +4,7 @@ package backend;
 import Sys.sleep;
 import sys.thread.Thread;
 import lime.app.Application;
-
+import backend.ClientPrefs;
 import hxdiscord_rpc.Discord;
 import hxdiscord_rpc.Types;
 

@@ -16,6 +16,7 @@ import haxe.io.BytesInput;
 import sys.io.File as SysFile;
 import sys.FileSystem;
 import states.ModsImport;
+import backend.ClientPrefs;
 
 enum MainMenuColumn {
 	LEFT;
@@ -26,6 +27,7 @@ enum MainMenuColumn {
 class MainMenuState extends MusicBeatState
 {
 	public static var psychEngineVersion:String = '1.0.4';
+	public static var osEngineVersion:String = '1.5.1';
 	public static var kathyEngineVersion(get, never):String;
 	static function get_kathyEngineVersion():String
 	{

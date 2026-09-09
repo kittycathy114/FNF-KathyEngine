@@ -2,6 +2,7 @@ package options;
 
 import flixel.FlxG;
 import backend.ClientPrefs;
+import states.MainMenuState;
 
 class CompatibilitySettingsSubState extends BaseOptionsMenu
 {
@@ -61,7 +62,7 @@ class CompatibilitySettingsSubState extends BaseOptionsMenu
 			Language.get("fake_window_title_desc"),
 			'fakeWindowTitlePreset',
 			STRING,
-			["Kathy Engine", "Friday Night Funkin': MintRhythm Engine", "Friday Night Funkin': OS Engine", "Friday Night Funkin': Psych Engine", "Friday Night Funkin'", "FNF", "WTF in FNF", "Rhythm Game", "Not FNF", "Just a Game"]);
+			["Kathy Engine", "Psych Engine: MintRhythm Extended", "Friday Night Funkin': Psych Engine", "Friday Night Funkin': OS Engine", "Friday Night Funkin'", "FNF", "WTF in FNF", "Rhythm Game", "Not FNF", "Just a Game"]);
 		option.onChange = onChangeFakeWindowTitle;
 		addOption(option);
 		#end
@@ -71,8 +72,24 @@ class CompatibilitySettingsSubState extends BaseOptionsMenu
 			Language.get("fake_os_version_desc"),
 			'fakeOSVersion',
 			STRING,
-			["1.0.0", "1.0.1", "1.1.0", "1.2.0", "1.3.0", "1.3.1", "1.4.0", "1.4.1", "1.5.0", "1.5.1"]);
+			["1.5.1", "1.5.0", "1.4.1", "1.4.0", "1.3.1", "1.3.0", "1.2.0", "1.1.0", "1.0.1", "1.0.0"]);
 		option.onChange = onChangeFakeOSMode;
+		addOption(option);
+
+		// Fake Psych 版本
+		option = new Option(Language.get('fake_psych_version'),
+			Language.get("fake_psych_version_desc"),
+			'fakePsychVersion',
+			STRING,
+			["1.0.4", "1.0.3", "1.0.2h", "1.0.1", "1.0-prerelease", "1.0", "0.7.3", "0.7.2h", "0.7.2", "0.7.1h", "0.7", "0.6.3", "0.6.2", "0.6.1", "0.6", "0.5.2h", "0.5.2", "0.5.1", "0.5"]);
+		option.onChange = onChangeFakePsychVersion;
+		addOption(option);
+
+		// 旧版短类名兼容层
+		option = new Option(Language.get('legacy_class_alias'),
+			Language.get("legacy_class_alias_desc"),
+			'enableLegacyClassAlias',
+			BOOL);
 		addOption(option);
 
 		// 长按音符仅播放一次确认动画
@@ -108,6 +125,7 @@ class CompatibilitySettingsSubState extends BaseOptionsMenu
 
 	function onChangeFakeOSMode()
 	{
+		MainMenuState.osEngineVersion = ClientPrefs.data.fakeOSVersion;
 		#if (!mobile && !html5)
 		Main.updateWindowTitle();
 		#end
@@ -119,5 +137,15 @@ class CompatibilitySettingsSubState extends BaseOptionsMenu
 		#if (!mobile && !html5)
 		Main.updateWindowTitle();
 		#end
+	}
+
+	function onChangeFakePsychVersion()
+	{
+		MainMenuState.psychEngineVersion = ClientPrefs.data.fakePsychVersion;
+	}
+
+	function onChangeFakeOSVersion()
+	{
+		MainMenuState.osEngineVersion = ClientPrefs.data.fakeOSVersion;
 	}
 }

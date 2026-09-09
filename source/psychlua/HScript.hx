@@ -407,9 +407,13 @@ class HScript extends Iris
 
 		// [COMPAT] 注册旧版 Psych(0.6.3/0.7.3) 常用顶层短类名，使旧模组无需 import/addHaxeLibrary 即可使用
 		// 仅在别名表对应的当前类能解析到时才注册，避免覆盖已有的同名定义
-		for (shortName => fullPath in LegacyClassAlias.aliases) {
-			var c:Dynamic = Type.resolveClass(fullPath);
-			if (c != null) set(shortName, c);
+		// 受「旧版短类名兼容」设置控制：关闭时不注入，HScript 内只能用完整路径
+		if (backend.ClientPrefs.data.enableLegacyClassAlias)
+		{
+			for (shortName => fullPath in LegacyClassAlias.aliases) {
+				var c:Dynamic = Type.resolveClass(fullPath);
+				if (c != null) set(shortName, c);
+			}
 		}
 
 		// Launch External EXE (Windows only)
