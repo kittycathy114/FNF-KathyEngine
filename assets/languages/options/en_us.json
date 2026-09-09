@@ -420,6 +420,8 @@
     "rating_counter": "Rating Counter",
     "rating_counter_animation": "Rating Counter Animation",
     "show_watermark": "Show Watermark",
+    "watermark_type_desc": "Set the engine type shown in the game watermark.",
+    "watermark_type": "Watermark Engine Type",
     "enable_game_log_display": "Game Log Display",
     "enable_console_log_output": "Console Log Output",
     "ratings_opacity": "Rating Sprite Opacity",

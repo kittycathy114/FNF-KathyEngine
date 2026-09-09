@@ -419,7 +419,7 @@ class PlayState extends MusicBeatState
 	public var botplaySine:Float = 0;
 	public var botplayTxt:FlxText;
 	public var replayTxt:FlxText;
-	public var watermarkText:FlxText;
+	public var watermarkTxt:FlxText;
 	public var ratingCounter:FlxText;
 	public var ratingCounterModule:objects.RatingCounter;
 
@@ -1345,27 +1345,26 @@ isReplaying = false;
 			botplayTxt.y = ClientPrefs.data.botplayStyle == 'Kade' ? healthBar.y + 120 : healthBar.y + 70;
 
 		var watermarkContent:String;
-		if (ClientPrefs.data.fakeOSMode)
+		switch (ClientPrefs.data.watermarkType)
 		{
-			if (ClientPrefs.data.timebarStyle == 'Leather')
+			case 'OS':
 				watermarkContent = 'OS v${ClientPrefs.data.fakeOSVersion}';
-			else
-				watermarkContent = '${SONG.song}-${Difficulty.getString().toUpperCase()} | OS ${ClientPrefs.data.fakeOSVersion}';
-		}
-		else
-		{
-			if (ClientPrefs.data.timebarStyle == 'Leather' || ClientPrefs.data.timebarStyle == 'Leather (Legacy)')
+			case 'Psych':
+				watermarkContent = 'PE ${MainMenuState.psychEngineVersion}';
+			case 'Kade':
+				watermarkContent = 'KE v1.5.4';
+			default: // Kathy
 				watermarkContent = 'KYE v${MainMenuState.kathyEngineVersion}';
-			else
-				watermarkContent = '${SONG.song}-${Difficulty.getString().toUpperCase()} | KYE ${MainMenuState.kathyEngineVersion}';
 		}
+		if (ClientPrefs.data.watermarkType == 'OS' || ClientPrefs.data.watermarkType == 'Kathy' || ClientPrefs.data.watermarkType == 'Psych' || ClientPrefs.data.watermarkType == 'Kade')
+			watermarkContent = '${SONG.song}-${Difficulty.getString().toUpperCase()} | ' + watermarkContent;
 		
-		watermarkText = new FlxText(20, FlxG.height - 20, 0, watermarkContent, 14);
-		watermarkText.setFormat(Paths.font("vcr.ttf"), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
-		watermarkText.scrollFactor.set();
-		watermarkText.y = !ClientPrefs.data.downScroll ? (watermarkText.height * 0.5) : FlxG.height - (watermarkText.height * 1.5);
-		watermarkText.visible = !ClientPrefs.data.hideHud;
-		if (ClientPrefs.data.waterMarkPlay)	addToHUD(watermarkText);
+		watermarkTxt = new FlxText(20, FlxG.height - 20, 0, watermarkContent, 14);
+		watermarkTxt.setFormat(Paths.font("vcr.ttf"), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		watermarkTxt.scrollFactor.set();
+		watermarkTxt.y = !ClientPrefs.data.downScroll ? (watermarkTxt.height * 0.5) : FlxG.height - (watermarkTxt.height * 1.5);
+		watermarkTxt.visible = !ClientPrefs.data.hideHud;
+		if (ClientPrefs.data.waterMarkPlay)	addToHUD(watermarkTxt);
 
 		// 使用新的 RatingCounter 模块（仅当开启评分计数器时创建，避免禁用后左侧依旧显示文本）
 		if (ClientPrefs.data.ratCounter)

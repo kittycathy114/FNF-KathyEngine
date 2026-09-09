@@ -425,6 +425,8 @@
     "rating_counter": "评级计数器",
     "rating_counter_animation": "评级计数器动效",
     "show_watermark": "显示水印",
+    "watermark_type_desc": "设置游戏内水印显示的引擎类型。",
+    "watermark_type": "水印引擎类型",
     "enable_game_log_display": "游戏日志显示",
     "enable_console_log_output": "控制台日志",
     "ratings_opacity": "评级精灵不透明度",

@@ -419,6 +419,8 @@
     "rating_counter": "評級計數器",
     "rating_counter_animation": "評級計數器動效",
     "show_watermark": "顯示浮水印",
+    "watermark_type_desc": "設定遊戲內水印顯示的引擎類型。",
+    "watermark_type": "水印引擎類型",
     "enable_game_log_display": "遊戲日誌顯示",
     "enable_console_log_output": "控制檯日誌",
     "ratings_opacity": "評級精靈不透明度",

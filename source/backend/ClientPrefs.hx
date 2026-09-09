@@ -346,6 +346,7 @@ import openfl.display.StageQuality;
 	public var fakeWindowTitle:String = "Kathy Engine";
 	public var fakeWindowTitlePreset:String = "Kathy Engine";
 	public var fakeOSVersion:String = "1.5.1";
+	public var watermarkType:String = 'Kathy';
 
 	// Fake Psych 版本伪装
 	public var fakePsychVersion:String = "1.0.4";

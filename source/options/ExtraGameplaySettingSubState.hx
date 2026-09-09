@@ -301,6 +301,13 @@ class ExtraGameplaySettingSubState extends BaseOptionsMenu
 			BOOL);
 		addOption(option);
 
+		option = new Option(Language.get('watermark_type'),
+			Language.get("watermark_type_desc"),
+			'watermarkType',
+			STRING,
+			['Kathy', 'OS', 'Psych', 'Kade']);
+		addOption(option);
+
 		option = new Option(Language.get('enable_game_log_display'),
 			Language.get("enable_game_log_desc"),
 			'enableGameLog',
