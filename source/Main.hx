@@ -587,13 +587,7 @@ class Main extends Sprite
 	{
 		if (Lib.current.stage != null && Lib.current.stage.window != null)
 		{
-			if (ClientPrefs.data.fakeOSMode)
-			{
-				Lib.current.stage.window.title = ClientPrefs.data.fakeWindowTitle;
-				return;
-			}
-
-			var baseTitle:String = Application.current.meta.get('title');
+			var baseTitle:String = ClientPrefs.data.windowTitle != null ? ClientPrefs.data.windowTitle : Application.current.meta.get('title');
 			if (baseTitle == null) baseTitle = "Kathy Engine";
 
 			var adminSuffix:String = "";

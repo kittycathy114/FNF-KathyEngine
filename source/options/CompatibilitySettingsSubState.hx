@@ -48,22 +48,14 @@ class CompatibilitySettingsSubState extends BaseOptionsMenu
 			psychlua.LuaCompatRouter.VERSIONS.copy());
 		addOption(option);
 
-		// Fake OS 伪装模式
-		option = new Option(Language.get('fake_os_mode'),
-			Language.get("fake_os_mode_desc"),
-			'fakeOSMode',
-			BOOL);
-		option.onChange = onChangeFakeOSMode;
-		addOption(option);
-
 		#if !mobile
-		// Fake 窗口标题
+		// 窗口标题
 		option = new Option(Language.get('fake_window_title'),
 			Language.get("fake_window_title_desc"),
-			'fakeWindowTitlePreset',
+			'windowTitlePreset',
 			STRING,
 			["Kathy Engine", "Psych Engine: MintRhythm Extended", "Friday Night Funkin': Psych Engine", "Friday Night Funkin': OS Engine", "Friday Night Funkin'", "FNF", "WTF in FNF", "Rhythm Game", "Not FNF", "Just a Game"]);
-		option.onChange = onChangeFakeWindowTitle;
+		option.onChange = onChangeWindowTitle;
 		addOption(option);
 		#end
 
@@ -131,9 +123,9 @@ class CompatibilitySettingsSubState extends BaseOptionsMenu
 		#end
 	}
 
-	function onChangeFakeWindowTitle()
+	function onChangeWindowTitle()
 	{
-		ClientPrefs.data.fakeWindowTitle = ClientPrefs.data.fakeWindowTitlePreset;
+		ClientPrefs.data.windowTitle = ClientPrefs.data.windowTitlePreset;
 		#if (!mobile && !html5)
 		Main.updateWindowTitle();
 		#end

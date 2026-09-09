@@ -341,10 +341,9 @@ import openfl.display.StageQuality;
 	public var fpsShowResolution:Bool = false; // 显示分辨率
 	public var fpsShowRefreshRate:Bool = false; // 显示刷新率
 
-	// Fake OS 伪装功能
-	public var fakeOSMode:Bool = false;
-	public var fakeWindowTitle:String = "Kathy Engine";
-	public var fakeWindowTitlePreset:String = "Kathy Engine";
+	// 窗口标题
+	public var windowTitle:String = "Kathy Engine";
+	public var windowTitlePreset:String = "Kathy Engine";
 	public var fakeOSVersion:String = "1.5.1";
 	public var watermarkType:String = 'Kathy';
 
@@ -596,9 +595,8 @@ class ClientPrefs {
 			defaultData.fakeOSVersion = '1.5.1';
 			defaultData.fakePsychVersion = '1.0.4';
 			defaultData.enableLegacyClassAlias = true;
-			defaultData.fakeOSMode = false;
-			defaultData.fakeWindowTitle = 'Kathy Engine';
-			defaultData.fakeWindowTitlePreset = 'Kathy Engine';
+			defaultData.windowTitle = 'Kathy Engine';
+			defaultData.windowTitlePreset = 'Kathy Engine';
 		}
 
 		// Corruption detection & auto-restore: if the main save is truncated/corrupted (zero fields),
@@ -697,9 +695,9 @@ class ClientPrefs {
 			while (data.arrowRGBPixel.length < 4) data.arrowRGBPixel.push([195, 75, 75]);
 		}
 
-		// 确保 Fake OS 标题从预设中正确初始化
-		if (data.fakeWindowTitlePreset != null) {
-			data.fakeWindowTitle = data.fakeWindowTitlePreset;
+		// 确保窗口标题从预设中正确初始化
+		if (data.windowTitlePreset != null) {
+			data.windowTitle = data.windowTitlePreset;
 		}
 
 		// 从存档恢复 Fake OS / Psych 版本号，覆盖源码默认值
@@ -717,12 +715,6 @@ class ClientPrefs {
 			if(Main.gameLogVar != null)
 				Main.gameLogVar.setEnabled(data.enableGameLog);
 
-			// 应用 Fake OS 窗口标题
-			#if (!mobile && !html5)
-			if (data.fakeOSMode && FlxG.stage != null && FlxG.stage.window != null) {
-				FlxG.stage.window.title = data.fakeWindowTitle;
-			}
-			#end
 
 			#if (!html5 && !switch)
 			FlxG.autoPause = ClientPrefs.data.autoPause;
