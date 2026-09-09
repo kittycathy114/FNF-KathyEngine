@@ -350,6 +350,9 @@ import openfl.display.StageQuality;
 	// Fake Psych 版本伪装
 	public var fakePsychVersion:String = "1.0.4";
 
+	// 旧版短类名兼容层（0.6.3/0.7.3 脚本可用短名，如 getPropertyFromClass('Note',...)）
+	public var enableLegacyClassAlias:Bool = true;
+
 	// 动态窗口标题（Dynamic Window Title）
 	public var dynamicWindowTitle:Bool = false; // 启用动态窗口标题（显示当前界面/模组/曲目信息）
 	public var windowTitleShowState:Bool = true; // 标题中显示当前界面/状态名称
