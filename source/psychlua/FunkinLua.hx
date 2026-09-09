@@ -735,6 +735,19 @@ class FunkinLua {
 			game.songScore = value;
 			game.RecalculateRating();
 		});
+		// 旧版 PE (0.6.3/0.7.3) 兼容：1.0.4 官方移除了 getScore/getHits/getMisses 只读函数，
+		// 仅在 luaCompatVersion 为旧版模式时注册，读取走 songScore/songHits/songMisses 字段
+		if(LuaCompatRouter.isLegacy()) {
+			Lua_helper.add_callback(lua, "getScore", function() {
+				return game.songScore;
+			});
+			Lua_helper.add_callback(lua, "getMisses", function() {
+				return game.songMisses;
+			});
+			Lua_helper.add_callback(lua, "getHits", function() {
+				return game.songHits;
+			});
+		}
 		Lua_helper.add_callback(lua, "setMisses", function(value:Int = 0) {
 			game.songMisses = value;
 			game.RecalculateRating();
@@ -1786,7 +1799,7 @@ class FunkinLua {
 		#end
 	}
 
-	function oldTweenFunction(tag:String, vars:String, tweenValue:Any, duration:Float, ease:String, funcName:String)
+	public function oldTweenFunction(tag:String, vars:String, tweenValue:Any, duration:Float, ease:String, funcName:String)
 	{
 		var target:Dynamic = LuaUtils.tweenPrepare(tag, vars);
 		var variables = MusicBeatState.getVariables();
@@ -1796,13 +1809,18 @@ class FunkinLua {
 			{
 				var originalTag:String = tag;
 				tag = LuaUtils.formatVariable('tween_$tag');
-				variables.set(tag, FlxTween.tween(target, tweenValue, duration, {ease: LuaUtils.getTweenEaseByString(ease),
+				var legacy:Bool = LuaCompatRouter.isLegacy();
+				var tw:FlxTween = FlxTween.tween(target, tweenValue, duration, {ease: LuaUtils.getTweenEaseByString(ease),
 					onComplete: function(twn:FlxTween)
 					{
 						variables.remove(tag);
+						if(legacy && PlayState.instance != null) PlayState.instance.modchartTweens.remove(originalTag);
 						if(PlayState.instance != null) PlayState.instance.callOnLuas('onTweenCompleted', [originalTag, vars]);
 					}
-				}));
+				});
+				variables.set(tag, tw);
+				// 旧版 PE 兼容：以原始 tag 额外写入 modchartTweens，便于 runHaxeCode 直接访问
+				if(legacy && PlayState.instance != null) PlayState.instance.modchartTweens.set(originalTag, tw);
 			}
 			else FlxTween.tween(target, tweenValue, duration, {ease: LuaUtils.getTweenEaseByString(ease)});
 			return tag;
@@ -1819,20 +1837,25 @@ class FunkinLua {
 		if(strumNote == null) return null;
 
 		if(tag != null)
-		{
-			var originalTag:String = tag;
-			tag = LuaUtils.formatVariable('tween_$tag');
-			LuaUtils.cancelTween(tag);
+			{
+				var originalTag:String = tag;
+				tag = LuaUtils.formatVariable('tween_$tag');
+				LuaUtils.cancelTween(tag);
 
-			var variables = MusicBeatState.getVariables();
-			variables.set(tag, FlxTween.tween(strumNote, data, duration, {ease: LuaUtils.getTweenEaseByString(ease),
-				onComplete: function(twn:FlxTween)
-				{
-					variables.remove(tag);
-					if(PlayState.instance != null) PlayState.instance.callOnLuas('onTweenCompleted', [originalTag]);
-				}
-			}));
-			return tag;
+				var variables = MusicBeatState.getVariables();
+				var legacy:Bool = LuaCompatRouter.isLegacy();
+				var tw:FlxTween = FlxTween.tween(strumNote, data, duration, {ease: LuaUtils.getTweenEaseByString(ease),
+					onComplete: function(twn:FlxTween)
+					{
+						variables.remove(tag);
+						if(legacy && PlayState.instance != null) PlayState.instance.modchartTweens.remove(originalTag);
+						if(PlayState.instance != null) PlayState.instance.callOnLuas('onTweenCompleted', [originalTag]);
+					}
+				});
+				variables.set(tag, tw);
+				// 旧版 PE 兼容：以原始 tag 额外写入 modchartTweens
+				if(legacy && PlayState.instance != null) PlayState.instance.modchartTweens.set(originalTag, tw);
+				return tag;
 		}
 		else FlxTween.tween(strumNote, data, duration, {ease: LuaUtils.getTweenEaseByString(ease)});
 		return null;

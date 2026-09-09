@@ -370,6 +370,18 @@ class LuaUtils
 			twn.destroy();
 			variables.remove(tag);
 		}
+		// 旧版 PE (0.6.3/0.7.3) 兼容：modchartTweens 里可能以原始 tag 存了同名的 tween，一并取消
+		if(LuaCompatRouter.isLegacy() && PlayState.instance != null)
+		{
+			var rawTag:String = tag.startsWith('tween_') ? tag.substr(7) : tag;
+			var legacy:FlxTween = PlayState.instance.modchartTweens.get(rawTag);
+			if(legacy != null)
+			{
+				legacy.cancel();
+				legacy.destroy();
+				PlayState.instance.modchartTweens.remove(rawTag);
+			}
+		}
 	}
 
 	public static function cancelTimer(tag:String) {

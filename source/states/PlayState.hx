@@ -19,9 +19,13 @@ import flixel.graphics.FlxGraphic;
 import flixel.FlxObject;
 import flixel.FlxSubState;
 import flixel.util.FlxSort;
-import flixel.util.FlxStringUtil;
-import flixel.util.FlxSave;
-import flixel.input.keyboard.FlxKey;
+	import flixel.util.FlxStringUtil;
+	import flixel.util.FlxSave;
+	import flixel.text.FlxText;
+	import flixel.util.FlxTimer;
+	import flixel.sound.FlxSound;
+	import psychlua.ModchartSprite;
+	import flixel.input.keyboard.FlxKey;
 import flixel.animation.FlxAnimationController;
 import lime.utils.Assets;
 import openfl.utils.AssetType;
@@ -457,6 +461,18 @@ class PlayState extends MusicBeatState
 	public var inCutscene:Bool = false;
 	public var skipCountdown:Bool = false;
 	var songLength:Float = 0;
+
+	// 旧版 PE (0.6.3/0.7.3) 兼容字段：模组脚本 runHaxeCode 会直接访问 game.modchartTweens.set/remove
+	// 1.0.4 官方已移除该字段，这里补回以保证旧脚本可运行（KathyEngine 自身 tween 走 variables，不使用此 map）
+	public var modchartTweens:Map<String, FlxTween> = new Map<String, FlxTween>();
+	// 旧版 PE (0.6.3/0.7.3) 兼容：1.0.4 官方移除了这些 modchart* 公开字段，
+	// 补回以避免老脚本 runHaxeCode 直接反射 game.modchartXxx 时报 Invalid access to field。
+	// 这些字段始终存在（编译期无法按 luaCompatVersion 动态开关），KathyEngine 自身不使用它们。
+	public var modchartSprites:Map<String, ModchartSprite> = new Map<String, ModchartSprite>();
+	public var modchartTexts:Map<String, FlxText> = new Map<String, FlxText>();
+	public var modchartTimers:Map<String, FlxTimer> = new Map<String, FlxTimer>();
+	public var modchartSounds:Map<String, FlxSound> = new Map<String, FlxSound>();
+	public var modchartSaves:Map<String, FlxSave> = new Map<String, FlxSave>();
 
 	public var boyfriendCameraOffset:Array<Float> = null;
 	public var opponentCameraOffset:Array<Float> = null;

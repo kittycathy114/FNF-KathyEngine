@@ -115,4 +115,10 @@ class LuaCompatRouter
 	{
 		return resolveVersion() == VERSION_1_0_4;
 	}
+
+	/** 是否为旧版 PE 兼容模式（0.6.3 / 0.7.3）。该模式下引擎 tween 会额外写入 PlayState.modchartTweens，以复现旧版语义。 */
+	public static function isLegacy():Bool
+	{
+		return resolveVersion() == VERSION_0_6_3 || resolveVersion() == VERSION_0_7_3;
+	}
 }
