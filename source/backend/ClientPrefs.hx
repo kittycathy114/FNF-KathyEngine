@@ -257,6 +257,9 @@ import openfl.display.StageQuality;
 	public var legacynotepos:Bool = false;
 	public var legacyHUD:Bool = false; // 兼容旧版Psych(0.6.x): 将HUD元素直接加入state而非uiGroup, 供旧模组脚本用getObjectOrder/setObjectOrder定位
 	public var chartingVersion:String = '1.0.4-Kathy'; // 制谱器版本: '1.0.4-Kathy' | '1.0.4-Official' | '0.7.3' | '0.6.3'
+	// Lua API 兼容版本：决定 setObjectCamera / doTween* / makeAnimatedLuaSprite 等 API 的默认参数与行为
+	// 'auto' = 自动识别（暂时回落到 1.0.4），'1.0.4' = KathyEngine 原生（默认），'0.7.3' / '0.6.3' = 旧版脚本兼容
+	public var luaCompatVersion:String = '1.0.4';
 	public var ratingsPos:String = "camHUD";
 
 	public var fpsPosition:String = "TOP_LEFT"; // "TOP_LEFT", "TOP_RIGHT", "BOTTOM_LEFT", "BOTTOM_RIGHT"

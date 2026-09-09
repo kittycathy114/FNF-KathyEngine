@@ -205,6 +205,13 @@ class ExtraGameplaySettingSubState extends BaseOptionsMenu
 			states.editors.ChartingRouter.VERSIONS.copy());
 		addOption(option);
 
+		option = new Option(Language.get('lua_compat_version'),
+			Language.get("lua_compat_version_desc"),
+			'luaCompatVersion',
+			STRING,
+			psychlua.LuaCompatRouter.VERSIONS.copy());
+		addOption(option);
+
 		option = new Option(Language.get('score_incrase_when_botplay'),
 			Language.get("bot_addscore_desc"),
 			'botplayScore',

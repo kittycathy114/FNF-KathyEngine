@@ -76,7 +76,9 @@ class ExtraFunctions
 			return Reflect.getProperty(controller.justReleased, name) == true;
 		});
 
-		Lua_helper.add_callback(lua, "keyJustPressed", function(name:String = '') {
+		Lua_helper.add_callback(lua, "keyJustPressed", function(?name:String = null) {
+			if (name == null) name = LuaCompatRouter.defaultKeyName();
+			if (name == null) name = '';
 			name = name.toLowerCase().trim();
 			switch(name) {
 				case 'left': return PlayState.instance.controls.NOTE_LEFT_P;
@@ -89,7 +91,9 @@ class ExtraFunctions
 			}
 			return false;
 		});
-		Lua_helper.add_callback(lua, "keyPressed", function(name:String = '') {
+		Lua_helper.add_callback(lua, "keyPressed", function(?name:String = null) {
+			if (name == null) name = LuaCompatRouter.defaultKeyName();
+			if (name == null) name = '';
 			name = name.toLowerCase().trim();
 			switch(name) {
 				case 'left': return PlayState.instance.controls.NOTE_LEFT;
@@ -102,7 +106,9 @@ class ExtraFunctions
 			}
 			return false;
 		});
-		Lua_helper.add_callback(lua, "keyReleased", function(name:String = '') {
+		Lua_helper.add_callback(lua, "keyReleased", function(?name:String = null) {
+			if (name == null) name = LuaCompatRouter.defaultKeyName();
+			if (name == null) name = '';
 			name = name.toLowerCase().trim();
 			switch(name) {
 				case 'left': return PlayState.instance.controls.NOTE_LEFT_R;

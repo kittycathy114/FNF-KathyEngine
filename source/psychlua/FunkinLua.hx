@@ -318,6 +318,10 @@ class FunkinLua {
 		Lua_helper.add_callback(lua, "getVar", function(varName:String) {
 			return MusicBeatState.getVariables().get(varName);
 		});
+		// 返回当前 Lua API 兼容版本（'1.0.4' / '0.7.3' / '0.6.3' / 'auto'），供高级脚本做分支
+		Lua_helper.add_callback(lua, "getLuaCompatVersion", function() {
+			return LuaCompatRouter.resolveVersion();
+		});
 
 		Lua_helper.add_callback(lua, "addLuaScript", function(luaFile:String, ?ignoreAlreadyRunning:Bool = false) {
 			var luaPath:String = findScript(luaFile);
@@ -579,19 +583,24 @@ class FunkinLua {
 			return null;
 		});
 
-		Lua_helper.add_callback(lua, "doTweenX", function(tag:String, vars:String, value:Dynamic, duration:Float, ?ease:String = 'linear') {
+		Lua_helper.add_callback(lua, "doTweenX", function(tag:String, vars:String, value:Dynamic, duration:Float, ?ease:String = null) {
+			ease = LuaCompatRouter.resolveEase(ease);
 			return oldTweenFunction(tag, vars, {x: value}, duration, ease, 'doTweenX');
 		});
-		Lua_helper.add_callback(lua, "doTweenY", function(tag:String, vars:String, value:Dynamic, duration:Float, ?ease:String = 'linear') {
+		Lua_helper.add_callback(lua, "doTweenY", function(tag:String, vars:String, value:Dynamic, duration:Float, ?ease:String = null) {
+			ease = LuaCompatRouter.resolveEase(ease);
 			return oldTweenFunction(tag, vars, {y: value}, duration, ease, 'doTweenY');
 		});
-		Lua_helper.add_callback(lua, "doTweenAngle", function(tag:String, vars:String, value:Dynamic, duration:Float, ?ease:String = 'linear') {
+		Lua_helper.add_callback(lua, "doTweenAngle", function(tag:String, vars:String, value:Dynamic, duration:Float, ?ease:String = null) {
+			ease = LuaCompatRouter.resolveEase(ease);
 			return oldTweenFunction(tag, vars, {angle: value}, duration, ease, 'doTweenAngle');
 		});
-		Lua_helper.add_callback(lua, "doTweenAlpha", function(tag:String, vars:String, value:Dynamic, duration:Float, ?ease:String = 'linear') {
+		Lua_helper.add_callback(lua, "doTweenAlpha", function(tag:String, vars:String, value:Dynamic, duration:Float, ?ease:String = null) {
+			ease = LuaCompatRouter.resolveEase(ease);
 			return oldTweenFunction(tag, vars, {alpha: value}, duration, ease, 'doTweenAlpha');
 		});
-		Lua_helper.add_callback(lua, "doTweenZoom", function(tag:String, camera:String, value:Dynamic, duration:Float, ?ease:String = 'linear') {
+		Lua_helper.add_callback(lua, "doTweenZoom", function(tag:String, camera:String, value:Dynamic, duration:Float, ?ease:String = null) {
+			ease = LuaCompatRouter.resolveEase(ease);
 			switch(camera.toLowerCase()) {
 				case 'camgame' | 'game': camera = 'camGame';
 				case 'camhud' | 'hud': camera = 'camHUD';
@@ -603,7 +612,8 @@ class FunkinLua {
 			}
 			return oldTweenFunction(tag, camera, {zoom: value}, duration, ease, 'doTweenZoom');
 		});
-		Lua_helper.add_callback(lua, "doTweenColor", function(tag:String, vars:String, targetColor:String, duration:Float, ?ease:String = 'linear') {
+		Lua_helper.add_callback(lua, "doTweenColor", function(tag:String, vars:String, targetColor:String, duration:Float, ?ease:String = null) {
+			ease = LuaCompatRouter.resolveEase(ease);
 			var penisExam:Dynamic = LuaUtils.tweenPrepare(tag, vars);
 			if(penisExam != null) {
 				var curColor:FlxColor = penisExam.color;
@@ -630,22 +640,29 @@ class FunkinLua {
 		});
 
 		//Tween shit, but for strums
-		Lua_helper.add_callback(lua, "noteTweenX", function(tag:String, note:Int, value:Dynamic, duration:Float, ?ease:String = 'linear') {
+		Lua_helper.add_callback(lua, "noteTweenX", function(tag:String, note:Int, value:Dynamic, duration:Float, ?ease:String = null) {
+			ease = LuaCompatRouter.resolveEase(ease);
 			return noteTweenFunction(tag, note, {x: value}, duration, ease);
 		});
-		Lua_helper.add_callback(lua, "noteTweenY", function(tag:String, note:Int, value:Dynamic, duration:Float, ?ease:String = 'linear') {
+		Lua_helper.add_callback(lua, "noteTweenY", function(tag:String, note:Int, value:Dynamic, duration:Float, ?ease:String = null) {
+			ease = LuaCompatRouter.resolveEase(ease);
 			return noteTweenFunction(tag, note, {y: value}, duration, ease);
 		});
-		Lua_helper.add_callback(lua, "noteTweenAngle", function(tag:String, note:Int, value:Dynamic, duration:Float, ?ease:String = 'linear') {
+		Lua_helper.add_callback(lua, "noteTweenAngle", function(tag:String, note:Int, value:Dynamic, duration:Float, ?ease:String = null) {
+			ease = LuaCompatRouter.resolveEase(ease);
 			return noteTweenFunction(tag, note, {angle: value}, duration, ease);
 		});
-		Lua_helper.add_callback(lua, "noteTweenAlpha", function(tag:String, note:Int, value:Dynamic, duration:Float, ?ease:String = 'linear') {
+		Lua_helper.add_callback(lua, "noteTweenAlpha", function(tag:String, note:Int, value:Dynamic, duration:Float, ?ease:String = null) {
+			ease = LuaCompatRouter.resolveEase(ease);
 			return noteTweenFunction(tag, note, {alpha: value}, duration, ease);
 		});
-		Lua_helper.add_callback(lua, "noteTweenDirection", function(tag:String, note:Int, value:Dynamic, duration:Float, ?ease:String = 'linear') {
+		Lua_helper.add_callback(lua, "noteTweenDirection", function(tag:String, note:Int, value:Dynamic, duration:Float, ?ease:String = null) {
+			ease = LuaCompatRouter.resolveEase(ease);
 			return noteTweenFunction(tag, note, {direction: value}, duration, ease);
 		});
-		Lua_helper.add_callback(lua, "mouseClicked", function(?button:String = 'left') {
+		Lua_helper.add_callback(lua, "mouseClicked", function(?button:String = null) {
+			if (button == null) button = LuaCompatRouter.defaultMouseButton();
+			if (button == null) button = 'left';
 			var click:Bool = FlxG.mouse.justPressed;
 			switch(button.trim().toLowerCase())
 			{
@@ -656,7 +673,9 @@ class FunkinLua {
 			}
 			return click;
 		});
-		Lua_helper.add_callback(lua, "mousePressed", function(?button:String = 'left') {
+		Lua_helper.add_callback(lua, "mousePressed", function(?button:String = null) {
+			if (button == null) button = LuaCompatRouter.defaultMouseButton();
+			if (button == null) button = 'left';
 			var press:Bool = FlxG.mouse.pressed;
 			switch(button.trim().toLowerCase())
 			{
@@ -667,7 +686,9 @@ class FunkinLua {
 			}
 			return press;
 		});
-		Lua_helper.add_callback(lua, "mouseReleased", function(?button:String = 'left') {
+		Lua_helper.add_callback(lua, "mouseReleased", function(?button:String = null) {
+			if (button == null) button = LuaCompatRouter.defaultMouseButton();
+			if (button == null) button = 'left';
 			var released:Bool = FlxG.mouse.justReleased;
 			switch(button.trim().toLowerCase())
 			{
@@ -722,7 +743,10 @@ class FunkinLua {
 			game.songHits = value;
 			game.RecalculateRating();
 		});
-		Lua_helper.add_callback(lua, "setHealth", function(value:Float = 1) game.health = value);
+		Lua_helper.add_callback(lua, "setHealth", function(?value:Float = null) {
+			if (value == null) value = LuaCompatRouter.defaultHealth();
+			game.health = value;
+		});
 		Lua_helper.add_callback(lua, "addHealth", function(value:Float = 0) game.health += value);
 		Lua_helper.add_callback(lua, "getHealth", function() return game.health);
 
@@ -746,7 +770,8 @@ class FunkinLua {
 			}
 			game.addCharacterToList(name, charType);
 		});
-		Lua_helper.add_callback(lua, "precacheImage", function(name:String, ?allowGPU:Bool = true) {
+		Lua_helper.add_callback(lua, "precacheImage", function(name:String, ?allowGPU:Bool = null) {
+			if (allowGPU == null) allowGPU = LuaCompatRouter.supportsAllowGPU();
 			Paths.image(name, allowGPU);
 		});
 		Lua_helper.add_callback(lua, "precacheSound", function(name:String) {
@@ -891,11 +916,15 @@ class FunkinLua {
 			game.setOnScripts('ratingFC', game.ratingFC);
 		});
 		Lua_helper.add_callback(lua, "updateScoreText", function() game.updateScoreText());
-		Lua_helper.add_callback(lua, "getMouseX", function(?camera:String = 'game') {
+		Lua_helper.add_callback(lua, "getMouseX", function(?camera:String = null) {
+			if (camera == null) camera = LuaCompatRouter.defaultMouseCamera();
+			if (camera == null) camera = 'game';
 			var cam:FlxCamera = LuaUtils.cameraFromString(camera);
 			return FlxG.mouse.getScreenPosition(cam).x;
 		});
-		Lua_helper.add_callback(lua, "getMouseY", function(?camera:String = 'game') {
+		Lua_helper.add_callback(lua, "getMouseY", function(?camera:String = null) {
+			if (camera == null) camera = LuaCompatRouter.defaultMouseCamera();
+			if (camera == null) camera = 'game';
 			var cam:FlxCamera = LuaUtils.cameraFromString(camera);
 			return FlxG.mouse.getScreenPosition(cam).y;
 		});
@@ -968,7 +997,8 @@ class FunkinLua {
 			}
 		});
 
-		Lua_helper.add_callback(lua, "makeLuaSprite", function(tag:String, ?image:String = null, ?x:Float = 0, ?y:Float = 0) {
+		Lua_helper.add_callback(lua, "makeLuaSprite", function(tag:String, ?image:String = null, ?x:Float = 0, ?y:Float = 0, ?spriteType:String = null) {
+			if (spriteType == null) spriteType = LuaCompatRouter.defaultSpriteType();
 			tag = tag.replace('.', '');
 			LuaUtils.destroyObject(tag);
 			var leSprite:ModchartSprite = new ModchartSprite(x, y);
@@ -979,7 +1009,8 @@ class FunkinLua {
 			MusicBeatState.getVariables().set(tag, leSprite);
 			leSprite.active = true;
 		});
-		Lua_helper.add_callback(lua, "makeAnimatedLuaSprite", function(tag:String, ?image:String = null, ?x:Float = 0, ?y:Float = 0, ?spriteType:String = 'auto') {
+		Lua_helper.add_callback(lua, "makeAnimatedLuaSprite", function(tag:String, ?image:String = null, ?x:Float = 0, ?y:Float = 0, ?spriteType:String = null) {
+			if (spriteType == null) spriteType = LuaCompatRouter.defaultSpriteType();
 			tag = tag.replace('.', '');
 			LuaUtils.destroyObject(tag);
 			var leSprite:ModchartSprite = new ModchartSprite(x, y);
@@ -1182,7 +1213,8 @@ class FunkinLua {
 			game.timeBar.setColors(left_color, right_color);
 		});
 
-		Lua_helper.add_callback(lua, "setObjectCamera", function(obj:String, camera:String = 'game') {
+		Lua_helper.add_callback(lua, "setObjectCamera", function(obj:String, ?camera:String = null) {
+			if (camera == null) camera = LuaCompatRouter.defaultCamera();
 			var real:FlxBasic = game.getLuaObject(obj);
 			if(real != null) {
 				real.cameras = [LuaUtils.cameraFromString(camera)];
