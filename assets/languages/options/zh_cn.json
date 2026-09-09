@@ -109,6 +109,8 @@
     "extra_options": "杂项",
     "spam_chart": "垃圾谱面",
     "spam_chart_desc": "针对超高密度（SPAM）谱面的性能优化",
+    "compatibility": "兼容性",
+    "compatibility_desc": "旧版与向后兼容设置",
     "language": "语言",
     "mobile_options": "移动端选项",
     "note_colors_desc": "自定义音符颜色和外观",

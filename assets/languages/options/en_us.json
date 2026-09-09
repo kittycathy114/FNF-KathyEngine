@@ -108,6 +108,8 @@
     "extra_options": "Misc",
     "spam_chart": "Spam Chart",
     "spam_chart_desc": "Performance optimizations for ultra-dense (SPAM) charts",
+    "compatibility": "Compatibility",
+    "compatibility_desc": "Legacy and backward-compatibility settings",
     "language": "Language",
     "mobile_options": "Mobile Options",
     "note_colors_desc": "Customize note colors and appearance",

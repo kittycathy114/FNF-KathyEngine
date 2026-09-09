@@ -316,30 +316,6 @@ class VisualsSettingsSubState extends BaseOptionsMenu
 		BOOL);
 	addOption(option);
 
-	var option:Option = new Option(Language.get('single_hold_animation'),
-		Language.get("single_hold_note_animation_desc"),
-		'singleHoldNoteAnimation',
-		BOOL);
-	addOption(option);
-
-	var option:Option = new Option(Language.get('auto_reset_strum_animation'),
-		Language.get("auto_reset_strum_anim_desc"),
-		'autoResetStrumAnim',
-		BOOL);
-	addOption(option);
-
-	var option:Option = new Option(Language.get('fallback_perfect_to_sick'),
-		Language.get("fallback_perfect_to_sick_desc"),
-		'fallbackPerfectToSick',
-		BOOL);
-	addOption(option);
-
-	var option:Option = new Option(Language.get('fallback_ex_perfect_to_sick'),
-		Language.get("fallback_experfect_to_sick_desc"),
-		'fallbackEXPerfectToSick',
-		BOOL);
-	addOption(option);
-
 	var soundTrayOptions:Array<String> = ['Flixel', 'Funkin', 'Kathy', 'Dave'];
 	var option:Option = new Option(Language.get('sound_tray_style'),
 		Language.get("sound_tray_style_desc"),
@@ -353,38 +329,6 @@ class VisualsSettingsSubState extends BaseOptionsMenu
 		'holdNoteBehind',
 		BOOL);
 	addOption(option);
-
-	var option:Option = new Option(Language.get('legacy_main_menu_ui'),
-		Language.get("legacy_main_menu_desc"),
-		'legacyMainMenu',
-		BOOL);
-	addOption(option);
-
-	// Fake OS 伪装设置
-	var option:Option = new Option(Language.get('fake_os_mode'),
-		Language.get("fake_os_mode_desc"),
-		'fakeOSMode',
-		BOOL);
-	addOption(option);
-	option.onChange = onChangeFakeOSMode;
-
-	#if !mobile
-	var option:Option = new Option(Language.get('fake_window_title'),
-		Language.get("fake_window_title_desc"),
-		'fakeWindowTitlePreset',
-		STRING,
-		["Kathy Engine", "Friday Night Funkin': MintRhythm Engine", "Friday Night Funkin': OS Engine", "Friday Night Funkin': Psych Engine", "Friday Night Funkin'", "FNF", "WTF in FNF", "Rhythm Game", "Not FNF", "Just a Game"]);
-	addOption(option);
-	option.onChange = onChangeFakeWindowTitle;
-	#end
-
-	var option:Option = new Option(Language.get('fake_os_version'),
-		Language.get("fake_os_version_desc"),
-		'fakeOSVersion',
-		STRING,
-		["1.0.0", "1.0.1", "1.1.0", "1.2.0", "1.3.0", "1.3.1", "1.4.0", "1.4.1", "1.5.0", "1.5.1"]);
-	addOption(option);
-		option.onChange = onChangeFakeOSMode;
 
 		// ===== 动态窗口标题 (Dynamic Window Title) =====
 		#if !mobile
@@ -764,22 +708,6 @@ class VisualsSettingsSubState extends BaseOptionsMenu
 	function onChangeFPSLayer()
 	{
 		Main.updateFPSLayer();
-	}
-
-	// Fake OS 相关函数
-	function onChangeFakeOSMode()
-	{
-		#if (!mobile && !html5)
-		Main.updateWindowTitle();
-		#end
-	}
-
-	function onChangeFakeWindowTitle()
-	{
-		ClientPrefs.data.fakeWindowTitle = ClientPrefs.data.fakeWindowTitlePreset;
-		#if (!mobile && !html5)
-		Main.updateWindowTitle();
-		#end
 	}
 
 	/*#if native

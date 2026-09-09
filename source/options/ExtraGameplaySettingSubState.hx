@@ -186,32 +186,6 @@ class ExtraGameplaySettingSubState extends BaseOptionsMenu
 			BOOL);
 		addOption(option);
 
-		option = new Option(Language.get('legacy_note_position'),
-			Language.get("legacy_notepos_desc"),
-			'legacynotepos',
-			BOOL);
-		addOption(option);
-
-		option = new Option(Language.get('legacy_hud'),
-			Language.get("legacy_hud_desc"),
-			'legacyHUD',
-			BOOL);
-		addOption(option);
-
-		option = new Option(Language.get('charting_version'),
-			Language.get("charting_version_desc"),
-			'chartingVersion',
-			STRING,
-			states.editors.ChartingRouter.VERSIONS.copy());
-		addOption(option);
-
-		option = new Option(Language.get('lua_compat_version'),
-			Language.get("lua_compat_version_desc"),
-			'luaCompatVersion',
-			STRING,
-			psychlua.LuaCompatRouter.VERSIONS.copy());
-		addOption(option);
-
 		option = new Option(Language.get('score_incrase_when_botplay'),
 			Language.get("bot_addscore_desc"),
 			'botplayScore',
@@ -537,6 +511,7 @@ class ExtraGameplaySettingSubState extends BaseOptionsMenu
 					#end
 					Language.get("extra_options")
 					, Language.get("spam_chart")
+					, Language.get("compatibility")
 					#if mobile , Language.get("mobile_options") #end
 					];
 		
@@ -557,6 +532,7 @@ class ExtraGameplaySettingSubState extends BaseOptionsMenu
 					#end
 					Language.get("extra_options_desc")
 					, Language.get("spam_chart_desc")
+					, Language.get("compatibility_desc")
 					#if mobile , Language.get("mobile_options_desc") #end
 					];
 			

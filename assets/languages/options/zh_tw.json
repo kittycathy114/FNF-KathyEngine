@@ -107,6 +107,8 @@
     "extra_options": "雜項",
     "spam_chart": "垃圾譜面",
     "spam_chart_desc": "針對超高密度（SPAM）譜面的效能最佳化",
+    "compatibility": "相容性",
+    "compatibility_desc": "舊版與向後相容設定",
     "language": "語言",
     "mobile_options": "移動端選項",
     "note_colors_desc": "自訂音符顏色和外觀",

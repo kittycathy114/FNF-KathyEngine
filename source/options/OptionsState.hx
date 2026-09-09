@@ -29,12 +29,13 @@ class OptionsState extends MusicBeatState
 		Language.get("visuals"),
 		Language.get("gameplay")
 		#if (cpp && windows && !mobile), Language.get("window_manager") #end,
-		Language.get("extra_options")
-		, Language.get("spam_chart")
+		Language.get("extra_options"),
+		Language.get("spam_chart"),
+		Language.get("compatibility")
 		//#if TRANSLATIONS_ALLOWED , Language.get("language") #end
 		#if mobile , Language.get("mobile_options") #end
 	];
-	
+
 	public var optionDescriptions:Array<String> = [
 		Language.get("note_colors_desc"),
 		Language.get("controls_desc"),
@@ -44,8 +45,9 @@ class OptionsState extends MusicBeatState
 		Language.get("visuals_desc"),
 		Language.get("gameplay_desc")
 		#if (cpp && windows && !mobile), Language.get("window_manager_desc") #end,
-		Language.get("extra_options_desc")
-		, Language.get("spam_chart_desc")
+		Language.get("extra_options_desc"),
+		Language.get("spam_chart_desc"),
+		Language.get("compatibility_desc")
 		#if mobile , Language.get("mobile_options_desc") #end
 	];
 	
@@ -204,6 +206,7 @@ class OptionsState extends MusicBeatState
 				openSubState(new options.ExtraGameplaySettingSubState());
 			},
 			Language.get("spam_chart") => () -> openSubState(new options.SpamChartSettingsSubState()),
+			Language.get("compatibility") => () -> openSubState(new options.CompatibilitySettingsSubState()),
 			Language.get("adjust_delay_combo") => () -> MusicBeatState.switchState(new options.NoteOffsetState()),
 			Language.get("adjust_rating_offset") => () -> MusicBeatState.switchState(new options.RatingOffsetState()),
 			Language.get("mobile_options") => () -> openSubState(new mobile.options.MobileOptionsSubState())
