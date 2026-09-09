@@ -575,8 +575,18 @@ inline static public function inst(song:String, ?specialInst:String = null, ?mod
 		var bitmap:BitmapData = null;
 		if (currentTrackedAssets.exists(cacheKey))
 		{
-			trackLocalAsset(cacheKey);
-			return currentTrackedAssets.get(cacheKey);
+			// 校验缓存条目是否仍然有效：FlxG.resetGame() → FlxG.bitmap.reset() 会销毁所有
+			// FlxGraphic（bitmap=null, key=null），但 Paths.currentTrackedAssets 这个独立 Map
+			// 不会自动清除，导致之后 Paths.image() 拿到已销毁的图形并直接返回，图标渲染为空白。
+			// 与 Note.hx:getCachedSparrowAtlas 的失效校验逻辑保持一致。
+			var cached:FlxGraphic = currentTrackedAssets.get(cacheKey);
+			if (cached != null && cached.bitmap != null
+				&& FlxG.bitmap.get(cached.key) == cached)
+			{
+				trackLocalAsset(cacheKey);
+				return cached;
+			}
+			currentTrackedAssets.remove(cacheKey); // 失效则丢弃，后续走 cacheBitmap 重新加载
 		}
 		return cacheBitmap(key, parentFolder, bitmap, allowGPU, cacheKey);
 	}
