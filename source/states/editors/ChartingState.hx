@@ -18,6 +18,7 @@ import flixel.addons.display.waveform.FlxWaveform.WaveformOrientation;
 import flixel.addons.display.waveform.FlxWaveform.WaveformAlignment;
 
 import openfl.events.Event;
+import openfl.utils.Assets as OpenFlAssets;
 
 import lime.utils.Assets;
 import lime.media.AudioBuffer;
@@ -3577,6 +3578,7 @@ var vortexPlaying:Bool = (vortexEnabled && FlxG.sound.music != null && FlxG.soun
 			for (key in sndsToKill)
 			{
 				Assets.cache.clear(key);
+				OpenFlAssets.cache.clear(key);
 				Paths.currentTrackedSounds.remove(key);
 				Paths.localTrackedAssets.remove(key);
 			}
@@ -3675,6 +3677,7 @@ var vortexPlaying:Bool = (vortexEnabled && FlxG.sound.music != null && FlxG.soun
 		updateAudioVolume();
 		setPitch();
 		_cacheSections();
+		updateWaveform();
 	}
 
 	function onSongComplete()
