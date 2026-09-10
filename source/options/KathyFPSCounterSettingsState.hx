@@ -15,7 +15,7 @@ import backend.Language;
 import backend.Paths;
 import backend.MusicBeatState;
 
-class FPSCounterSettingsState extends MusicBeatState
+class KathyFPSCounterSettingsState extends MusicBeatState
 {
 	var curSelected:Int = 0;
 	var scrollOffset:Int = 0;
@@ -84,7 +84,7 @@ class FPSCounterSettingsState extends MusicBeatState
 		super.create();
 
 		#if DISCORD_ALLOWED
-		DiscordClient.changePresence("FPS Counter Settings Menu", null);
+		DiscordClient.changePresence("Kathy FPS Counter Settings Menu", null);
 		#end
 
 		options = [
@@ -133,7 +133,7 @@ class FPSCounterSettingsState extends MusicBeatState
 		if (fontFile == null) fontFile = "vcr.ttf";
 		var fontPath = Paths.font(fontFile);
 
-		titleText = new FlxText(75, 45, 400, "FPS Counter\nSettings", 32);
+		titleText = new FlxText(75, 45, 400, "Kathy FPS Counter\nSettings", 32);
 		titleText.setFormat(fontPath, 32, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		titleText.alpha = 1;
 		add(titleText);
@@ -516,7 +516,7 @@ class FPSCounterSettingsState extends MusicBeatState
 			alphabetB.visible = true;
 			alphabetHex.visible = true;
 			colorWheelSelector.visible = true;
-			
+
 			var tweenR = FlxTween.tween(alphabetR, {x: 880}, 0.4, {ease: FlxEase.quadOut});
 			var tweenG = FlxTween.tween(alphabetG, {x: 980}, 0.4, {ease: FlxEase.quadOut});
 			var tweenB = FlxTween.tween(alphabetB, {x: 1080}, 0.4, {ease: FlxEase.quadOut});
@@ -525,7 +525,7 @@ class FPSCounterSettingsState extends MusicBeatState
 			_activeTweens.push(tweenG);
 			_activeTweens.push(tweenB);
 			_activeTweens.push(tweenHex);
-			
+
 			new FlxTimer().start(0.4, function(_) {
 				updateColorPickerUI();
 			});
@@ -540,7 +540,7 @@ class FPSCounterSettingsState extends MusicBeatState
 			_activeTweens.push(tweenG);
 			_activeTweens.push(tweenB);
 			_activeTweens.push(tweenHex);
-			
+
 			new FlxTimer().start(0.4, function(_) {
 				alphabetR.visible = false;
 				alphabetG.visible = false;
@@ -820,7 +820,7 @@ class FPSCounterSettingsState extends MusicBeatState
 			case 21: ClientPrefs.data.fpsShowRefreshRate = false;
 			case 22: ClientPrefs.data.fpsLayer = "Stage";
 		}
-		
+
 		optionValues[index].text = getCurrentValue(index);
 		optionValues[index].color = valueColorFor(index);
 		updatePreview();

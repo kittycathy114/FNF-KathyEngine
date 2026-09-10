@@ -636,9 +636,14 @@ class BaseOptionsMenu extends MusicBeatSubstate
 	{
 		var sel:Option = optionsArray[curSelected];
 		var desc:String = sel.description;
-		// 禁用项在描述后追加前提条件说明，指明为何不可用
-		if (sel.disabled && sel.requirement != null && sel.requirement.length > 0)
-			desc += '\n[' + OptionsLanguage.get('requirement_prefix', '需要: ') + sel.requirement + ']';
+		// 禁用项在描述后追加原因说明，指明为何不可用
+		if (sel.disabled)
+		{
+			if (sel.disabledReason != null)
+				desc += '\n[' + sel.disabledReason + ']';
+			else if (sel.requirement != null && sel.requirement.length > 0)
+				desc += '\n[' + OptionsLanguage.get('requirement_prefix', '需要: ') + sel.requirement + ']';
+		}
 
 		if (desc != _lastDesc) {
 			_lastDesc = desc;
@@ -863,6 +868,16 @@ class BaseOptionsMenu extends MusicBeatSubstate
 		}
 	}
 	
+	// 统一计算选项列表标签：altText 优先，其次禁用项追加前提条件，否则用原始名称
+	private function getOptionLabel(optData:Option):String
+	{
+		if (optData.altText != null)
+			return optData.altText;
+		if (optData.disabled && optData.requirement != null && optData.requirement.length > 0)
+			return optData.name + ' (' + OptionsLanguage.get('requirement_prefix', '需要: ') + optData.requirement + ')';
+		return optData.name;
+	}
+
 	function refreshAllTexts() {
 		// 刷新标题
 		//titleText.text = title;
@@ -871,11 +886,7 @@ class BaseOptionsMenu extends MusicBeatSubstate
 		for (i in 0...grpOptions.length) {
 			var opt = grpOptions.members[i];
 			var optData = optionsArray[i];
-			// 禁用项在标签后追加前提条件，指明为何不可用（无需选中即可看到）
-			if (optData.disabled && optData.requirement != null && optData.requirement.length > 0)
-				opt.text = optData.name + ' (' + OptionsLanguage.get('requirement_prefix', '需要: ') + optData.requirement + ')';
-			else
-				opt.text = optData.name;
+			opt.text = getOptionLabel(optData);
 			// 标签变长后，把右侧数值/状态文本推开，避免重叠
 			if (optData.child != null)
 				cast(optData.child, AttachedFlxText).offsetX = opt.width + 60;

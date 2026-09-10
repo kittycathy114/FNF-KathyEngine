@@ -23,7 +23,7 @@ import objects.Alphabet;
 
 /**
  * 原版 FunkinDebugDisplay 风格的专属设置页。
- * 复用 FPSCounterSettingsState 的列表 + 色轮/渐变/HEX 拾色交互，
+ * 复用 KathyFPSCounterSettingsState 的列表 + 色轮/渐变/HEX 拾色交互，
  * 右侧用真实的 FunkinDebugDisplay 做实时预览。
  */
 class DebugDisplaySettingsState extends MusicBeatState

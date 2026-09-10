@@ -45,6 +45,10 @@ class Option
 	public var name:String = 'Unknown';
 	// 选项被禁用时的前提条件说明（如"需要 Kathy 评价下落风格"），选中禁用项时显示在描述框
 	public var requirement:String = null;
+	// 自定义显示文案，覆盖 name + requirement 的默认拼接（用于替代带前缀的 requirement 显示）
+	public var altText:String = null;
+	// 禁用原因说明（不带前缀），选中禁用项时显示在描述框；为 null 时回退到 requirement 逻辑
+	public var disabledReason:String = null;
 
 	public var defaultKeys:Keybind = null;
 	public var keys:Keybind = null;

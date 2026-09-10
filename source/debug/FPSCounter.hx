@@ -16,6 +16,7 @@ import backend.ClientPrefs;
 import backend.Paths;
 import StringTools;
 import lime.app.Application;
+import debug.PsychFPSCounter;
 #if cpp
 #if windows
 @:cppFileCode('#include <windows.h>')
@@ -57,6 +58,9 @@ class FPSCounter extends Sprite
 	// 原版 FunkinDebugDisplay 风格（"Debug" fpsStyle）独立面板
 	public var debugDisplay:FunkinDebugDisplay;
 
+	// 原版 Psych 风格实例（fpsStyle == "Psych" 时显示）
+	private var psychInstance:PsychFPSCounter;
+
 	// 布局参数
 	private var lineHeight:Float = 18;
 
@@ -81,6 +85,11 @@ class FPSCounter extends Sprite
 		debugDisplay = new FunkinDebugDisplay(10, 10);
 		debugDisplay.visible = false;
 		addChild(debugDisplay);
+
+		// 创建原版 Psych 风格实例（初始隐藏，fpsStyle == "Psych" 时显示）
+		psychInstance = new PsychFPSCounter(x, y, 0xFFFFFF);
+		psychInstance.visible = (ClientPrefs.data.fpsStyle == "Psych");
+		addChild(psychInstance);
 
 		#if !officialBuild
 		if (LimeSystem.platformName == LimeSystem.platformVersion || LimeSystem.platformVersion == null)
@@ -116,6 +125,20 @@ class FPSCounter extends Sprite
 
 	public dynamic function updateText():Void
 	{
+		// Psych 原版风格：委托给 PsychFPSCounter
+		if (ClientPrefs.data.fpsStyle == "Psych")
+		{
+			psychInstance.visible = true;
+			allInfoText.visible = false;
+			bgSprite.visible = false;
+			if (debugDisplay != null) debugDisplay.visible = false;
+			return;
+		}
+		else if (psychInstance != null)
+		{
+			psychInstance.visible = false;
+		}
+
 		// 原版 FunkinDebugDisplay 风格：完全交给独立面板渲染
 		if (ClientPrefs.data.fpsStyle == "V-Slice")
 		{
@@ -129,7 +152,7 @@ class FPSCounter extends Sprite
 			debugDisplay.visible = false;
 		}
 
-		// 切回 Psych / Simple 时，需把文本与背景重新显示（之前切到 V-Slice 时被隐藏）
+		// 切回 Kathy / Simple 时，需把文本与背景重新显示（之前切到 V-Slice 时被隐藏）
 		allInfoText.visible = true;
 		bgSprite.visible = true;
 
@@ -372,6 +395,14 @@ class FPSCounter extends Sprite
 	// 重新应用所有设置
 	public function applySettings():Void
 	{
+		// 若切换到 Psych 模式，重建 psychInstance 以应用新位置
+		if (ClientPrefs.data.fpsStyle == "Psych" && psychInstance != null)
+		{
+			removeChild(psychInstance);
+			psychInstance = new PsychFPSCounter(10, 3, 0xFFFFFF);
+			addChild(psychInstance);
+		}
+
 		updateText();
 		positionFPS(x, y);
 
@@ -429,6 +460,13 @@ class FPSCounter extends Sprite
 	{
 		if (!visible)
 			return;
+
+		// Psych 原版风格：显式驱动 psychInstance（引擎不自动向子节点传递 __enterFrame）
+		if (ClientPrefs.data.fpsStyle == "Psych")
+		{
+			if (psychInstance != null) psychInstance.__enterFrame(deltaTime);
+			return;
+		}
 
 		// 原版 Debug(V-Slice) 风格：本类覆写了 __enterFrame 且不调用 super，
 		// OpenFL 不会把帧回调链式传到子面板，故这里显式驱动 debugDisplay 刷新。

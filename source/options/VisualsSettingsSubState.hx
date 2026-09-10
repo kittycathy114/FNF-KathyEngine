@@ -213,7 +213,7 @@ class VisualsSettingsSubState extends BaseOptionsMenu
 			Language.get("fps_counter_style_desc"),
 			'fpsStyle',
 			STRING,
-			['Psych', 'Simple', 'V-Slice']);
+			['Psych', 'Kathy', 'Simple', 'V-Slice']);
 		addOption(option);
 		option.onChange = onChangeFPSStyle;
 
@@ -225,31 +225,28 @@ class VisualsSettingsSubState extends BaseOptionsMenu
 		addOption(option);
 		option.onChange = onChangeFPSLayer;
 		
-		var option:Option = new Option(Language.get('psych_fps_settings'),
+		var option:Option = new Option(Language.get('show_game_version_name'),
+			Language.get("show_game_version_desc"),
+			'exgameversion',
+			BOOL);
+		fpsExgameversionOption = addOption(option);
+		option.onChange = function() {
+			if (Main.fpsVar != null) Main.fpsVar.applySettings();
+		};
+
+		fpsSettingsButton = new Option(
+			Language.get('psych_fps_settings'),
 			Language.get("fps_settings_button_desc"),
 			'_fpsSettings',
 			BUTTON);
-		addOption(option);
-		option.onChange = function() {
-			MusicBeatState.switchState(new FPSCounterSettingsState());
-		};
-		
-		var option:Option = new Option(Language.get('simple_fps_settings'),
-			Language.get("simple_info_settings_button_desc"),
-			'_simpleInfoSettings',
-			BUTTON);
-		addOption(option);
-		option.onChange = function() {
-			MusicBeatState.switchState(new SimpleInfoDisplaySettingsState());
-		};
-
-		var option:Option = new Option(Language.get('debug_fps_settings'),
-			Language.get("debug_fps_settings_desc"),
-			'_debugSettings',
-			BUTTON);
-		addOption(option);
-		option.onChange = function() {
-			MusicBeatState.switchState(new DebugDisplaySettingsState());
+		addOption(fpsSettingsButton);
+		fpsSettingsButton.onChange = function() {
+			switch(ClientPrefs.data.fpsStyle)
+			{
+				case 'Simple': MusicBeatState.switchState(new SimpleInfoDisplaySettingsState());
+				case 'V-Slice': MusicBeatState.switchState(new DebugDisplaySettingsState());
+				default: MusicBeatState.switchState(new KathyFPSCounterSettingsState());
+			}
 		};
 
 		//新版lime跟git库的不同，故临时禁用此项，之后也许会改
@@ -369,6 +366,7 @@ class VisualsSettingsSubState extends BaseOptionsMenu
 		#end
 
 		super();
+		refreshFPSStyleDependentOptions();
 		add(notes);
 		add(splashes);
 
@@ -384,6 +382,16 @@ class VisualsSettingsSubState extends BaseOptionsMenu
 	}
 
 	var notesShown:Bool = false;
+	var fpsSettingsButton:Option;
+	var fpsExgameversionOption:Option;
+
+	// 选项列表分帧构建完成后再同步一次依赖 fpsStyle 的状态，确保初始进入即显示禁用后缀
+	override function onOptionsBuilt():Void
+	{
+		super.onOptionsBuilt();
+		refreshFPSStyleDependentOptions();
+	}
+
 	override function changeSelection(change:Int = 0, skipRefresh:Bool = false, skipDesc:Bool = false)
 	{
 		super.changeSelection(change, skipRefresh, skipDesc);
@@ -702,12 +710,65 @@ class VisualsSettingsSubState extends BaseOptionsMenu
 
 	function onChangeFPSStyle()
 	{
+		if (Main.fpsVar != null) Main.fpsVar.applySettings();
 		Main.updateFPSLayer();
+		refreshFPSStyleDependentOptions();
 	}
 
 	function onChangeFPSLayer()
 	{
 		Main.updateFPSLayer();
+	}
+
+	// 按当前 fpsStyle 返回跳转按钮的语言键
+	private function getFPSStyleButtonLabelKey():String
+	{
+		return switch(ClientPrefs.data.fpsStyle)
+		{
+			case 'Simple': 'simple_fps_settings';
+			case 'V-Slice': 'debug_fps_settings';
+			case 'Kathy': 'kathy_fps_settings';
+			default: 'psych_fps_settings';
+		};
+	}
+
+	// 同步依赖 fpsStyle 的选项状态：按钮文案、exgameversion 可用性
+	private function refreshFPSStyleDependentOptions():Void
+	{
+		var isPsych:Bool = (ClientPrefs.data.fpsStyle == 'Psych');
+		var labelKey:String = getFPSStyleButtonLabelKey();
+		if (fpsExgameversionOption != null)
+		{
+			fpsExgameversionOption.disabled = !isPsych;
+			if (isPsych)
+			{
+				fpsExgameversionOption.altText = null;
+				fpsExgameversionOption.disabledReason = null;
+			}
+			else
+			{
+				var reason:String = Language.get('requires_psych_style');
+				fpsExgameversionOption.altText = Language.get('show_game_version_name') + ' (' + reason + ')';
+				fpsExgameversionOption.disabledReason = reason;
+			}
+		}
+		if (fpsSettingsButton != null)
+		{
+			fpsSettingsButton.name = Language.get(labelKey);
+			fpsSettingsButton.disabled = isPsych;
+			if (isPsych)
+			{
+				var reason:String = Language.get('fps_settings_not_configurable');
+				fpsSettingsButton.altText = Language.get(labelKey) + ' (' + reason + ')';
+				fpsSettingsButton.disabledReason = reason;
+			}
+			else
+			{
+				fpsSettingsButton.altText = null;
+				fpsSettingsButton.disabledReason = null;
+			}
+		}
+		refreshAllTexts();
 	}
 
 	/*#if native
