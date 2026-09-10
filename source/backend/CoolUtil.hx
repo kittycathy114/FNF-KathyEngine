@@ -14,13 +14,21 @@ class CoolUtil
 	private static var cachedTips:String = null;
 	private static var _coolTextFileCache:Map<String, Array<String>> = null;
 	private static var _gridCache:Map<String, FlxGraphic> = null;
-	
+	private static var _updateCheckDone:Bool = false;
+	private static var _updateCheckPending:Bool = false;
+
 	public static function checkForUpdates(?onComplete:(latestVersion:String, isOutdated:Bool)->Void, url:String = null):Void {
 		var version:String = states.MainMenuState.kathyEngineVersion;
 		if(!ClientPrefs.data.checkForUpdates) {
 			if(onComplete != null) onComplete(version, false);
 			return;
 		}
+		if(_updateCheckDone) {
+			if(onComplete != null) onComplete(version, false);
+			return;
+		}
+		if(_updateCheckPending) return;
+		_updateCheckPending = true;
 		if (url == null || url.length == 0)
 			url = "https://raw.githubusercontent.com/kittycathy114/FNF-KathyEngine/main/gitVersion.txt";
 		final fallbackUrl:String = "https://cdn.jsdelivr.net/gh/kittycathy114/FNF-KathyEngine@main/gitVersion.txt";
@@ -28,6 +36,7 @@ class CoolUtil
 		trace('checking for updates... ($url)');
 		Network.httpGet(url,
 			function (data:String) {
+				_updateCheckDone = true;
 				var newVersion:String = data.split('\n')[0].trim();
 				trace('version online: $newVersion, your version: $version');
 				if(versionCompare(newVersion, version) > 0) {
@@ -44,6 +53,7 @@ class CoolUtil
 					trace('failed to check (official github): $error, fallback to jsdelivr');
 					checkForUpdates(onComplete, fallbackUrl);
 				} else {
+					_updateCheckDone = true;
 					trace('failed to check for updates: $error');
 					if(onComplete != null) onComplete(version, false);
 				}
