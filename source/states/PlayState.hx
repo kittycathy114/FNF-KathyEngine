@@ -4557,9 +4557,16 @@ tempScore += '${lblScore}: ${songScore}';
 					iconP2.x = healthBar.barCenter + (iconP2.frameHeight / 2) - iconOffset * 2 - iconP2.width;
 				}
 			else if (ClientPrefs.data.iconbopstyle == "Leather") {
-        		iconP1.y = iconP1InitialY + (iconP1.scale.y - 1) * 60;
-        		iconP2.y = iconP2InitialY + (iconP2.scale.y - 1) * 60;
-    		}
+				// 左上角缩放原点：与 Psych (Legacy) 同理，解除 flixel 居中缩放
+				iconP1.origin.set(0, 0);  iconP2.origin.set(0, 0);
+				iconP1.offset.set(0, 0);  iconP2.offset.set(0, 0);
+				// y 钉初始位置（无跳动偏移）
+				iconP1.y = iconP1InitialY;
+				iconP2.y = iconP2InitialY;
+				// x 只跟随血量，不随 scale 跳动（与 Psych Legacy / Dave 完全一致）
+				iconP1.x = healthBar.barCenter - iconOffset;
+				iconP2.x = healthBar.barCenter + (iconP2.frameHeight / 2) - iconOffset * 2 - iconP2.width;
+			}
 			else if (ClientPrefs.data.iconbopstyle == "Codename") {
         		if(ClientPrefs.data.downScroll){
 				iconP1.y = iconP1InitialY - (iconP1.scale.y - 1) * 70;
