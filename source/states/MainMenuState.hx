@@ -62,6 +62,7 @@ class MainMenuState extends MusicBeatState
 	var dropFileHandler:Dynamic = null;
 	private var tipText:FlxText;
 	private var destroyed:Bool = false;
+	private var languageChangeCallback:Void->Void;
 	var selectedSomethin:Bool = false;
 	var timeNotMoving:Float = 0;
 
@@ -146,18 +147,32 @@ class MainMenuState extends MusicBeatState
 			createModernMenu();
 
 
-		var mrVer:FlxText = new FlxText(12, FlxG.height - 66, 0, 'Kathy Engine v' + kathyEngineVersion, 12);
+		var isMrExtended:Bool = ClientPrefs.data.windowTitlePreset == 'Psych Engine: MintRhythm Extended';
+		var kathyLabel:String = isMrExtended ? (ClientPrefs.data.language == 'zh_cn' || ClientPrefs.data.language == 'zh_tw' ? '薄荷韵律 (M.R. Extended)' : 'MintRhythm Extended') : 'Kathy Engine';
+		var mrVerFont:String = isMrExtended ? 'unifont-16.0.02.otf' : 'vcr.ttf';
+		var mrVer:FlxText = new FlxText(12, FlxG.height - 66, 0, '${kathyLabel} v' + kathyEngineVersion, 12);
 		mrVer.scrollFactor.set();
-		mrVer.setFormat(Paths.font("vcr.ttf"), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		mrVer.setFormat(Paths.font(mrVerFont), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		add(mrVer);
 		var psychVer:FlxText = new FlxText(12, FlxG.height - 46, 0, "Psych Engine v" + psychEngineVersion, 12);
 		psychVer.scrollFactor.set();
-		psychVer.setFormat(Paths.font("vcr.ttf"), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		psychVer.setFormat(Paths.font(mrVerFont), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		add(psychVer);
 		var fnfVer:FlxText = new FlxText(12, FlxG.height - 26, 0, 'Friday Night Funkin\' v0.2.8', 12);
 		fnfVer.scrollFactor.set();
-		fnfVer.setFormat(Paths.font("vcr.ttf"), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		fnfVer.setFormat(Paths.font(mrVerFont), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		add(fnfVer);
+		languageChangeCallback = function () {
+			if (ClientPrefs.data.windowTitlePreset != 'Psych Engine: MintRhythm Extended') return;
+			var isZh:Bool = ClientPrefs.data.language == 'zh_cn' || ClientPrefs.data.language == 'zh_tw';
+			var label:String = isZh ? '薄荷韵律 (M.R. Extended)' : 'MintRhythm Extended';
+			mrVer.text = '${label} v' + kathyEngineVersion;
+			var font:String = isMrExtended ? 'unifont-16.0.02.otf' : 'vcr.ttf';
+			mrVer.setFormat(Paths.font(font), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+			psychVer.setFormat(Paths.font(font), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+			fnfVer.setFormat(Paths.font(font), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		};
+		Language.addCallback(languageChangeCallback);
 		
 		CoolUtil.tipsShow(function (tipsContent:String) {
 			if (destroyed) return;
@@ -862,6 +877,10 @@ class MainMenuState extends MusicBeatState
 	override function destroy()
 	{
 		destroyed = true;
+		if (languageChangeCallback != null) {
+			Language.removeCallback(languageChangeCallback);
+			languageChangeCallback = null;
+		}
 		#if desktop
 		if (dropFileHandler != null) {
 			Application.current.window.onDropFile.remove(dropFileHandler);
