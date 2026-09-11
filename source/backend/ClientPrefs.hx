@@ -362,7 +362,7 @@ import openfl.display.StageQuality;
 
 	// Leather 风格相关
 	public var biggerInfoText:Bool = false; // 更大的信息文本
-	public var loadLeatherIcons:Bool = false; // 启用后优先加载 Leather 格式的小图标（leather/<角色名>-icons.png），支持 Mods 覆盖
+	public var loadLeatherIcons:String = 'default'; // 小图标样式: 'default'=默认, 'leather'=Leather Engine 格式(leather/<角色名>-icons.png), 'os'=OS 风格(icon-<角色名>.png)，支持 Mods 覆盖
 	public var opponentSplashes:Bool = false; // 启用后对手侧箭头击打也会显示 NoteSplash
 	public var holdCovers:Bool = true; // 长条按住期间在箭头上显示 Hold Cover 光效（类似原版 FNF），末尾播放爆发动画
 	public var opponentHoldCovers:Bool = false; // 对手侧也显示 Hold Cover（需 CPU Strums 可见）

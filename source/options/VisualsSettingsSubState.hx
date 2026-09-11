@@ -131,7 +131,8 @@ class VisualsSettingsSubState extends BaseOptionsMenu
 		var option:Option = new Option(Language.get('load_leather_icons'),
 			Language.get("load_leather_icons_desc"),
 			'loadLeatherIcons',
-			BOOL);
+			STRING,
+			['default', 'leather', 'os']);
 		addOption(option);
 
 		var option:Option = new Option(Language.get('opponent_splashes'),

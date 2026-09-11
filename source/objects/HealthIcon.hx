@@ -30,13 +30,19 @@ class HealthIcon extends FlxSprite
 		if(this.char != char) {
 			var name:String = 'icons/' + char;
 
-			// Leather 图标模式：启用后优先查找 leather/<角色名>-icons 格式，
+			// Leather 图标模式：当 loadLeatherIcons='leather' 时优先查找 leather/<角色名>-icons 格式，
 			// Paths.fileExists / Paths.image 会自动按 Mods → currentLevel → shared 顺序解析，
 			// 因此 Mods 中的 Leather 图标会被自动优先使用。
-			if (ClientPrefs.data.loadLeatherIcons) {
+			if (ClientPrefs.data.loadLeatherIcons == 'leather') {
 				var leatherName:String = 'icons/leather/' + char + '-icons';
 				if (Paths.fileExists('images/' + leatherName + '.png', IMAGE))
 					name = leatherName;
+			}
+			// OS 图标模式：当 loadLeatherIcons='os' 时使用 OS 风格图标（icons/os/icon-<角色名>.png）
+			else if (ClientPrefs.data.loadLeatherIcons == 'os') {
+				var osName:String = 'icons/os/icon-' + char;
+				if (Paths.fileExists('images/' + osName + '.png', IMAGE))
+					name = osName;
 			}
 
 			if(!Paths.fileExists('images/' + name + '.png', IMAGE)) name = 'icons/icon-' + char; //Older versions of psych engine's support
