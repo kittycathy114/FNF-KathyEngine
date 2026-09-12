@@ -1748,6 +1748,7 @@ if(_shouldReset) Conductor.songPosition = 0;
 			}
 
 			if(!songFinished) Conductor.songPosition = FlxMath.bound(FlxG.sound.music.time + Conductor.offset, 0, FlxG.sound.music.length - 1);
+			Conductor.bpm = Conductor.getBPMFromSeconds(Conductor.songPosition).bpm;
 			updateScrollY();
 		}
 
