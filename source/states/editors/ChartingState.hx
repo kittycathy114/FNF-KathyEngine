@@ -1,4 +1,4 @@
-package states.editors;
+﻿package states.editors;
 
 import flixel.FlxSubState;
 import flixel.util.FlxSave;
@@ -356,6 +356,17 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	var movingNotes:FlxTypedGroup<MetaNote> = new FlxTypedGroup<MetaNote>();
 	var eventLockOverlay:FlxSprite;
 	var vortexIndicator:FlxSprite;
+
+	// Lil' Buddies 制谱器迷你角色预览
+	var lilStage:FlxSprite;
+	var lilBf:FlxSprite;
+	var lilOpp:FlxSprite;
+	var lilBfSingFinishedBeat:Int = -1;  // 上次 playLilSing 发生在哪一拍（-1 表示 idle 中）
+    var lilOppSingFinishedBeat:Int = -1;
+    var lilBfInSustain:Bool = false;
+    var lilOppInSustain:Bool = false;
+    var lilLastStrumCheckTime:Float = 0;  // 独立的时间窗口起点，自己维护不依赖外部 lastTime
+
 	var strumLineNotes:FlxTypedGroup<StrumNote> = new FlxTypedGroup<StrumNote>();
 	var dummyArrow:FlxSprite;
 	var dragPreview:FlxSprite;
@@ -529,6 +540,9 @@ if(_shouldReset) Conductor.songPosition = 0;
 		if(chartEditorSave.data.dragCreateHoldNote == null) chartEditorSave.data.dragCreateHoldNote = true;
 		rightClickDeleteNote = chartEditorSave.data.rightClickDeleteNote;
 		dragCreateHoldNote = chartEditorSave.data.dragCreateHoldNote;
+
+		// Lil' Buddies 迷你角色预览设置
+		if(chartEditorSave.data.showLilBuddies == null) chartEditorSave.data.showLilBuddies = true;
 		if (controls.mobileC)
 		{
 			// 移动端自动禁用右键移除箭头 / 拖动生成长条，避免影响触控游玩体验
@@ -612,6 +626,51 @@ if(_shouldReset) Conductor.songPosition = 0;
 		vortexIndicator.active = false;
 		updateVortexColor();
 		add(vortexIndicator);
+
+		// ===== Lil' Buddies 制谱器迷你角色预览 =====
+		// 固定在屏幕左下角，不随谱面滚动（scrollFactor=0）
+		// layout: lilStage 在最底层背景 → lilBf(左) + lilOpp(右) 角色精灵
+		var lilVisible:Bool = chartEditorSave.data.showLilBuddies;
+
+		// 舞台背景 256×256，左下角，底部离屏幕 32px
+            var lilBaseY:Float = FlxG.height - 256 - 32;
+            lilStage = new FlxSprite(32, lilBaseY).loadGraphic(Paths.image('editors/lilStage'));
+            lilStage.scrollFactor.set();
+            lilStage.visible = lilVisible;
+            add(lilStage);
+
+            // 迷你 BF 300×256 每帧，和舞台底部对齐
+            lilBf = new FlxSprite(32, lilBaseY).loadGraphic(Paths.image('editors/lilBf'), true, 300, 256);
+		lilBf.animation.add('idle', [0, 1], 12, true);
+		lilBf.animation.add('0', [3, 4, 5], 12, false);
+		lilBf.animation.add('1', [6, 7, 8], 12, false);
+		lilBf.animation.add('2', [9, 10, 11], 12, false);
+		lilBf.animation.add('3', [12, 13, 14], 12, false);
+		lilBf.animation.add('yeah', [17, 20, 23], 12, false);
+		lilBf.animation.play('idle');
+		lilBf.animation.onFinish.add(function(name:String){
+			if(lilBf != null && name != 'idle')
+				lilBf.animation.play(name, true, false, lilBf.animation.getByName(name).numFrames - 2);
+		});
+		lilBf.scrollFactor.set();
+		lilBf.visible = lilVisible;
+		add(lilBf);
+
+		// 迷你对手 300×256 每帧，放在 lilBf 右边
+		lilOpp = new FlxSprite(32, lilBaseY).loadGraphic(Paths.image('editors/lilOpp'), true, 300, 256);
+		lilOpp.animation.add('idle', [0, 1], 12, true);
+		lilOpp.animation.add('0', [3, 4, 5], 12, false);
+		lilOpp.animation.add('1', [6, 7, 8], 12, false);
+		lilOpp.animation.add('2', [9, 10, 11], 12, false);
+		lilOpp.animation.add('3', [12, 13, 14], 12, false);
+		lilOpp.animation.play('idle');
+		lilOpp.animation.onFinish.add(function(name:String){
+			if(lilOpp != null && name != 'idle')
+				lilOpp.animation.play(name, true, false, lilOpp.animation.getByName(name).numFrames - 2);
+		});
+		lilOpp.scrollFactor.set();
+		lilOpp.visible = lilVisible;
+		add(lilOpp);
 
 		// 创建轨道颜色覆盖层 - 只在gridBg显示的区域，放在strumLineNotes之前
 		var gridHeight:Float = opponentGridBg.height; // 只覆盖grid显示的高度
@@ -1043,6 +1102,22 @@ if(_shouldReset) Conductor.songPosition = 0;
 			char.playAnim(animToPlay, true);
 			char.holdTimer = 0;
 		}
+	}
+
+	// Lil' Buddies 迷你角色唱歌动画
+	// isBf: true=BF唱歌(lilBf), false=对手唱歌(lilOpp)
+	// direction: 0=LEFT, 1=DOWN, 2=UP, 3=RIGHT
+	private function playLilSing(isBf:Bool, direction:Int):Void
+	{
+		if(chartEditorSave == null || !chartEditorSave.data.showLilBuddies) return;
+		var target:FlxSprite = isBf ? lilBf : lilOpp;
+		if(target == null || !target.visible) return;
+		var animName:String = "" + Std.int(Math.abs(direction));
+		target.animation.play(animName, true);
+		// 记录当前拍号，下一拍自动回 idle（与主角色逻辑对齐）
+		var curBeatNow:Int = Math.floor(Conductor.getStep(Conductor.songPosition) / 4);
+		if(isBf) lilBfSingFinishedBeat = curBeatNow;
+		else lilOppSingFinishedBeat = curBeatNow;
 	}
 
 	// 处理idle动画的播放
@@ -2663,6 +2738,80 @@ if(_shouldReset) Conductor.songPosition = 0;
 		var curDecStepPure:Float = Conductor.getStep(Conductor.songPosition);
 		curStepPure = Math.floor(curDecStepPure);
 		curBeatPure = Math.floor(curStepPure / 4);
+
+	// ===== Lil' Buddies 迷你角色动画 =====
+
+	// [块A] 独立音符驱动 + sustain 检测（music.playing 时）
+	if(chartEditorSave != null && chartEditorSave.data.showLilBuddies && FlxG.sound.music != null && FlxG.sound.music.playing)
+	{
+		var lilNow:Float = Conductor.songPosition;
+		// 独立时间窗口，不依赖外部 lastTime
+		for(note in notes)
+		{
+			if(note == null || note.isEvent) continue;
+			var noteStrumTime:Float = note.strumTime;
+			if(noteStrumTime > lilLastStrumCheckTime && noteStrumTime <= lilNow)
+			{
+				playLilSing(note.mustPress, Std.int(note.noteData) % 4);
+			}
+		}
+		lilLastStrumCheckTime = lilNow;
+
+		// 长条持续 → sing 不回 idle
+		lilBfInSustain = false;
+		lilOppInSustain = false;
+		for(note in notes)
+		{
+			if(note == null || note.isEvent) continue;
+			var noteEndTime:Float = note.strumTime + (note.sustainLength > 0 ? note.sustainLength : 0);
+			if(lilNow >= note.strumTime && lilNow <= noteEndTime)
+			{
+				if(note.mustPress) lilBfInSustain = true;
+				else lilOppInSustain = true;
+			}
+		}
+	}
+
+	// [块B] idle 恢复（每帧执行，用 curBeatPure 拍数判断）
+	if(chartEditorSave != null && chartEditorSave.data.showLilBuddies)
+	{
+		// 只在 curAnim != 'idle' 时才 play，避免每帧 forceRestart 打断 idle 循环
+		if(lilBf != null && lilBf.visible)
+		{
+			var bfAnim:String = lilBf.animation.curAnim != null ? lilBf.animation.curAnim.name : '';
+			if(bfAnim != 'idle' && !lilBfInSustain && lilBfSingFinishedBeat != -1 && curBeatPure > lilBfSingFinishedBeat)
+			{
+				lilBf.animation.play('idle', false, false);  // forceRestart=false，不打断循环
+				lilBfSingFinishedBeat = -1;
+			}
+		}
+		if(lilOpp != null && lilOpp.visible)
+		{
+			var oppAnim:String = lilOpp.animation.curAnim != null ? lilOpp.animation.curAnim.name : '';
+			if(oppAnim != 'idle' && !lilOppInSustain && lilOppSingFinishedBeat != -1 && curBeatPure > lilOppSingFinishedBeat)
+			{
+				lilOpp.animation.play('idle', false, false);
+				lilOppSingFinishedBeat = -1;
+			}
+		}
+	}
+
+	// [块C] 音乐未播放：重置时间窗口 + 点击 lilBf → yeah 动画
+	if(chartEditorSave != null && chartEditorSave.data.showLilBuddies && FlxG.sound.music != null && !FlxG.sound.music.playing)
+	{
+		lilLastStrumCheckTime = Conductor.songPosition;
+
+		if(lilBf != null && lilBf.visible && FlxG.mouse.justPressed && !ignoreClickForThisFrame)
+		{
+			var mx:Float = FlxG.mouse.screenX;
+			var my:Float = FlxG.mouse.screenY;
+			if(mx >= lilBf.x && mx <= lilBf.x + lilBf.width && my >= lilBf.y && my <= lilBf.y + lilBf.height)
+			{
+				lilBf.animation.play('yeah', true);
+				lilBfSingFinishedBeat = curBeatPure;
+			}
+		}
+	}
 		
 		// 计算纯粹的section（不受noteOffset影响）
 		curSecPure = curSec; // 默认使用当前curSec
@@ -8232,6 +8381,26 @@ for (i in 0...GRID_PLAYERS)
 					};
 					dragCharacterCheckBox2.cameras = state.cameras;
 					state.add(dragCharacterCheckBox2);
+					checkY += 30;
+
+					// Lil' Buddies 迷你角色预览
+					var lilBuddiesCheckBox:PsychUICheckBox = new PsychUICheckBox(state.bg.x + 40, checkY, Language.get('visualeffect_lilbuddies'), 200);
+					lilBuddiesCheckBox.checked = chartEditorSave.data.showLilBuddies;
+					lilBuddiesCheckBox.onClick = function()
+					{
+						chartEditorSave.data.showLilBuddies = lilBuddiesCheckBox.checked;
+						chartEditorSave.flush();
+						if(lilStage != null) lilStage.visible = lilBuddiesCheckBox.checked;
+						if(lilBf != null) lilBf.visible = lilBuddiesCheckBox.checked;
+						if(lilOpp != null) lilOpp.visible = lilBuddiesCheckBox.checked;
+						if(lilBuddiesCheckBox.checked)
+					{
+						if(lilBf != null) { lilBf.animation.play('idle', false, false); lilBfSingFinishedBeat = -1; lilBfInSustain = false; }
+						if(lilOpp != null) { lilOpp.animation.play('idle', false, false); lilOppSingFinishedBeat = -1; lilOppInSustain = false; }
+					}
+					};
+					lilBuddiesCheckBox.cameras = state.cameras;
+					state.add(lilBuddiesCheckBox);
 
 					var btnY = state.bg.y + 240;
 					var btn:PsychUIButton = new PsychUIButton(0, btnY, Language.get('charting_ok_btn'), state.close);
