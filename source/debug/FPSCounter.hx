@@ -33,7 +33,12 @@ class FPSCounter extends Sprite
 	public var memoryMegas(get, never):Float;
 	public var memoryPeakMegas(default, null):Float = 0;
 
-	@:noCompletion private var times:Array<Float>;
+	// ---- 环形 FPS 缓冲区（替代 Array.push/shift） ----
+	private static final RING_SIZE:Int = 256;
+	@:noCompletion private var ringTimes:Array<Float>;
+	@:noCompletion private var ringWrite:Int = 0;
+	@:noCompletion private var ringCount:Int = 0;
+
 	@:noCompletion private var lastFramerateUpdateTime:Float;
 	@:noCompletion private var updateTime:Int;
 	@:noCompletion private var framesCount:Int;
@@ -69,6 +74,16 @@ class FPSCounter extends Sprite
 
 	public var fontName:String = Paths.font("vcr.ttf");
 
+	// ---- 缓存变量 ----
+	private var _cachedMemMegas:Float = 0;
+	private var _lastMemQueryTime:Float = 0;
+	private var _lastHtmlText:String = null;      // 上次写入 allInfoText.htmlText 的值
+	private var _lastSimpleText:String = null;   // Simple 模式上次写入 text 的值
+	private var _lastTextFormatHash:Int = -1;    // TextFormat 变化标识
+	private var _lastBgWidth:Float = -1;         // 上次背景宽度
+	private var _lastBgHeight:Float = -1;        // 上次背景高度
+	private var _lastVersionStr:String = null;   // 缓存 Application.version
+
 	public function new(x:Float = 10, y:Float = 10, color:flixel.util.FlxColor = 0xFF000000)
 	{
 		super();
@@ -100,8 +115,12 @@ class FPSCounter extends Sprite
 
 		positionFPS(x, y);
 
-		// 初始化 FPS 计算变量
-		times = [];
+		// 初始化环形 FPS 缓冲区
+		ringTimes = [];
+		for (i in 0...RING_SIZE) ringTimes.push(0);
+		ringWrite = 0;
+		ringCount = 0;
+
 		lastFramerateUpdateTime = Timer.stamp();
 		prevTime = Lib.getTimer();
 		updateTime = prevTime + 500;
@@ -109,8 +128,9 @@ class FPSCounter extends Sprite
 		currentTime = 0;
 		cacheCount = 0;
 
-		// 初始化更新时间
+		// 初始化时间戳
 		lastFpsUpdateTime = Timer.stamp();
+		_lastMemQueryTime = Timer.stamp();
 	}
 
 	private function createTextField(size:Int, color:flixel.util.FlxColor, bold:Bool = false):TextField
@@ -125,7 +145,7 @@ class FPSCounter extends Sprite
 
 	public dynamic function updateText():Void
 	{
-		// Psych 原版风格：委托给 PsychFPSCounter
+		// Psych 原版风格：委托给 PsychFPSCounter（自己有节流）
 		if (ClientPrefs.data.fpsStyle == "Psych")
 		{
 			psychInstance.visible = true;
@@ -159,15 +179,7 @@ class FPSCounter extends Sprite
 		// Simple/Leather 模式：使用 _sans 字体，简洁格式（与 SimpleInfoDisplay 一致）
 		if (ClientPrefs.data.fpsStyle == "Simple")
 		{
-			var currentTime = Timer.stamp();
-			var memory:Float = 0;
-			try
-			{
-				memory = memoryMegas;
-				if (memory < 0 || !Std.is(memory, Float)) memory = 0;
-			}
-			catch (e:Dynamic) { memory = 0; }
-
+			var memory:Float = getMemoryCached();
 			if (memory > memoryPeakMegas) memoryPeakMegas = memory;
 
 			var textLines:Array<String> = [];
@@ -176,12 +188,19 @@ class FPSCounter extends Sprite
 			if (ClientPrefs.data.simpleInfoShowMem) textLines.push(formatSimpleMemory(memory) + " / " + formatSimpleMemory(memoryPeakMegas));
 			if (ClientPrefs.data.simpleInfoShowVersion)
 			{
-				var version:String = Application.current.meta.get('version');
-				if (version == null) version = "0.0.0";
+				var version:String = getCachedVersion();
 				textLines.push("v" + version);
 			}
 
 			var allText = textLines.join('\n');
+
+			// ---- 内容没变化就跳过 ----
+			if (allText == _lastSimpleText && !simpleFormatChanged())
+			{
+				bgSprite.visible = false;
+				return;
+			}
+			_lastSimpleText = allText;
 
 			// 颜色（Simple 模式使用自己的颜色设置）
 			var simpleColorInt = (ClientPrefs.data.simpleInfoColor.red << 16) | (ClientPrefs.data.simpleInfoColor.green << 8) | ClientPrefs.data.simpleInfoColor.blue;
@@ -189,7 +208,7 @@ class FPSCounter extends Sprite
 			allInfoText.htmlText = '<font color="#$colorHex">$allText</font>';
 
 			// _sans 字体和字号（Simple 模式使用系统 _sans 字体，而非 vcr.ttf）
-			allInfoText.defaultTextFormat = new TextFormat("_sans", ClientPrefs.data.simpleInfoFontSize, simpleColorInt, false);
+			applyTextFormatIfChanged("_sans", ClientPrefs.data.simpleInfoFontSize, simpleColorInt, false);
 
 			// 隐藏背景（Simple 模式没有背景）
 			bgSprite.visible = false;
@@ -198,23 +217,8 @@ class FPSCounter extends Sprite
 			return;
 		}
 
-		// Psych 风格：详细信息（原有逻辑）
-		var currentTime = Timer.stamp();
-		var memory:Float = 0;
-		
-		try
-		{
-			memory = memoryMegas;
-			// 确保内存值是有效的数字
-			if (memory < 0 || !Std.is(memory, Float))
-			{
-				memory = 0;
-			}
-		}
-		catch (e:Dynamic)
-		{
-			memory = 0;
-		}
+		// Kathy 风格：详细信息
+		var memory:Float = getMemoryCached();
 
 		// 更新内存峰值
 		if (memory > memoryPeakMegas)
@@ -359,17 +363,55 @@ class FPSCounter extends Sprite
 
 		// 转换颜色为十六进制字符串
 		var colorHex = StringTools.hex((ClientPrefs.data.fpsColor.red << 16) | (ClientPrefs.data.fpsColor.green << 8) | ClientPrefs.data.fpsColor.blue, 6);
-		allInfoText.htmlText = '<font color="#$colorHex">$allText</font>';
+		var htmlText = '<font color="#$colorHex">$allText</font>';
+
+		// ---- 内容没变化就跳过 TextField 更新 + TextFormat + Background ----
+		if (htmlText == _lastHtmlText && !kathyFormatChanged())
+		{
+			this.alpha = ClientPrefs.data.fpsOpacity;
+			return;
+		}
+		_lastHtmlText = htmlText;
+		allInfoText.htmlText = htmlText;
 		
-		// 更新字体大小
-		var textColorInt = (ClientPrefs.data.fpsColor.red << 16) | (ClientPrefs.data.fpsColor.green << 8) | ClientPrefs.data.fpsColor.blue;
-		allInfoText.defaultTextFormat = new TextFormat(fontName, ClientPrefs.data.fpsFontSize, textColorInt, false);
+		applyTextFormatIfChanged(fontName, ClientPrefs.data.fpsFontSize, (ClientPrefs.data.fpsColor.red << 16) | (ClientPrefs.data.fpsColor.green << 8) | ClientPrefs.data.fpsColor.blue, false);
 		
 		// 更新透明度
 		this.alpha = ClientPrefs.data.fpsOpacity;
 		
-		// 更新背景
+		// 更新背景（尺寸变化时才重绘）
 		updateBackground();
+	}
+
+	/** 生成 TextFormat 的 hash，用来检测设置是否变了 */
+	inline private function computeFormatHash(name:String, size:Int, color:Int, bold:Bool):Int
+	{
+		var h:Int = (name == null ? 0 : name.length * 17 + Std.int(name.charCodeAt(0)));
+		h = h ^ size ^ color;
+		if (bold) h = h ^ 1;
+		return h;
+	}
+
+	private function applyTextFormatIfChanged(name:String, size:Int, color:Int, bold:Bool):Void
+	{
+		var h = computeFormatHash(name, size, color, bold);
+		if (h == _lastTextFormatHash) return;
+		_lastTextFormatHash = h;
+		allInfoText.defaultTextFormat = new TextFormat(name, size, color, bold);
+	}
+
+	private function simpleFormatChanged():Bool
+	{
+		var desiredColor = (ClientPrefs.data.simpleInfoColor.red << 16) | (ClientPrefs.data.simpleInfoColor.green << 8) | ClientPrefs.data.simpleInfoColor.blue;
+		var h = computeFormatHash("_sans", ClientPrefs.data.simpleInfoFontSize, desiredColor, false);
+		return h != _lastTextFormatHash;
+	}
+
+	private function kathyFormatChanged():Bool
+	{
+		var desiredColor = (ClientPrefs.data.fpsColor.red << 16) | (ClientPrefs.data.fpsColor.green << 8) | ClientPrefs.data.fpsColor.blue;
+		var h = computeFormatHash(fontName, ClientPrefs.data.fpsFontSize, desiredColor, false);
+		return h != _lastTextFormatHash;
 	}
 	
 	private function updateBackground():Void
@@ -377,24 +419,41 @@ class FPSCounter extends Sprite
 		// Psych 模式下重新显示背景
 		bgSprite.visible = true;
 
+		// 计算目标尺寸，如果没变就跳过重绘
+		var padding = ClientPrefs.data.fpsBgPadding;
+		var w = allInfoText.width + padding * 2;
+		var h = allInfoText.height + padding * 2;
+
+		if (ClientPrefs.data.fpsBgEnabled && w == _lastBgWidth && h == _lastBgHeight)
+		{
+			return; // 尺寸没变，没必要重绘 Graphics
+		}
+		_lastBgWidth = w;
+		_lastBgHeight = h;
+
 		bgSprite.graphics.clear();
 		
 		if (ClientPrefs.data.fpsBgEnabled)
 		{
-			var padding = ClientPrefs.data.fpsBgPadding;
-			var w = allInfoText.width + padding * 2;
-			var h = allInfoText.height + padding * 2;
-			
 			var bgColorInt = (ClientPrefs.data.fpsBgColor.red << 16) | (ClientPrefs.data.fpsBgColor.green << 8) | ClientPrefs.data.fpsBgColor.blue;
 			bgSprite.graphics.beginFill(bgColorInt, ClientPrefs.data.fpsBgOpacity);
 			bgSprite.graphics.drawRect(-padding, -padding, w, h);
 			bgSprite.graphics.endFill();
 		}
 	}
-	
+
 	// 重新应用所有设置
 	public function applySettings():Void
 	{
+		// ---- 重置缓存，让下一次 updateText 一定刷新 ----
+		_lastHtmlText = null;
+		_lastSimpleText = null;
+		_lastTextFormatHash = -1;
+		_lastBgWidth = -1;
+		_lastBgHeight = -1;
+		_lastVersionStr = null;
+		_lastMemQueryTime = 0;
+
 		// 若切换到 Psych 模式，重建 psychInstance 以应用新位置
 		if (ClientPrefs.data.fpsStyle == "Psych" && psychInstance != null)
 		{
@@ -419,7 +478,7 @@ class FPSCounter extends Sprite
 
 	/**
 	 * 独立开关+热键：在 Off / Simple / Advanced 之间循环当前 Debug 面板模式。
-	 * 仅当 fpsStyle 为 "Debug" 时生效。
+	 * 仅当 fpsStyle 为 "V-Slice" 时生效。
 	 */
 	public function cycleDebugMode():Void
 	{
@@ -484,28 +543,34 @@ class FPSCounter extends Sprite
 			lastDelayUpdateTime = Timer.stamp();
 		}
 
-		// 持续追踪时间（用于 FPS 计算）
+		// ---- 环形 FPS 计数：O(1) 写入，消除 shift ----
 		currentTime += deltaTime;
-		times.push(currentTime);
+		ringTimes[ringWrite] = currentTime;
+		ringWrite = (ringWrite + 1) % RING_SIZE;
+		if (ringCount < RING_SIZE) ringCount++;
 
-		while (times[0] < currentTime - 1000)
-		{
-			times.shift();
-		}
-
-		var currentCount = times.length;
 		// 只在显示更新时更新 FPS 值，避免数值跳动
-		// Simple/Leather 模式更新频率更高（每 0.1 秒），Psych 模式保持原频率（每 0.5 秒）
+		// Simple 模式 0.1s，其他 0.5s
 		var updateInterval:Float = (ClientPrefs.data.fpsStyle == "Simple") ? 0.1 : 0.5;
 		if (Timer.stamp() - lastFpsUpdateTime > updateInterval)
 		{
-			currentFPS = Math.round((currentCount + cacheCount) / 2);
-			cacheCount = currentCount;
+			// 从环形缓冲里数最近 1 秒内有多少帧
+			var cutoff = currentTime - 1000;
+			var count:Int = 0;
+			for (i in 0...ringCount)
+			{
+				var idx = (ringWrite - 1 - i + RING_SIZE) % RING_SIZE;
+				if (ringTimes[idx] >= cutoff) count++;
+				else break;
+			}
+			currentFPS = Math.round((count + cacheCount) / 2);
+			cacheCount = count;
 			lastFpsUpdateTime = Timer.stamp();
 			updateText();
 		}
 
-		if (Timer.stamp() - lastObjectCountUpdate > 2.0)
+		// ---- 只在玩家开了 Objects 显示时才遍历 ----
+		if (ClientPrefs.data.fpsShowObjects && Timer.stamp() - lastObjectCountUpdate > 2.0)
 		{
 			objectCount = countObjects(FlxG.state);
 			lastObjectCountUpdate = Timer.stamp();
@@ -521,24 +586,10 @@ class FPSCounter extends Sprite
 
 			if (nowTime >= updateTime)
 			{
-				var elapsed = nowTime - prevTime;
 				framesCount = 0;
 				prevTime = nowTime;
 				updateTime = nowTime + 500;
 			}
-
-		// 仅在设备"无法达到"设定帧率时（实测明显偏低）才下调引擎帧率；
-		// 绝不允许把帧率"拉高"到实测值，否则一旦短时超标就会把引擎永久锁定到超过设定值的帧率。
-		//石山AI发力了——牢喵_202608.15
-		/*if (FlxG.updateFramerate > currentFPS + 5
-			&& haxe.Timer.stamp() - lastFramerateUpdateTime >= 1.5
-			&& currentFPS >= 30)
-		{
-			var clamped = Std.int(Math.min(currentFPS, ClientPrefs.data.framerate));
-			FlxG.updateFramerate = FlxG.drawFramerate = clamped;
-			lastFramerateUpdateTime = haxe.Timer.stamp();
-		}*/
-
 		}
 	}
 
@@ -589,14 +640,17 @@ class FPSCounter extends Sprite
 		return count;
 	}
 
-	// 原生GC开关状态标记：仅当关闭时在 FPS 行显示 "NO GC" 提示
-	inline function gcStateLabel():String
+	// ---- 节流的内存查询 ----
+	private function getMemoryCached():Float
 	{
-		return (ClientPrefs.data != null && !ClientPrefs.data.garbageCollectorEnabled) ? "(No GC)" : "";
-	}
+		var now = Timer.stamp();
+		if (now - _lastMemQueryTime < 0.5) // 0.5 秒更新一次
+		{
+			// 即使在 Simple 模式也返回缓存值（Simple 用 Simple 格式）
+			return _cachedMemMegas;
+		}
+		_lastMemQueryTime = now;
 
-	function get_memoryMegas():Float
-	{
 		#if cpp
 		try
 		{
@@ -605,7 +659,10 @@ class FPSCounter extends Sprite
 			{
 				var mem:Float = cast memValue;
 				if (Math.isFinite(mem) && mem >= 0)
+				{
+					_cachedMemMegas = mem;
 					return mem;
+				}
 			}
 		}
 		catch (e:Dynamic) {}
@@ -617,13 +674,38 @@ class FPSCounter extends Sprite
 			{
 				var mem:Float = cast memValue;
 				if (Math.isFinite(mem) && mem >= 0)
+				{
+					_cachedMemMegas = mem;
 					return mem;
+				}
 			}
 		}
 		catch (e:Dynamic) {}
 		#end
 
+		_cachedMemMegas = 0;
 		return 0;
+	}
+
+	function get_memoryMegas():Float
+	{
+		return _cachedMemMegas;
+	}
+
+	/** 缓存版本字符串 */
+	inline private function getCachedVersion():String
+	{
+		if (_lastVersionStr != null) return _lastVersionStr;
+		var v:String = Application.current.meta.get('version');
+		if (v == null) v = "0.0.0";
+		_lastVersionStr = v;
+		return v;
+	}
+
+	// 原生GC开关状态标记：仅当关闭时在 FPS 行显示 "NO GC" 提示
+	inline function gcStateLabel():String
+	{
+		return (ClientPrefs.data != null && !ClientPrefs.data.garbageCollectorEnabled) ? "(No GC)" : "";
 	}
 
 	public inline function positionFPS(X:Float, Y:Float, ?scale:Float = 1)

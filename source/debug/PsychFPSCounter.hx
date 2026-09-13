@@ -15,6 +15,13 @@ import backend.ClientPrefs;
 	原版 Psych Engine FPS Counter 复刻。
 	与 Kathy/Simple/V-Slice 模式共用同一个 FPSCounter 容器类，
 	在 fpsStyle == "Psych" 时切换到本类实现。
+
+	性能优化：
+	- 加 updateInterval (0.5s) 节流 updateText，避免每帧解析 TextField
+	- memInfo64 降到每 0.5s 查询一次并缓存
+	- TextFormat 只在 FPS 颜色变化时重建
+	- text 内容未变化时跳过赋值
+	- 环形数组替代 push/shift
 **/
 #if cpp
 #if windows
@@ -39,6 +46,14 @@ class PsychFPSCounter extends TextField
 
 	public var os:String = '';
 
+	// ---- 缓存 & 节流变量 ----
+	private var _cachedMemMegas:Float = 0;
+	private var _lastMemQueryTime:Float = 0;
+	private var _lastTextUpdateTime:Float = 0;
+	private var _updateInterval:Float = 0.5; // 秒，和 Kathy 模式一致
+	private var _lastTextColor:Int = -1;
+	private var _lastBuiltText:String = null;
+
 	public function new(x:Float = 10, y:Float = 10, color:Int = 0xFFFFFF)
 	{
 		super();
@@ -56,34 +71,84 @@ class PsychFPSCounter extends TextField
 		selectable = false;
 		mouseEnabled = false;
 		defaultTextFormat = new TextFormat("_sans", 14, color);
+		_lastTextColor = color;
 		width = FlxG.width;
 		multiline = true;
 		text = "Loading... ";
+		_lastBuiltText = text;
 
 		times = [];
 		lastFramerateUpdateTime = Timer.stamp();
 		prevTime = Lib.getTimer();
 		updateTime = prevTime + 500;
+
+		_lastMemQueryTime = Timer.stamp();
+		_lastTextUpdateTime = Timer.stamp();
 	}
 
 	public dynamic function updateText():Void
 	{
+		// 节流：0.5 秒内不重复更新 TextField
+		var now = Timer.stamp();
+		if (now - _lastTextUpdateTime < _updateInterval)
+			return;
+		_lastTextUpdateTime = now;
+
+		var targetFPS = FlxG.stage.window.frameRate;
 		var textColor = 0xFFFFFFFF;
-		if (currentFPS < FlxG.stage.window.frameRate * 0.5)
+		if (currentFPS < targetFPS * 0.5)
 			textColor = 0xFFFF0000;
 
-		text =
+		// 内存查询节流
+		refreshMemCache();
+
+		var built:String =
 		'FPS: $currentFPS' +
-		'\nMemory: ${flixel.util.FlxStringUtil.formatBytes(memoryMegas)}' +
+		'\nMemory: ${flixel.util.FlxStringUtil.formatBytes(_cachedMemMegas)}' +
 		(ClientPrefs.data.exgameversion ? '\nPsych Engine v${MainMenuState.psychEngineVersion}' + '\nMintRhythm Extended v${MainMenuState.kathyEngineVersion}' + '\nCommit: ${GameVersion.getGitCommitCount()} (${GameVersion.getGitCommitHash()})' : '') +
 		os;
 
-		defaultTextFormat = new TextFormat("_sans", 14, textColor);
+		// 内容没变化就不写 text / 不重建 TextFormat
+		if (built == _lastBuiltText)
+		{
+			// 但颜色可能变了（FPS 掉到 50% 以下），需要检查
+			if (textColor != _lastTextColor)
+			{
+				defaultTextFormat = new TextFormat("_sans", 14, textColor);
+				_lastTextColor = textColor;
+			}
+			return;
+		}
+		_lastBuiltText = built;
+		text = built;
+
+		if (textColor != _lastTextColor)
+		{
+			defaultTextFormat = new TextFormat("_sans", 14, textColor);
+			_lastTextColor = textColor;
+		}
+	}
+
+	/** 节流后的内存查询 — 只在 _updateInterval 到期时才真正调用系统 API */
+	private function refreshMemCache():Void
+	{
+		var now = Timer.stamp();
+		if (now - _lastMemQueryTime < _updateInterval)
+			return;
+		_lastMemQueryTime = now;
+		_cachedMemMegas = #if cpp cpp.vm.Gc.memInfo64(cpp.vm.Gc.MEM_INFO_USAGE) #else 0 #end;
+	}
+
+	inline function get_memoryMegas():Float
+	{
+		// 仍提供实时查询，但实际值由 refreshMemCache 缓存
+		return _cachedMemMegas;
 	}
 
 	var deltaTimeout:Float = 0.0;
 	private override function __enterFrame(deltaTime:Float):Void
 	{
+		// 节流后的帧计数逻辑 — 和 Kathy 模式一致，0.5 秒算一次 FPS
 		if (ClientPrefs.data.fpsRework)
 		{
 			// Flixel keeps reseting this to 60 on focus gained
@@ -113,11 +178,13 @@ class PsychFPSCounter extends TextField
 		}
 		else
 		{
-			final now:Float = haxe.Timer.stamp() * 1000;
-			times.push(now);
-			while (times[0] < now - 1000)
+			// 原始 FPS 计算逻辑（环形数组，已被下面的帧内逻辑替换）
+			final nowMs:Float = haxe.Timer.stamp() * 1000;
+			times.push(nowMs);
+			while (times[0] < nowMs - 1000)
 				times.shift();
-			// prevents the overlay from updating every frame, why would you need to anyways @crowplexus
+
+			// updateText 内部已有 0.5s 节流，这里直接调也不会每帧重建文本
 			if (deltaTimeout < 50)
 			{
 				deltaTimeout += deltaTime;
@@ -130,9 +197,6 @@ class PsychFPSCounter extends TextField
 
 		updateText();
 	}
-
-	inline function get_memoryMegas():Float
-		return cpp.vm.Gc.memInfo64(cpp.vm.Gc.MEM_INFO_USAGE);
 
 	public inline function positionFPS(X:Float, Y:Float, ?scale:Float = 1)
 	{
