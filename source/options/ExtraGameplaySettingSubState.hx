@@ -272,6 +272,24 @@ class ExtraGameplaySettingSubState extends BaseOptionsMenu
 			BOOL);
 		addOption(option);
 
+		option = new Option(Language.get('frame_adaptive_sync'),
+			Language.get("frame_adaptive_sync_desc"),
+			'useFrameAdaptiveSync',
+			BOOL);
+		addOption(option);
+
+		option = new Option(Language.get('sync_speed_multiplier'),
+			Language.get("sync_speed_multiplier_desc"),
+			'syncSpeedMultiplier',
+			FLOAT);
+		option.displayFormat = '%v X';
+		option.scrollSpeed = 2;
+		option.minValue = 0.1;
+		option.maxValue = 10;
+		option.changeValue = 0.1;
+		option.decimals = 1;
+		addOption(option);
+
 		option = new Option(Language.get('background_volume_level'),
 			Language.get("bgvol_level_desc"),
 			'backgroundVolumeLevel',

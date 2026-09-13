@@ -87,6 +87,10 @@ import openfl.display.StageQuality;
 	// ===== 低延迟 / 性能模式 =====
 	// 自动重同步：弱机卡顿时，引擎会检测音频与逻辑不同步并跳回正确位置。关闭后不会“倒带”，改由玩家手动校准。
 	public var autoResync:Bool = true;
+	// 帧自适应同步：根据目标帧率动态调整 songPosition 向音频时钟的收敛速度，低帧时更平滑、高帧时更跟手。
+	public var useFrameAdaptiveSync:Bool = false;
+	// 同步速度倍率（仅 useFrameAdaptiveSync 启用时生效），范围 0.1 ~ 10，默认 1.0。
+	public var syncSpeedMultiplier:Float = 1.0;
 	// 提前剔除已错过音符的渲染：已错过且离开屏幕（或到达极晚阈值）的音符不再参与绘制，降低 SPAM 谱渲染负担。
 	public var hideMissedNotes:Bool = true;
 
@@ -660,11 +664,17 @@ class ClientPrefs {
 		if (!Reflect.hasField(FlxG.save.data, 'hitsoundPitchRange') || data.hitsoundPitchRange <= 0)
 			data.hitsoundPitchRange = 0.25;
 
-		// 打击音对象池新字段填充默认值（兼容老存档升级）
+		// 为 1.5.x 新增的打击音对象池新字段填充默认值（兼容老存档升级）
 		if (!Reflect.hasField(FlxG.save.data, 'hitSoundPoolEnabled'))
 			data.hitSoundPoolEnabled = true;
 		if (!Reflect.hasField(FlxG.save.data, 'hitSoundPoolSize') || data.hitSoundPoolSize < 1)
 			data.hitSoundPoolSize = 50;
+
+		// 为帧自适应同步新增字段填充默认值（兼容老存档升级）
+		if (!Reflect.hasField(FlxG.save.data, 'useFrameAdaptiveSync'))
+			data.useFrameAdaptiveSync = false;
+		if (!Reflect.hasField(FlxG.save.data, 'syncSpeedMultiplier') || data.syncSpeedMultiplier <= 0)
+			data.syncSpeedMultiplier = 1.0;
 
 		// 向后兼容：将旧版 Bool 类型的 rmPerfect 转换为新版 String 三选一
 		// 旧 false → 'enable'(正常), 旧 true → 'remove'(完全移除), 新存档直接为 String
