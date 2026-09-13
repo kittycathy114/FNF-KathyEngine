@@ -219,13 +219,18 @@ class MainMenuState extends MusicBeatState
 		#end
 
 		#if CHECK_FOR_UPDATES
-		CoolUtil.checkForUpdates(function (latestVersion:String, isOutdated:Bool) {
-			if (showOutdatedWarning && isOutdated && FlxG.state == this && this.subState == null) {
-				showOutdatedWarning = false;
-				persistentUpdate = false;
-				openSubState(new substates.OutdatedSubState(latestVersion));
-			}
-		});
+		// 更新检查已在标题界面后台启动；结果就绪且为过时版本时，进主界面立即提示（本会话仅一次）
+		if (showOutdatedWarning && CoolUtil.updateIsOutdated && this.subState == null)
+		{
+			showOutdatedWarning = false;
+			// 稍等入场转场结束再弹，避免盖住放大动画；期间已切走则放弃
+			new FlxTimer().start(0.5, function(_) {
+				if (!destroyed && FlxG.state == this && this.subState == null) {
+					persistentUpdate = false;
+					openSubState(new substates.OutdatedSubState(CoolUtil.updateLatestVersion));
+				}
+			});
+		}
 		#end
 
 		FlxG.camera.follow(camFollow, null, 0.15);

@@ -145,6 +145,11 @@ class TitleState extends MusicBeatState
 
 		// 预加载tips内容
 		CoolUtil.tipsShow(function (_:String) {});
+
+		// 一进游戏就在后台检查更新（每次启动仅一次），结果供主界面进入时弹窗
+		#if CHECK_FOR_UPDATES
+		CoolUtil.checkForUpdates();
+		#end
 		FlxG.mouse.useSystemCursor = ClientPrefs.data.systemCursor;
 	}
 

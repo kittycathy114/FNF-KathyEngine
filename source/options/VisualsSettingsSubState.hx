@@ -291,6 +291,12 @@ class VisualsSettingsSubState extends BaseOptionsMenu
 			'checkForUpdates',
 			BOOL);
 		addOption(option);
+
+		var option:Option = new Option(Language.get('receive_beta_builds'),
+			Language.get("receivebetabuilds_desc"),
+			'receiveBetaBuilds',
+			BOOL);
+		addOption(option);
 		#end
 
 	#if DISCORD_ALLOWED

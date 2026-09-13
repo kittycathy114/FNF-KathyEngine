@@ -29,12 +29,13 @@ class Network
 	 *
 	 * 当联网被禁用时不会发起任何请求，并会调用一次 `onError('networking disabled')`（若提供）。
 	 *
-	 * @param url     请求地址
-	 * @param onData  成功回调（被拦截时不会触发，参数为响应文本）
-	 * @param onError 失败回调（被拦截时会以原因字符串调用一次）
+	 * @param url       请求地址
+	 * @param onData    成功回调（被拦截时不会触发，参数为响应文本）
+	 * @param onError   失败回调（被拦截时会以原因字符串调用一次）
+	 * @param userAgent 可选 User-Agent（GitHub API 要求请求必须携带 UA，否则返回 403）
 	 * @return 实际发起的 `lime.net.HTTPRequest`，被拦截时返回 null
 	 */
-	public static function httpGet(url:String, ?onData:String->Void, ?onError:Dynamic->Void):lime.net.HTTPRequest<Dynamic>
+	public static function httpGet(url:String, ?onData:String->Void, ?onError:Dynamic->Void, ?userAgent:String):lime.net.HTTPRequest<Dynamic>
 	{
 		if (isNetworkingDisabled())
 		{
@@ -44,6 +45,8 @@ class Network
 		}
 
 		final req = new lime.net.HTTPRequest<Dynamic>();
+		if (userAgent != null && userAgent.length > 0)
+			req.userAgent = userAgent;
 		req.load(url).onComplete(function(data:Dynamic) {
 			if (onData != null) onData(Std.string(data));
 		}).onError(function(error:Dynamic) {

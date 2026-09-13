@@ -158,6 +158,7 @@ import openfl.display.StageQuality;
 	// 画面每拍缩放特效（标题界面 3%，主界面 1.5%）：true=开启，false=关闭
 	public var beatScale:Bool = true;
 	public var checkForUpdates:Bool = true;
+	public var receiveBetaBuilds:Bool = false; // 更新检查是否包含测试版（Pre-release）构建：关闭时只检查正式版
 	public var disableNetworking:Bool = false; // 全局联网开关：true 时拦截所有联网行为
 	public var comboStacking:Bool = true;
 	public var gameplaySettings:Map<String, Dynamic> = [

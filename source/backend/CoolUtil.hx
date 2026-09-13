@@ -5,6 +5,7 @@ import lime.utils.Assets as LimeAssets;
 import flixel.addons.display.FlxGridOverlay;
 import flixel.graphics.FlxGraphic;
 import flixel.FlxG;
+import flixel.util.FlxTimer;
 
 #if cpp
 @:cppFileCode('#include <thread>')
@@ -12,73 +13,246 @@ import flixel.FlxG;
 class CoolUtil
 {
 	private static var cachedTips:String = null;
+	private static var _tipsPending:Bool = false; // tips 请求进行中标志：预取与主界面请求重叠时复用同一请求，避免重复联网
+	private static var _tipsQueue:Array<String->Void> = [];
 	private static var _coolTextFileCache:Map<String, Array<String>> = null;
 	private static var _gridCache:Map<String, FlxGraphic> = null;
 	private static var _updateCheckDone:Bool = false;
 	private static var _updateCheckPending:Bool = false;
+	private static var _updateWatchdog:FlxTimer = null;
+	private static var _updateRequestId:Int = 0; // 每次发起请求自增，用于丢弃看门狗超时后才迟到的过期响应
 
-	public static function checkForUpdates(?onComplete:(latestVersion:String, isOutdated:Bool)->Void, url:String = null):Void {
-		var version:String = states.MainMenuState.kathyEngineVersion;
+	// 更新检查结果（检查结束后有效）：标题界面后台发起，主界面进入时读取
+	public static var updateLatestVersion:String = null;
+	public static var updateIsOutdated:Bool = false;
+
+	// 更新检查源：jsDelivr CDN 上的 gitVersion.txt（唯一版本源）
+	//   release:1.x.x    <- 最新正式版（所有用户）
+	//   dev:x.x.x-rc.1xx   <- 最新测试版（可选；"接收测试版构建"开启时优先读取）
+	//   注意 jsDelivr 对 @main 分支有最长 12h 的 CDN 缓存，改完文件后可用 purge.jsdelivr.net 主动刷新
+	static inline final UPDATE_SOURCE_URL:String = "https://cdn.jsdelivr.net/gh/kittycathy114/FNF-KathyEngine@main/gitVersion.txt";
+	// 看门狗超时：连上但服务器一直不响应时按失败处理，及时结束本次检查
+	static inline final UPDATE_TIMEOUT:Float = 4;
+
+	/**
+	 * 发起更新检查（每次启动仅一次，在标题界面后台调用）。
+	 * 结果写入 updateLatestVersion / updateIsOutdated，由主界面在进入时读取并弹窗。
+	 */
+	public static function checkForUpdates():Void {
 		if(!ClientPrefs.data.checkForUpdates) {
-			if(onComplete != null) onComplete(version, false);
+			_updateCheckDone = true;
 			return;
 		}
-		if(_updateCheckDone) {
-			if(onComplete != null) onComplete(version, false);
+		if(_updateCheckDone || _updateCheckPending) return;
+		// 全局联网禁用时直接短路，避免逐层触发 onError 回调
+		if(Network.isNetworkingDisabled()) {
+			trace('[UpdateCheck] networking disabled, skipping');
+			_updateCheckDone = true;
 			return;
 		}
-		if(_updateCheckPending) return;
 		_updateCheckPending = true;
-		if (url == null || url.length == 0)
-			url = "https://raw.githubusercontent.com/kittycathy114/FNF-KathyEngine/main/gitVersion.txt";
-		final fallbackUrl:String = "https://cdn.jsdelivr.net/gh/kittycathy114/FNF-KathyEngine@main/gitVersion.txt";
+		requestUpdateCheck();
+	}
 
-		trace('checking for updates... ($url)');
-		Network.httpGet(url,
+	/** 实际发起更新检查请求（不带会话去重门控） */
+	static function requestUpdateCheck():Void {
+		trace('checking for updates... ($UPDATE_SOURCE_URL)');
+
+		final reqId:Int = ++_updateRequestId;
+
+		// 4 秒看门狗：HTTPRequest 挂起（连上但不返回）永远不会触发 onError，
+		// 必须主动超时结束；否则本次检查放弃
+		if(_updateWatchdog != null) _updateWatchdog.cancel();
+		_updateWatchdog = new FlxTimer().start(UPDATE_TIMEOUT, function(tmr:FlxTimer) {
+			if(reqId != _updateRequestId) return; // 已被新请求取代
+			_updateWatchdog = null;
+			trace('update check timed out after ${Std.int(UPDATE_TIMEOUT)}s ($UPDATE_SOURCE_URL)');
+			finishUpdateCheck(states.MainMenuState.kathyEngineVersion, false);
+		});
+
+		Network.httpGet(UPDATE_SOURCE_URL,
 			function (data:String) {
-				_updateCheckDone = true;
-				var newVersion:String = data.split('\n')[0].trim();
-				trace('version online: $newVersion, your version: $version');
-				if(versionCompare(newVersion, version) > 0) {
-					trace('a new version is available!');
-					if(onComplete != null) onComplete(newVersion, true);
-				} else {
-					trace('you are on the latest version');
-					if(onComplete != null) onComplete(version, false);
+				if(reqId != _updateRequestId) return; // 看门狗已超时放弃本请求，丢弃迟到响应
+				stopUpdateWatchdog();
+				var newVersion:String = parseUpdateResponse(data);
+				if(newVersion == null) {
+					// 响应不是合法版本号（如 CDN 缓存被污染），按失败处理
+					trace('invalid response from update source');
+					finishUpdateCheck(states.MainMenuState.kathyEngineVersion, false);
+					return;
 				}
+				trace('version online: $newVersion, your version: ${states.MainMenuState.kathyEngineVersion}');
+				finishUpdateCheck(newVersion, versionCompare(newVersion, states.MainMenuState.kathyEngineVersion) > 0);
 			},
 			function (error) {
-				// 官方 GitHub 不可用时，回退到 jsDelivr CDN
-				if (url != fallbackUrl) {
-					trace('failed to check (official github): $error, fallback to jsdelivr');
-					checkForUpdates(onComplete, fallbackUrl);
-				} else {
-					_updateCheckDone = true;
-					trace('failed to check for updates: $error');
-					if(onComplete != null) onComplete(version, false);
-				}
+				if(reqId != _updateRequestId) return;
+				stopUpdateWatchdog();
+				trace('failed to check ($UPDATE_SOURCE_URL): $error');
+				finishUpdateCheck(states.MainMenuState.kathyEngineVersion, false);
 			});
 	}
 
+	static function finishUpdateCheck(latestVersion:String, isOutdated:Bool):Void {
+		_updateCheckDone = true;
+		_updateCheckPending = false;
+		updateLatestVersion = latestVersion;
+		updateIsOutdated = isOutdated;
+	}
+
+	static function stopUpdateWatchdog():Void {
+		if(_updateWatchdog != null) {
+			_updateWatchdog.cancel();
+			_updateWatchdog = null;
+		}
+	}
+
 	/**
-	 * 语义化版本比较。会自动忽略 " dev" 之类的附加后缀，只比较主.次.修订号。
+	 * 从 gitVersion.txt 内容中提取版本号，无法解析时返回 null。
+	 * 文件格式（键名大小写不限；兼容旧式无键单行文件）：
+	 *   release:1.1.0     <- 最新正式版（所有用户）
+	 *   dev:1.1.1-rc.1    <- 最新测试版（可选；"接收测试版构建"开启时优先读取，缺失时退回 release）
+	 */
+	static function parseUpdateResponse(data:String):String {
+		var stable:String = null, latest:String = null;
+		for (line in data.split('\n')) {
+			var key:String = null, ver:String = line;
+			var colon:Int = line.indexOf(':');
+			if(colon > 0) {
+				key = line.substring(0, colon).trim().toLowerCase();
+				ver = line.substring(colon + 1);
+			}
+			ver = parseVersionLine(ver);
+			if(ver == null) continue;
+			if(key == null || key == 'release' || key == 'stable') {
+				if(stable == null) stable = ver;
+			} else if(key == 'dev' || key == 'beta' || key == 'prerelease') {
+				if(latest == null) latest = ver;
+			}
+		}
+		if(stable == null) return null;
+		if(!ClientPrefs.data.receiveBetaBuilds) {
+			// 测试版开关关闭时，release 行必须是纯正式版或 Fix/Hotfix 修复版：
+			// 普通预发布后缀（-rc.x/-beta 等）只应出现在 dev 行，避免误推给所有用户
+			var pre:String = splitCorePre(stable).pre;
+			if(pre != null && pre.length > 0 && !isFixSuffix(pre)) {
+				trace('[UpdateCheck] release version "$stable" has a prerelease suffix, but receiveBetaBuilds is off; ignored');
+				return null;
+			}
+			return stable;
+		}
+		if(latest == null) return stable;
+		return latest;
+	}
+
+	/** 解析单行版本号：剥离 v/V 前缀后校验合法性 */
+	static function parseVersionLine(line:String):String {
+		line = line.trim();
+		if(line.length > 1 && (line.charAt(0) == 'v' || line.charAt(0) == 'V'))
+			line = line.substring(1);
+		return isValidVersion(line) ? line : null;
+	}
+
+	/** 接受任意长度数字核心版本（1.2 / 1.2.3 / 1.2.3.4），可带预发布后缀（-beta、-rc.1 等）与 '+' 构建元数据 */
+	static function isValidVersion(s:String):Bool {
+		return s != null && ~/^\d+(\.\d+)*(-[0-9A-Za-z][0-9A-Za-z.-]*)?(\+[0-9A-Za-z.-]*)?$/.match(s);
+	}
+
+	/**
+	 * 语义化版本比较（SemVer 2.0.0 宽松实现，含 Fix/Hotfix 扩展）。
+	 *  - 核心段支持任意数量：1.2 / 1.2.3 / 1.2.3.4 均可，缺段按 0 补齐
+	 *  - 预发布后缀：1.2.0-alpha < 1.2.0-beta.1 < 1.2.0-beta.10 < 1.2.0-rc < 1.2.0
+	 *    （同核心版本下，无后缀比有后缀新；标识符数字比数值、字母比字典序、数字 < 字母）
+	 *  - Fix/Hotfix 扩展：首个标识符以 fix/hotfix 开头的后缀（大小写不限，如 -fix.1、-HotFix-xxx）
+	 *    视为"高于正式版"的紧急修复通道，但仍低于任何版本号更高的核心版本
+	 *  - 忽略空格后缀（如 debug 构建的 " dev"）和 '+' 构建元数据
 	 * @return >0 表示 a 比 b 新，<0 表示 a 比 b 旧，0 表示相等
 	 */
 	public static function versionCompare(a:String, b:String):Int
 	{
 		var va:String = a.split(' ')[0].trim();
 		var vb:String = b.split(' ')[0].trim();
-		var pa:Array<String> = va.split('.');
-		var pb:Array<String> = vb.split('.');
+		var sa:{core:String, pre:String} = splitCorePre(va);
+		var sb:{core:String, pre:String} = splitCorePre(vb);
+
+		var pa:Array<String> = sa.core.split('.');
+		var pb:Array<String> = sb.core.split('.');
 		var len:Int = Std.int(Math.max(pa.length, pb.length));
 		for (i in 0...len)
 		{
-			var na:Int = (i < pa.length) ? Std.parseInt(pa[i]) : 0;
-			var nb:Int = (i < pb.length) ? Std.parseInt(pb[i]) : 0;
+			var na:Int = (i < pa.length) ? parseVersionSegment(pa[i]) : 0;
+			var nb:Int = (i < pb.length) ? parseVersionSegment(pb[i]) : 0;
 			if (na > nb) return 1;
 			if (na < nb) return -1;
 		}
+		return comparePrerelease(sa.pre, sb.pre);
+	}
+
+	/** 拆出核心版本与预发布后缀；'+' 构建元数据不参与比较 */
+	static function splitCorePre(v:String):{core:String, pre:String}
+	{
+		var plus:Int = v.indexOf('+');
+		if(plus >= 0) v = v.substring(0, plus);
+		var dash:Int = v.indexOf('-');
+		if(dash < 0) return {core: v, pre: null};
+		return {core: v.substring(0, dash), pre: v.substring(dash + 1)};
+	}
+
+	static function parseVersionSegment(s:String):Int
+	{
+		var n:Null<Int> = Std.parseInt(s);
+		return (n == null) ? 0 : n; // 非法段按 0 处理，避免 null 参与比较
+	}
+
+	/**
+	 * 预发布后缀比较。常规后缀：无后缀 > 有后缀；标识符数字比数值、字母比字典序、数字 < 字母。
+	 * Fix/Hotfix 扩展：fix/hotfix 类后缀视为高于正式版与一切常规预发布（见 isFixSuffix）。
+	 */
+	static function comparePrerelease(a:String, b:String):Int
+	{
+		// Fix/Hotfix 通道：同核心版本下 正式版 < -fix.1 < -fix.2 < 下一版本号
+		var aFix:Bool = isFixSuffix(a);
+		var bFix:Bool = isFixSuffix(b);
+		if(aFix != bFix)
+			return aFix ? 1 : -1;
+
+		if(a == null || a.length == 0) return (b == null || b.length == 0) ? 0 : 1;
+		if(b == null || b.length == 0) return -1;
+		var pa:Array<String> = a.split('.');
+		var pb:Array<String> = b.split('.');
+		var len:Int = Std.int(Math.max(pa.length, pb.length));
+		for (i in 0...len)
+		{
+			if(i >= pa.length) return -1; // 前段全等时，标识符更少的一方更旧
+			if(i >= pb.length) return 1;
+			var sa:String = pa[i], sb:String = pb[i];
+			var na:Null<Int> = Std.parseInt(sa);
+			var nb:Null<Int> = Std.parseInt(sb);
+			if(na != null && nb != null)
+			{
+				if(na > nb) return 1;
+				if(na < nb) return -1;
+			}
+			else if(na != null) return -1; // 数字标识符 < 字母标识符
+			else if(nb != null) return 1;
+			else
+			{
+				// 字母标识符按小写化后的字典序比较，使 -Beta / -BETA / -beta 等大小写变体互相兼容
+				var c:Int = Reflect.compare(sa.toLowerCase(), sb.toLowerCase());
+				if(c != 0) return c;
+			}
+		}
 		return 0;
+	}
+
+	/**
+	 * 是否为 Fix/Hotfix 类后缀：首个标识符以 fix / hotfix 开头（大小写不限）。
+	 * 如 -fix、-fix.1、-Fix-2、-hotfix-20260913。多个修复版建议用点号编号（-fix.1 / -fix.2）以获得正确的数值排序。
+	 */
+	static function isFixSuffix(pre:String):Bool
+	{
+		if(pre == null || pre.length == 0) return false;
+		var first:String = pre.split('.')[0].toLowerCase();
+		return first.indexOf('fix') == 0 || first.indexOf('hotfix') == 0;
 	}
 
 	public static function tipsShow(?onComplete:String->Void, url:String = null, forceReload:Bool = false):Void {
@@ -90,23 +264,42 @@ class CoolUtil
 		if (url == null || url.length == 0)
 			url = "https://raw.githubusercontent.com/kittycathy332/FNF-Kathy-Things/main/engine/menu/tips/" + ClientPrefs.data.language + ".txt";
 
+		// 首个请求还在途中时，后续调用只排队等结果，不再重复发请求
+		if (_tipsPending) {
+			if (onComplete != null) _tipsQueue.push(onComplete);
+			return;
+		}
+		_tipsPending = true;
+
 		trace('searching for tips... ($url)');
 		Network.httpGet(url,
 			function (data:String)
 			{
+				_tipsPending = false;
 				cachedTips = data.trim(); // 缓存结果
+				flushTipsQueue(cachedTips);
 				if (onComplete != null) onComplete(cachedTips);
 			},
 			function (error) {
 				// 语言专属文件不存在时，回退到简体中文
 				if (url.indexOf("zh_cn.txt") == -1) {
 					trace('tip file for current language unavailable, fallback to zh_cn: $error');
+					_tipsPending = false; // 递归重试会重新置位
 					tipsShow(onComplete, "https://raw.githubusercontent.com/kittycathy332/FNF-Kathy-Things/main/engine/menu/tips/zh_cn.txt", forceReload);
 				} else {
+					_tipsPending = false;
 					trace('error: $error');
+					flushTipsQueue('');
 					if (onComplete != null) onComplete('');
 				}
 			});
+	}
+
+	/** 把排队中的 tips 回调按序补发（含完全失败时的空结果） */
+	static function flushTipsQueue(tips:String):Void {
+		var queue:Array<String->Void> = _tipsQueue;
+		_tipsQueue = [];
+		for (cb in queue) cb(tips);
 	}
 
 	inline public static function quantize(f:Float, snap:Float){
