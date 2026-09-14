@@ -76,6 +76,7 @@ import crowplexus.hscript.Printer;
 #end
 import lime.app.Application;
 import backend.Native;
+import backend.AudioClock;
 
 import funkin.vis.dsp.SpectralAnalyzer;
 import funkin.vis.audioclip.frontends.LimeAudioClip;
@@ -3448,7 +3449,9 @@ tempScore += '${lblScore}: ${songScore}';
 			FlxTween.globalManager.forEach(function(twn:FlxTween) if(!twn.finished) twn.active = true);
 
 			paused = false;
-			callOnScripts('onResume');
+		if (FlxG.sound.music != null)
+			AudioClock.resume(FlxG.sound.music.time, playbackRate);
+		callOnScripts('onResume');
 			resetRPC(startTimer != null && startTimer.finished);
 			runSongSyncThread();
 		}
@@ -3523,6 +3526,11 @@ tempScore += '${lblScore}: ${songScore}';
 
 	override public function update(elapsed:Float)
 	{
+		// 帧率无关的亚帧音频时钟：帧首喂一次 OpenAL 位置，
+		// 让 Note.followStrumNote 在帧内任意时刻都能拿到纳秒级连续音频时间。
+		if (FlxG.sound.music != null && FlxG.sound.music.playing && !paused)
+			AudioClock.tick(FlxG.sound.music.time, playbackRate);
+
 		// 分帧延迟初始化：将非关键操作分散到后续帧，避免 create() 中长时间阻塞主线程
 		if (_deferredInitStep >= 0)
 		{
@@ -4673,6 +4681,7 @@ tempScore += '${lblScore}: ${songScore}';
 		persistentUpdate = false;
 		persistentDraw = true;
 		paused = true;
+		AudioClock.pause();
 
 		if(FlxG.sound.music != null) {
 			FlxG.sound.music.pause();
@@ -7157,6 +7166,7 @@ tempScore += '${lblScore}: ${songScore}';
 	}
 
 	override function destroy() {
+		AudioClock.reset();
 		if (keyViewer != null)
 		{
 			keyViewer.destroy();

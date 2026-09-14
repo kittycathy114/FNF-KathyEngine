@@ -3,6 +3,7 @@ package objects;
 import backend.animation.PsychAnimationController;
 import backend.NoteTypesConfig;
 import backend.ClientPrefs;
+import backend.AudioClock;
 
 import shaders.RGBPalette;
 import shaders.RGBPalette.RGBShaderReference;
@@ -1063,7 +1064,18 @@ class Note extends FlxSprite
 		var strumAlpha:Float = myStrum.alpha;
 		var strumDirection:Float = myStrum.direction;
 
-		distance = (0.45 * (Conductor.songPosition - strumTime) * songSpeed * multSpeed);
+		// 帧率无关的亚帧连续音频时钟驱动位置计算，消除 Conductor.songPosition 的 lerp 收敛振荡
+		// 以及 OpenAL 每帧采样量化。详见 AudioClock 注释。
+		// 量纲说明：AudioClock.getPosition() 锚在「真实 OpenAL 时间」(music.time)，而
+		// Conductor.songPosition = music.time + Conductor.offset（PlayState 里 Conductor.offset
+		// 已按 playbackRate 归一：SONG.offset / playbackRate）。故 + Conductor.offset 即可
+		// 还原成与 Conductor.songPosition 同量纲的逻辑时间，前奏段 / 倍速下均不错位。
+		var timeNow:Float = Conductor.songPosition;
+		if (FlxG.sound.music != null && FlxG.sound.music.playing)
+		{
+			timeNow = AudioClock.getPosition() + Conductor.offset;
+		}
+		distance = (0.45 * (timeNow - strumTime) * songSpeed * multSpeed);
 		if (!myStrum.downScroll) distance *= -1;
 
 		// 使用 StrumNote 缓存的 cos/sin（默认 90° 时 dirCos=0, dirSin=1），避免每音符每帧各算一次
