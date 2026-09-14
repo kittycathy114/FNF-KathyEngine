@@ -1,4 +1,4 @@
-﻿package states.editors;
+package states.editors;
 
 import flixel.FlxSubState;
 import flixel.util.FlxSave;
@@ -1368,6 +1368,8 @@ if(_shouldReset) Conductor.songPosition = 0;
 	var _topBarFrameTime:Float = 0;
 	var _topBarFPS:Float = 0;
 	var _topBarPeakMem:Float = 0; // 峰值内存（字节），自行跟踪
+	var _topBarLastMemQueryTime:Float = 0; // 上次查询系统内存的时间戳（用于节流）
+	var _topBarLastMemBytes:Float = 0; // 最近一次成功查询到的内存（字节）
 
 	var fileDialog:FileDialogHandler = new FileDialogHandler();
 	var lastFocus:PsychUIInputText;
@@ -6553,13 +6555,44 @@ for (i in 0...GRID_PLAYERS)
 			_topBarFrameCount = 0;
 			_topBarFrameTime = 0;
 		}
-		// 内存：memoryMegas getter 直接读系统（与 visible 无关），自行跟踪峰值
-		var curMemBytes:Float = 0;
-		if (Main.fpsVar != null)
-			curMemBytes = Main.fpsVar.memoryMegas;
-		if (curMemBytes > _topBarPeakMem)
-			_topBarPeakMem = curMemBytes;
-		var curMB:Int = Std.int(curMemBytes / (1024 * 1024));
+		// 内存：独立节流查询系统内存（Main.fpsVar.visible=false 时其缓存不再刷新，不能依赖它）
+		var now = haxe.Timer.stamp();
+		if (now - _topBarLastMemQueryTime >= 0.5)
+		{
+			_topBarLastMemQueryTime = now;
+			var mem:Float = 0;
+			#if cpp
+			try
+			{
+				var memValue:Dynamic = cpp.vm.Gc.memInfo64(cpp.vm.Gc.MEM_INFO_USAGE);
+				if (Std.is(memValue, Float) || Std.is(memValue, Int))
+				{
+					var m:Float = cast memValue;
+					if (Math.isFinite(m) && m >= 0)
+						mem = m;
+				}
+			}
+			catch (e:Dynamic) {}
+			if (mem == 0)
+			{
+				try
+				{
+					var memValue2:Dynamic = cpp.vm.Gc.memInfo(cpp.vm.Gc.MEM_INFO_USAGE);
+					if (Std.is(memValue2, Float) || Std.is(memValue2, Int))
+					{
+						var m2:Float = cast memValue2;
+						if (Math.isFinite(m2) && m2 >= 0)
+							mem = m2;
+					}
+				}
+				catch (e2:Dynamic) {}
+			}
+			#end
+			_topBarLastMemBytes = mem;
+		}
+		if (_topBarLastMemBytes > _topBarPeakMem)
+			_topBarPeakMem = _topBarLastMemBytes;
+		var curMB:Int = Std.int(_topBarLastMemBytes / (1024 * 1024));
 		var peakMB:Int = Std.int(_topBarPeakMem / (1024 * 1024));
 		var newText:String = 'FPS: ' + Std.int(_topBarFPS) + '    内存: ' + curMB + '/' + peakMB + 'MB';
 		if (topBarFpsMemText.text != newText) topBarFpsMemText.text = newText;
