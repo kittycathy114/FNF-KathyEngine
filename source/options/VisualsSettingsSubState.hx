@@ -152,6 +152,12 @@ class VisualsSettingsSubState extends BaseOptionsMenu
 			'opponentHoldCovers',
 			BOOL);
 		addOption(option);
+
+		var option:Option = new Option(Language.get('note_timer'),
+			Language.get("note_timer_desc"),
+			'noteTimerEnabled',
+			BOOL);
+		addOption(option);
 		
 		var option:Option = new Option(Language.get('time_bar'),
 			Language.get("timebar_desc"),

@@ -1395,6 +1395,20 @@ isReplaying = false;
 		noteGroup.cameras = [camHUD];
 		//comboGroup.cameras = [camHUD];
 		comboGroup.cameras = [ClientPrefs.data.ratingsPos == 'camHUD' ? camHUD : camGame];
+
+		// 箭头倒计时：两箭头间隔 ≥ 3秒 时显示圆形进度圈 + 整数秒
+		if (ClientPrefs.data.noteTimerEnabled)
+		{
+			noteTimer = new ui.NoteTimer(this);
+			if (ClientPrefs.data.legacyHUD)
+			{
+				add(noteTimer);
+				noteTimer.cameras = [camHUD];
+			}
+			else
+				uiGroup.add(noteTimer);
+		}
+
 		startingSong = true;
 
 		// PER-SONG CUSTOM EVENTS & NOTETYPES (take priority over global)
@@ -5172,6 +5186,9 @@ tempScore += '${lblScore}: ${songScore}';
 	public var uiGroup:FlxSpriteGroup;
 	// Stores Note Objects in a Group
 	public var noteGroup:FlxTypedGroup<FlxBasic>;
+
+	// 箭头倒计时：当两箭头间隔 ≥ 3秒 时显示圆形进度圈 + 整数秒数字
+	var noteTimer:ui.NoteTimer = null;
 
 	// checkModHasImage 缓存：避免每次note命中都执行文件系统查询
 	var _modImageCache:Map<String, Bool> = null;
