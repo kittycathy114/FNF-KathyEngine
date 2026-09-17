@@ -32,9 +32,37 @@ class Paths
 	inline public static var SOUND_EXT = #if web "mp3" #else "ogg" #end;
 	inline public static var VIDEO_EXT = "mp4";
 
-	public static function excludeAsset(key:String) {
+	// 按上下文标签分组的资源保护。调用者在登记时带上 tag（如 'freeplay'、'loading'），
+	// 退出该上下文时用 clearExcludedByTag() 批量移除保护条目，随后 clearStoredMemory/
+	// clearUnusedMemory 就能真正回收这些资源，避免全局永久泄漏。
+	// 不传 tag 的调用走 legacy 路径，条目仍在 dumpExclusions 里（兼容现有未迁移的调用方）。
+	public static var _excludedByTag:Map<String, Array<String>> = new Map();
+
+	public static function excludeAsset(key:String, ?tag:String = null) {
 		if (!dumpExclusions.contains(key))
 			dumpExclusions.push(key);
+		if (tag != null)
+		{
+			if (!_excludedByTag.exists(tag))
+				_excludedByTag.set(tag, []);
+			var bucket:Array<String> = _excludedByTag.get(tag);
+			if (!bucket.contains(key))
+				bucket.push(key);
+		}
+	}
+
+	/// 按 tag 批量移除保护条目。移除后这些 key 不再出现在 dumpExclusions 里，
+	/// 随后 clearStoredMemory/clearUnusedMemory 就能回收它们。
+	public static function clearExcludedByTag(tag:String):Void
+	{
+		if (!_excludedByTag.exists(tag)) return;
+		var bucket:Array<String> = _excludedByTag.get(tag);
+		for (key in bucket)
+		{
+			var idx:Int = dumpExclusions.indexOf(key);
+			if (idx >= 0) dumpExclusions.splice(idx, 1);
+		}
+		_excludedByTag.remove(tag);
 	}
 
 	public static var dumpExclusions:Array<String> = ['assets/shared/music/freakyMenu.$SOUND_EXT', 'assets/shared/mobile/touchpad/bg.png'];
@@ -107,6 +135,8 @@ class Paths
 		}
 		// flags everything to be cleared out next unused memory clear
 		localTrackedAssets = [];
+		// Sparrow/Packer atlas 缓存也一并释放（下次 getSparrowAtlas 会重建，代价只是再 parse XML）
+		_atlasCache = new Map();
 		#if !html5 openfl.Assets.cache.clear("songs"); #end
 	}
 
@@ -671,18 +701,19 @@ inline static public function inst(song:String, ?specialInst:String = null, ?mod
 			var modKey:String = key;
 			if(parentFolder == 'songs') modKey = 'songs/$key';
 
-			for(mod in Mods.getGlobalMods())
-				if (FileSystem.exists(mods('$mod/$modKey')))
-					return true;
-				#if linux
-				else if (FileSystem.exists(findFile('$mod/$modKey')))
-					return true;
-				#end
-
-			if (FileSystem.exists(mods(Mods.currentModDirectory + '/' + modKey)) || FileSystem.exists(mods(modKey)))
+			// globalMods + mods 根：走 Mods.globalModsHas 缓存，避免重复 N 次 FileSystem.exists
+			if (Mods.globalModsHas(modKey))
 				return true;
+
+			// currentModDirectory：只一个目录，不走缓存（缓存 key 会因 currentModDirectory 切换失效）
+			if (Mods.currentModDirectory != null && Mods.currentModDirectory.length > 0)
+			{
+				if (FileSystem.exists(mods(Mods.currentModDirectory + '/' + modKey)))
+					return true;
+			}
+
 			#if linux
-			else if (FileSystem.exists(findFile(modKey)))
+			if (FileSystem.exists(findFile(modKey)))
 				return true;
 			#end
 		}
@@ -740,6 +771,9 @@ inline static public function inst(song:String, ?specialInst:String = null, ?mod
 
 	static public function getSparrowAtlas(key:String, ?parentFolder:String = null, ?allowGPU:Bool = true):FlxAtlasFrames
 	{
+		var __cacheKey:String = 'Sparrow|' + key;
+		if (_atlasCache.exists(__cacheKey)) return _atlasCache.get(__cacheKey);
+
 		if(key.contains('psychic')) trace(key, parentFolder, allowGPU);
 		// 读取 Sparrow XML 内容（经 OpenFlAssets 读取打包资源，兼容 Android），
 		// 不再把 getPath 的路径字符串丢给 fromSparrow 当内联 XML 解析，避免设备上解析为 null。
@@ -756,11 +790,16 @@ inline static public function inst(song:String, ?specialInst:String = null, ?mod
 		if (xml == null)
 			xml = getTextFromFile(LanguageBasic.getFileTranslation('images/$key') + '.xml');
 		// XML 缺失/为空/不可解析时返回 null，交由调用方（如 NoteSplash.loadSplash）走默认回退，
-		// 避免 fromSparrow 对空根节点解引用抛 “Null Object Reference”。
+		// 避免 fromSparrow 对空根节点解引用抛 "Null Object Reference"。
 		if (xml == null || StringTools.trim(xml).length < 1)
+		{
+			_atlasCache.set(__cacheKey, null);
 			return null;
+		}
 		var imageLoaded:FlxGraphic = image(key, parentFolder, allowGPU);
-		return FlxAtlasFrames.fromSparrow(imageLoaded, xml);
+		var __frames:FlxAtlasFrames = FlxAtlasFrames.fromSparrow(imageLoaded, xml);
+		_atlasCache.set(__cacheKey, __frames);
+		return __frames;
 	}
 
 	inline static public function getPackerAtlas(key:String, ?parentFolder:String = null, ?allowGPU:Bool = true):FlxAtlasFrames
@@ -801,6 +840,13 @@ inline static public function inst(song:String, ?specialInst:String = null, ?mod
 	}
 
 	public static var currentTrackedSounds:Map<String, Sound> = [];
+
+	/// Atlas 缓存：getSparrowAtlas / getPackerAtlas / getAsepriteAtlas 结果缓存，
+	/// 避免每次都 File.getContent + XML 解析 + FlxAtlasFrames.fromSparrow 重建 Frames 对象。
+	/// mod 列表变化时需手动调 clearAtlasCache()（Mods.invalidateDirectoriesCache 后会被调）。
+	static var _atlasCache:Map<String, FlxAtlasFrames> = new Map();
+	public static function clearAtlasCache():Void _atlasCache = new Map();
+
 	public static function returnSound(key:String, ?path:String, ?modsAllowed:Bool = true, ?beepOnNull:Bool = true)
 	{
 		var file:String = getPath(LanguageBasic.getFileTranslation(key) + '.$SOUND_EXT', SOUND, path, modsAllowed);
@@ -878,20 +924,14 @@ inline static public function inst(song:String, ?specialInst:String = null, ?mod
 			#end
 		}
 
-		for(mod in Mods.getGlobalMods())
-		{
-			var fileToCheck:String = mods(mod + '/' + key);
-			if(FileSystem.exists(fileToCheck))
-				return fileToCheck;
-			#if linux
-			else
-			{
-				var newPath:String = findFile(key);
-				if (newPath != null)
-					return newPath;
-			}
-			#end
-		}
+		// globalMods + mods 根：走 Mods.findInGlobalMods 缓存
+		var found:Null<String> = Mods.findInGlobalMods(key);
+		if (found != null) return found;
+		#if linux
+		var fileToFind:String = findFile(key);
+		if (fileToFind != null)
+			return fileToFind;
+		#end
 		return (#if android StorageUtil.getExternalStorageDirectory() + #else Sys.getCwd() + #end 'mods/' + key);
 	}
 

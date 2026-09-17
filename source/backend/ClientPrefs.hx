@@ -112,12 +112,6 @@ import openfl.display.StageQuality;
 	// 这些改动不改变 Note 实例生命周期，脚本安全。关闭则全量回退。默认开启。
 	public var noteOptimization:Bool = true;
 
-	// ===== Freeplay 分帧加载优化 =====
-	// 进入 Freeplay 时先同步构建可见窗口（文本行 ±_drawDistance、图标 ±ICON_RADIUS），
-	// 其余条目与图标在后续空闲帧分批补建，把“几百首歌一次性全建”的卡顿摊到进入后的前几帧。
-	// 关闭则回退为一次性全量同步构建（低端设备推荐开启）。
-	public var freeplayFramedLoading:Bool = true;
-
 	// ===== 对象池开关 =====
 	// 开启后按 (noteData) 分桶复用普通音符实例，消除每秒数十~数百次 new/destroy 的 GC 停顿。
 	// ⚠ 风险：复用的 Note 实例对脚本而言不再是“每个都是全新对象”。若谱面/modchart 的

@@ -8,6 +8,11 @@ class HealthIcon extends FlxSprite
 	public var startSize:Float = 1;
 	public var framesCount:Int = 1; // 当前图标实际包含的状态帧数量
 
+	// 资源保护的上下文标签。由 FreeplayState 在构建图标批量创建前设为 'freeplay'，
+	// 构建完清回 null。其他状态（PlayState、编辑器等）默认 null，
+	// HealthIcon 不会自动调 excludeAsset，图标纹理随该状态 destroy 时一起被清。
+	public static var _excludeContext:Null<String> = null;
+
 
 	public function new(char:String = 'face', isPlayer:Bool = false, ?allowGPU:Bool = true)
 	{
@@ -50,11 +55,13 @@ class HealthIcon extends FlxSprite
 
 			var graphic = Paths.image(name, allowGPU);
 
-			// 保护图标纹理缓存：图标是 Freeplay 等场景反复使用的高频资源，
-			// 登记到 dumpExclusions 使其在 clearStoredMemory/clearUnusedMemory 时不被清除，
-			// 避免每次进入 Freeplay 都重复解码全部图标 PNG（低端设备进入慢的主要卡顿源）。
+			// 资源保护由调用方通过 HealthIcon._excludeContext 设置上下文标签。
+			// FreeplayState 在构建批量图标前会设为 'freeplay'，退出时调
+			// Paths.clearExcludedByTag('freeplay') → clearStoredMemory → 真正释放纹理。
+			// PlayState / 编辑器等其他状态的 _excludeContext 默认 null，
+			// 图标纹理不被保护，随该状态 destroy 时一起被清，无累积泄漏。
 			if (graphic != null && graphic.key != null && graphic.key.length > 0)
-				Paths.excludeAsset(graphic.key);
+				Paths.excludeAsset(graphic.key, _excludeContext);
 
 			// 自适应切分：按 宽/高 推算图标数量，每个图标视为正方形。
 			// 这样 2:1（双态）、3:1（三态）等任意数量的图标条都能正确切分，避免把 2:1 误切成三份。

@@ -341,14 +341,16 @@ class FreeplayState extends MusicBeatState
 
 	override function create()
 	{
-		// 进 Freeplay 前回收上一状态遗留的音频与图片纹理，
-		// 与其余状态保持一致，避免跨状态累积导致运存只增不减。
-		Paths.clearStoredMemory();
-		Paths.clearUnusedMemory();
-
+		var __t0:Float = haxe.Timer.stamp();
 		persistentUpdate = true;
 		PlayState.isStoryMode = false;
+
+		// 本状态内所有 HealthIcon 创建都带上 'freeplay' tag，退出时可一次性释放
+		HealthIcon._excludeContext = 'freeplay';
+
 		WeekData.reloadWeekFiles(false);
+		var __t1:Float = haxe.Timer.stamp();
+		trace('[FREEPLAY] reloadWeekFiles: ' + Math.round((__t1 - __t0) * 1000) + 'ms');
 
 		#if DISCORD_ALLOWED
 		// Updating Discord Rich Presence
@@ -369,6 +371,8 @@ class FreeplayState extends MusicBeatState
 			return;
 		}
 
+		var __addSongCount:Int = 0;
+		var __t2:Float = haxe.Timer.stamp();
 		for (i in 0...WeekData.weeksList.length)
 		{
 			if (weekIsLocked(WeekData.weeksList[i]))
@@ -401,15 +405,23 @@ class FreeplayState extends MusicBeatState
 					WeekData.setDirectoryFromWeek(leWeek);
 				}
 				addSong(song[0], i, song[1], FlxColor.fromRGB(colors[0], colors[1], colors[2]));
+				__addSongCount++;
 			}
 		}
-		Mods.loadTopMod();
+		var __t3:Float = haxe.Timer.stamp();
+		trace('[FREEPLAY] addSong ×' + __addSongCount + ': ' + Math.round((__t3 - __t2) * 1000) + 'ms');
 
+		var __tModsLoad:Float = haxe.Timer.stamp();
+		Mods.loadTopMod();
+		trace('[FREEPLAY] Mods.loadTopMod: ' + Math.round((haxe.Timer.stamp() - __tModsLoad) * 1000) + 'ms');
+
+		var __tBg:Float = haxe.Timer.stamp();
 		bg = new FlxSprite().loadGraphic(Paths.image('menuDesat'));
 		bg.antialiasing = ClientPrefs.data.antialiasing;
 		add(bg);
 		bg.screenCenter();
-		bg.scale.set(1.0, 1.0); // 确保初始scale为1
+		bg.scale.set(1.0, 1.0);
+		trace('[FREEPLAY] bg+menuDesat: ' + Math.round((haxe.Timer.stamp() - __tBg) * 1000) + 'ms');
 
 		grpSongs = new FlxTypedGroup<Alphabet>();
 		add(grpSongs);
@@ -422,8 +434,14 @@ class FreeplayState extends MusicBeatState
 		iconLoadStatus = new Array<Bool>();
 
 		songs = songsFull;
+		var __t4:Float = haxe.Timer.stamp();
 		reloadSongList();
-		preloadAllIcons(); // 一次性加载全部小图标：浏览时不再有新建/解码的分配抖动
+		var __t5:Float = haxe.Timer.stamp();
+		trace('[FREEPLAY] reloadSongList: ' + Math.round((__t5 - __t4) * 1000) + 'ms');
+		var __t7:Float = haxe.Timer.stamp();
+		preloadAllIcons();
+		var __t6:Float = haxe.Timer.stamp();
+		trace('[FREEPLAY] preloadAllIcons: ' + Math.round((__t6 - __t7) * 1000) + 'ms');
 		WeekData.setDirectoryFromWeek();
 
 		if (curSelected >= songs.length)
@@ -673,11 +691,10 @@ class FreeplayState extends MusicBeatState
 		for (i in 0...songs.length)
 			addPriority(i);
 
-		// 同步先建可见窗口（窗口优先区最多 (±drawDistance*2+1)+(±ICON_RADIUS*2+1) 条）；
-		// 关闭分帧加载时一次性全量构建（回退原逻辑），其余走空闲帧补建
+		// 同步先建可见窗口（Alphabet ±drawDistance + 图标 ±ICON_RADIUS），其余走空闲帧补建
 		_listBuildIndex = 0;
 		var windowBudget:Int = (_drawDistance * 2 + 1) + (ICON_RADIUS * 2 + 1);
-		buildListBatch(ClientPrefs.data.freeplayFramedLoading ? windowBudget : songs.length);
+		buildListBatch(windowBudget);
 	}
 
 	/**
@@ -725,7 +742,7 @@ class FreeplayState extends MusicBeatState
 		if (loadingText == null)
 			return;
 
-		var building:Bool = ClientPrefs.data.freeplayFramedLoading && (_listBuildIndex >= 0 || _iconBuildIndex >= 0);
+		var building:Bool = (_listBuildIndex >= 0 || _iconBuildIndex >= 0);
 		loadingText.visible = building;
 		if (!building)
 			return;
@@ -2149,9 +2166,12 @@ class FreeplayState extends MusicBeatState
 		for (i in 0...songs.length)
 			addPriority(i);
 
-		// 同步先建可见窗口；关闭分帧加载时一次性全量构建（回退原逻辑），其余由 update() 空闲帧补建
+		// 同步只建可见窗口内的 HealthIcon（±ICON_RADIUS = 17 个），其余由 update() 空闲帧逐帧补建。
+		// 与 Alphabet 列表的 windowBudget 策略保持一致：在 create() 只做"必须立即可见"的内容，
+		// 把剩余的 400+ HealthIcon 创建分摊到 20 帧（~333ms），避免一次性 ~900ms 同步阻塞。
 		_iconBuildIndex = 0;
-		buildIconsBatch(ClientPrefs.data.freeplayFramedLoading ? (ICON_RADIUS * 2 + 1) : songs.length);
+		var __visibleBudget:Int = Std.int(Math.min(ICON_RADIUS * 2 + 1, songs.length));
+		buildIconsBatch(__visibleBudget);
 	}
 
 	/**
@@ -2474,9 +2494,17 @@ class FreeplayState extends MusicBeatState
 		// 离开 Freeplay 时释放残余的试听音频缓存（防止之前未来得及释放的累积）
 		clearPreviewSounds();
 
+		// --- 资源彻底释放 ---
+		// 1. 清除 'freeplay' tag 保护（HealthIcon 图标才能被 clearStoredMemory 回收）
+		HealthIcon._excludeContext = null;
+		Paths.clearExcludedByTag('freeplay');
+		// 2. 再释放本状态不再需要的静态缓存（下次进 Freeplay 会重新构建）
+		#if MODS_ALLOWED
+		WeekData._invalidateReloadCache();
+		#end
+		Mods.invalidateDirectoriesCache(); // 顺带清 globalModsExistsCache + Paths._atlasCache
+		// 3. 现在 clearStoredMemory / clearUnusedMemory 才能真正回收所有 freeplay 资源
 		super.destroy();
-
-		// 退出 Freeplay 时立即回收本状态加载的图片纹理与音频，不再等下一个状态清理
 		Paths.clearStoredMemory();
 		Paths.clearUnusedMemory();
 

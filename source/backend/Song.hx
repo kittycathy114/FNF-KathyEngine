@@ -114,7 +114,6 @@ class Song
 		var sectionsData:Array<SwagSection> = songJson.notes;
 		if(sectionsData == null) return;
 
-		var yieldCounter:Int = 0;
 		for (section in sectionsData)
 		{
 			if (section.sectionNotes == null)
@@ -134,15 +133,6 @@ class Song
 
 				if(!Std.isOfType(note[3], String))
 					note[3] = Note.defaultNoteTypes[note[3]];
-			}
-
-			yieldCounter++;
-			if (yieldCounter >= 4)
-			{
-				yieldCounter = 0;
-				#if (sys && FEATURE_FILESYSTEM)
-				Sys.sleep(0.002);
-				#end
 			}
 		}
 	}

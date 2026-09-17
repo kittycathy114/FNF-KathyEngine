@@ -36,9 +36,53 @@ class Mods
 	// directoriesWithFile 结果缓存，避免重复的 FileSystem.exists 调用
 	static var _directoriesCache:Map<String, Array<String>> = null;
 
+	/// globalMods + mods 根 FileSystem.exists 结果缓存。
+	/// key = 路径（不含 currentModDirectory 前缀），value = 是否存在。
+	/// 独立于 currentModDirectory，所以 Freeplay 循环里切 currentModDirectory 也能持续命中。
+	static var _globalExistsCache:Map<String, Bool> = new Map();
+
 	public static function invalidateDirectoriesCache()
 	{
 		_directoriesCache = null;
+		_globalExistsCache = new Map();
+		Paths.clearAtlasCache();
+	}
+
+	/// 查 globalMods + mods 根里有没有这个路径，带缓存。
+	/// 不考虑 currentModDirectory（那部分每次查一个目录，成本可忽略，由调用方单独处理）。
+	public static function globalModsHas(modKey:String):Bool
+	{
+		return findInGlobalMods(modKey) != null;
+	}
+
+	/// 带缓存版的 modFolders globalMods 链遍历。
+	/// 返回找到的完整路径（含 modsRoot + mod + '/' + modKey），没找到返回 null。
+	/// 缓存命中时直接返回之前找到的结果，避免 N 次 FileSystem.exists。
+	public static function findInGlobalMods(modKey:String):Null<String>
+	{
+		var modsRoot:String = #if android StorageUtil.getExternalStorageDirectory() + #else Sys.getCwd() + #end 'mods/';
+		for(mod in globalMods)
+		{
+			var pth:String = modsRoot + mod + '/' + modKey;
+			var exists:Bool;
+			if (_globalExistsCache.exists(pth))
+				exists = _globalExistsCache.get(pth);
+			else
+			{
+				exists = FileSystem.exists(pth);
+				_globalExistsCache.set(pth, exists);
+			}
+			if (exists) return pth;
+		}
+		// 也查 mods 根
+		var rootPth:String = modsRoot + modKey;
+		if (_globalExistsCache.exists(rootPth))
+		{
+			return _globalExistsCache.get(rootPth) ? rootPth : null;
+		}
+		var re:Bool = FileSystem.exists(rootPth);
+		_globalExistsCache.set(rootPth, re);
+		return re ? rootPth : null;
 	}
 
 	inline public static function getGlobalMods()

@@ -358,12 +358,6 @@ class ExtraGameplaySettingSubState extends BaseOptionsMenu
 		};
 		addOption(option);
 
-		option = new Option(Language.get('freeplay_framed_loading'),
-			Language.get("freeplay_framed_loading_desc"),
-			'freeplayFramedLoading',
-			BOOL);
-		addOption(option);
-
 	// PERCENT 类型设置
 		option = new Option(Language.get('ratings_opacity'),
 			Language.get("rating_opac_desc"),

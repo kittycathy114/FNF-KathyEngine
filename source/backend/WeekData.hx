@@ -26,6 +26,19 @@ class WeekData {
 	private static var loadedFiles:Map<String, Bool> = new Map();
 	#if MODS_ALLOWED
 	public static var fileCache:Map<String, {data:WeekFile, mtime:Float}> = new Map();
+
+	// reloadWeekFiles 跨会话缓存：enabled mod 列表没变且 isStoryMode 没变时，
+	// 直接返回上次扫描结果，跳过 O(N) 次目录遍历 + JSON 解析。
+	private static var _lastReloadKey:String = null;
+
+	/// 失效 reloadWeekFiles 缓存。退出 Freeplay 时调，下次进入会重新全量扫描。
+	public static function _invalidateReloadCache():Void
+	{
+		_lastReloadKey = null;
+		weeksList = [];
+		weeksLoaded.clear();
+		loadedFiles = new Map();
+	}
 	#end
 	public var folder:String = '';
 
@@ -77,6 +90,17 @@ class WeekData {
 
 	public static function reloadWeekFiles(isStoryMode:Null<Bool> = false)
 	{
+		#if MODS_ALLOWED
+		// 跨会话缓存：enabled mod 列表 + isStoryMode 没变 → 跳过全量扫描
+		var cacheKey:String = _buildReloadCacheKey(isStoryMode);
+		if (_lastReloadKey != null && cacheKey == _lastReloadKey && weeksList.length > 0)
+		{
+			trace('[WEEKDATA] reloadWeekFiles: CACHE HIT (weeks=' + weeksList.length + ')');
+			return;
+		}
+		trace('[WEEKDATA] reloadWeekFiles: CACHE MISS (full scan, modCount=' + Mods.getGlobalMods().length + ')');
+		#end
+
 		weeksList = [];
 		weeksLoaded.clear();
 		loadedFiles = new Map();
@@ -150,7 +174,23 @@ class WeekData {
 			}
 		}
 		#end
+
+		#if MODS_ALLOWED
+		_lastReloadKey = cacheKey;
+		#end
 	}
+
+	#if MODS_ALLOWED
+	/// 构建 reloadWeekFiles 的缓存 key：enabled mod 列表（Mods.globalMods） + isStoryMode。
+	/// mod 启用状态没变 + 筛选模式没变 → 直接复用上次结果，跳过全量目录扫描 + JSON 解析。
+	private static function _buildReloadCacheKey(isStoryMode:Null<Bool> = false):String
+	{
+		// 直接用 Mods.globalMods —— 已经是 parseList() 解析好的 enabled mod 列表，零 IO 开销
+		var mods:Array<String> = Mods.getGlobalMods();
+		var flag:String = (isStoryMode == null) ? 'null' : (isStoryMode ? 'story' : 'free');
+		return mods.join(',') + '|' + flag;
+	}
+	#end
 
 	private static function addWeek(weekToCheck:String, path:String, directory:String, i:Int, originalLength:Int)
 	{

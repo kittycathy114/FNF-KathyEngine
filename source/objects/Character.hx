@@ -47,6 +47,48 @@ class Character extends FlxSprite
 	**/
 	public static final DEFAULT_CHARACTER:String = 'bf';
 
+	/**
+	 * 预加载缓存：key = 角色名，value = 已解析的角色 JSON 对象（CharacterFile Dynamic）。
+	 * 由 LoadingState.preloadCharacter() 在后台线程填充，changeCharacter() 在主线程消费，
+	 * 省掉主线程 File.getContent + Json.parse 的同步开销。
+	 * 生命周期：只在单次 PlayState 进入期间有效，下次进入会被 LoadingState 重新填充。
+	 */
+	public static var _preloadedJsonCache:Map<String, Dynamic> = new Map();
+
+	/**
+	 * 后台线程预加载入口：读取并解析指定角色的 Character JSON，存入缓存。
+	 * 线程安全：LoadingState.preloadCharacter() 在后台线程调用，主线程在 checkLoaded() 后才消费，无竞态。
+	 */
+	public static function preloadCharacterJson(name:String):Void
+	{
+		if (name == null || name.length == 0 || _preloadedJsonCache.exists(name)) return;
+
+		var path:String = Paths.getPath('characters/$name.json', TEXT);
+		#if MODS_ALLOWED
+		if (!FileSystem.exists(path))
+		#else
+		if (!Assets.exists(path))
+		#end
+			path = Paths.getSharedPath('characters/' + DEFAULT_CHARACTER + '.json');
+
+		try
+		{
+			#if MODS_ALLOWED
+			var json:Dynamic = Json.parse(File.getContent(path));
+			#else
+			var json:Dynamic = Json.parse(Assets.getText(path));
+			#end
+			if (json != null) _preloadedJsonCache.set(name, json);
+		}
+		catch (e:Dynamic) {}
+	}
+
+	/** 清空预加载缓存（每次 LoadingState 开始时调用） */
+	public static function clearPreloadedJsonCache():Void
+	{
+		_preloadedJsonCache = new Map();
+	}
+
 	public var animOffsets:Map<String, Array<Dynamic>>;
 	public var debugMode:Bool = false;
 	public var extraData:Map<String, Dynamic> = new Map<String, Dynamic>();
@@ -136,33 +178,45 @@ class Character extends FlxSprite
 		animationsArray = [];
 		animOffsets = [];
 		curCharacter = character;
-		var characterPath:String = 'characters/$character.json';
 
-		var path:String = Paths.getPath(characterPath, TEXT);
-		#if MODS_ALLOWED
-		if (!FileSystem.exists(path))
-		#else
-		if (!Assets.exists(path))
-		#end
+		// 优先命中后台线程预加载的 JSON 缓存，省掉主线程 File.getContent + Json.parse
+		var json:Dynamic = null;
+		if (_preloadedJsonCache.exists(character))
 		{
-			path = Paths.getSharedPath('characters/' + DEFAULT_CHARACTER + '.json'); //If a character couldn't be found, change him to BF just to prevent a crash
-			missingCharacter = true;
-			missingText = new FlxText(0, 0, 300, 'ERROR:\n$character.json', 16);
-			missingText.alignment = CENTER;
+			json = _preloadedJsonCache.get(character);
 		}
-
-		try
+		else
 		{
+			var characterPath:String = 'characters/$character.json';
+			var path:String = Paths.getPath(characterPath, TEXT);
 			#if MODS_ALLOWED
-			loadCharacterFile(Json.parse(File.getContent(path)));
+			if (!FileSystem.exists(path))
 			#else
-			loadCharacterFile(Json.parse(Assets.getText(path)));
+			if (!Assets.exists(path))
 			#end
+			{
+				path = Paths.getSharedPath('characters/' + DEFAULT_CHARACTER + '.json'); //If a character couldn't be found, change him to BF just to prevent a crash
+				missingCharacter = true;
+				missingText = new FlxText(0, 0, 300, 'ERROR:\n$character.json', 16);
+				missingText.alignment = CENTER;
+			}
+
+			try
+			{
+				#if MODS_ALLOWED
+				json = Json.parse(File.getContent(path));
+				#else
+				json = Json.parse(Assets.getText(path));
+				#end
+			}
+			catch(e:Dynamic)
+			{
+				trace('Error loading character file of "$character": $e');
+			}
 		}
-		catch(e:Dynamic)
-		{
-			trace('Error loading character file of "$character": $e');
-		}
+
+		if (json != null)
+			loadCharacterFile(json);
 
 		skipDance = false;
 		hasMissAnimations = hasAnimation('singLEFTmiss') || hasAnimation('singDOWNmiss') || hasAnimation('singUPmiss') || hasAnimation('singRIGHTmiss');

@@ -18,6 +18,8 @@ import sys.thread.Thread;
 import sys.thread.Mutex;
 import objects.Note;
 import objects.NoteSplash;
+import objects.NoteHoldCover;
+import substates.PauseSubState;
 #if HSCRIPT_ALLOWED
 import psychlua.HScript;
 import crowplexus.iris.Iris;
@@ -455,6 +457,9 @@ class LoadingState extends MusicBeatState
 		musicToPrepare = [];
 		songsToPrepare = [];
 
+		// 清空上一次遗留的角色 JSON 缓存，避免新谱面用了旧角色数据
+		Character.clearPreloadedJsonCache();
+
 		initialThreadCompleted = false;
 		var threadsCompleted:Int = 0;
 		var threadsMax:Int = 0;
@@ -711,6 +716,28 @@ class LoadingState extends MusicBeatState
 					soundsToPrepare.push('intro1');
 					soundsToPrepare.push('introGo');
 				}
+
+				// Hold Cover 贴图（原在 PlayState.create() 中同步加载，长条首次命中时会卡一下）
+				if (ClientPrefs.data.holdCovers)
+				{
+					if (NoteHoldCover.isRGBSkin())
+						imagesToPrepare.push(NoteHoldCover.getRGBAtlasPath());
+					else
+						for (c in NoteHoldCover.COVER_COLORS)
+							imagesToPrepare.push(NoteHoldCover.getColorAtlasPath(c));
+				}
+
+				// Pause 音乐（原在 PlayState.create() 中同步加载，暂停首次打开时会卡）
+				var pauseMusicName:String = null;
+				if (PauseSubState.songName != null && PauseSubState.songName.length > 0)
+					pauseMusicName = PauseSubState.songName;
+				else
+				{
+					var fmt:String = Paths.formatToSongPath(ClientPrefs.data.pauseMusic);
+					if (fmt != 'none') pauseMusicName = fmt;
+				}
+				if (pauseMusicName != null)
+					musicToPrepare.push(pauseMusicName);
 			}
 			catch (e:Dynamic)
 			{
@@ -847,6 +874,11 @@ class LoadingState extends MusicBeatState
 			var character:Dynamic = Json.parse(Assets.getText(path));
 			#end
 
+			// 把已解析的角色 JSON 缓存起来，让 Character.changeCharacter() 在主线程直接命中，
+			// 省掉重复的 File.getContent + Json.parse 同步开销
+			if (character != null)
+				Character._preloadedJsonCache.set(char, character);
+
 			var isAnimateAtlas:Bool = false;
 			var img:String = character.image;
 			img = img.trim();
@@ -861,7 +893,9 @@ class LoadingState extends MusicBeatState
 				var split:Array<String> = img.split(',');
 				for (file in split)
 				{
-					imagesToPrepare.push(file.trim());
+					var trimmed:String = file.trim();
+					if (!imagesToPrepare.contains(trimmed))
+						imagesToPrepare.push(trimmed);
 				}
 			}
 			#if flxanimate
@@ -925,7 +959,7 @@ class LoadingState extends MusicBeatState
 		return Paths.currentTrackedSounds.get(file);
 	}
 
-	// thread safe sound loader
+	@:access(flixel.system.frontEnds.BitmapFrontEnd._cache)
 	static function preloadGraphic(key:String):Null<BitmapData>
 	{
 		try
@@ -935,28 +969,44 @@ class LoadingState extends MusicBeatState
 			if (requestKey.lastIndexOf('.') < 0)
 				requestKey += '.png';
 
-			if (!Paths.currentTrackedAssets.exists(requestKey))
-			{
-				var file:String = Paths.getPath(requestKey, IMAGE);
-				if (#if sys FileSystem.exists(file) || #end OpenFlAssets.exists(file, IMAGE))
-				{
-					#if sys
-					var bitmap:BitmapData = BitmapData.fromFile(file);
-					#else
-					var bitmap:BitmapData = OpenFlAssets.getBitmapData(file, false);
-					#end
+			// 双重缓存检查：
+			// 1. Paths.currentTrackedAssets — 常规资源缓存（被 clearStoredMemory 清空）
+			// 2. FlxG.bitmap._cache — 底层 flixel bitmap 缓存（可能仍然保留，即使 currentTrackedAssets 已清）
+			// vanilla 角色图集等资源在主菜单加载过，FlxG.bitmap._cache 里还留着，
+			// 跳过它们的 BitmapData.fromFile 能省掉大量重复解码时间。
+			if (Paths.currentTrackedAssets.exists(requestKey))
+				return Paths.currentTrackedAssets.get(requestKey).bitmap;
 
-					mutex.acquire();
-					requestedBitmaps.set(file, bitmap);
-					originalBitmapKeys.set(file, requestKey);
-					mutex.release();
-					return bitmap;
+			if (FlxG.bitmap._cache.exists(requestKey))
+			{
+				// 已经在 FlxG.bitmap._cache 里，跳过解码。把 FlxGraphic 登记到 currentTrackedAssets
+				// 以便后续 checkLoaded 和 PlayState 直接命中，避免重复缓存校验。
+				var cachedGraphic:FlxGraphic = FlxG.bitmap._cache.get(requestKey);
+				if (cachedGraphic != null)
+				{
+					Paths.currentTrackedAssets.set(requestKey, cachedGraphic);
+					Paths.trackLocalAsset(requestKey);
+					return cachedGraphic.bitmap;
 				}
-				else
-					trace('no such image $key exists');
 			}
 
-			return Paths.currentTrackedAssets.get(requestKey).bitmap;
+			var file:String = Paths.getPath(requestKey, IMAGE);
+			if (#if sys FileSystem.exists(file) || #end OpenFlAssets.exists(file, IMAGE))
+			{
+				#if sys
+				var bitmap:BitmapData = BitmapData.fromFile(file);
+				#else
+				var bitmap:BitmapData = OpenFlAssets.getBitmapData(file, false);
+				#end
+
+				mutex.acquire();
+				requestedBitmaps.set(file, bitmap);
+				originalBitmapKeys.set(file, requestKey);
+				mutex.release();
+				return bitmap;
+			}
+			else
+				trace('no such image $key exists');
 		}
 		catch (e:haxe.Exception)
 		{
