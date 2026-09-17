@@ -7229,6 +7229,15 @@ tempScore += '${lblScore}: ${songScore}';
 		#if FLX_PITCH FlxG.sound.music.pitch = 1; #end
 		FlxG.animationTimeScale = 1;
 
+		// 清理旧版 PE 兼容字段中的 tween/timer 对象，防止 FlxTimer.globalManager 持有已销毁 state
+		for (tween in modchartTweens) { if (tween != null) tween.destroy(); }
+		modchartTweens = null;
+		for (timer in modchartTimers) { if (timer != null) timer.destroy(); }
+		modchartTimers = null;
+		modchartSprites = null;
+		modchartTexts = null;
+		modchartSounds = null;
+
 		Note.globalRgbShaders = [];
 		backend.NoteTypesConfig.clearNoteTypesData();
 
@@ -7783,6 +7792,11 @@ tempScore += '${lblScore}: ${songScore}';
 			}
 
 			if(exclusions.contains(script.scriptName))
+				continue;
+
+			// 性能优化：广播前先查探测缓存，未实现该事件的脚本直接跳过
+			// （ FunkinLua.call 内部也会短路，这里是双保险，避免进 try 块）
+			if(!script.probeFunc(funcToCall))
 				continue;
 
 			var myValue:Dynamic = script.call(funcToCall, args);

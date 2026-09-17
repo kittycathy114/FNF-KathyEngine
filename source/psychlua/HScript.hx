@@ -550,6 +550,10 @@ class HScript extends Iris
 	{
 		origin = null;
 		#if LUA_ALLOWED parentLua = null; #end
+		// 断开对 PlayState 的强引用，防止解释器阻止 state 被 GC
+		if (interp != null)
+			Reflect.setProperty(interp, 'parentInstance', null);
+		interp = null;
 		super.destroy();
 	}
 

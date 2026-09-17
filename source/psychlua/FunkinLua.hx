@@ -51,6 +51,11 @@ class FunkinLua {
 	public var modFolder:String = null;
 	public var closed:Bool = false;
 
+	// 性能优化：缓存"该脚本是否实现了某事件函数"
+	// 避免每次事件广播都进 Lua.getglobal + type 判定
+	// 值为 true 表示已探测且存在；未探测过的函数走懒探测
+	public var implementedFuncs:Map<String, Bool>;
+
 	#if HSCRIPT_ALLOWED
 	public var hscript:HScript = null;
 	#end
@@ -61,6 +66,7 @@ class FunkinLua {
 	public function new(scriptName:String) {
 		lua = LuaL.newstate();
 		LuaL.openlibs(lua);
+		implementedFuncs = new Map<String, Bool>();
 
 		//trace('Lua version: ' + Lua.version());
 		//trace("LuaJIT version: " + Lua.versionJIT());
@@ -1733,6 +1739,9 @@ class FunkinLua {
 	public function call(func:String, args:Array<Dynamic>):Dynamic {
 		if(closed) return LuaUtils.Function_Continue;
 
+		// 性能优化：先查探测缓存，未实现的函数直接短路（省掉 getglobal + type 判定）
+		if (!probeFunc(func)) return LuaUtils.Function_Continue;
+
 		lastCalledFunction = func;
 		lastCalledScript = this;
 		try {
@@ -1790,6 +1799,8 @@ class FunkinLua {
 		}
 		Lua.close(lua);
 		lua = null;
+		// 性能优化：销毁 state 后缓存失效
+		implementedFuncs = null;
 		#if HSCRIPT_ALLOWED
 		if(hscript != null)
 		{
@@ -1797,6 +1808,33 @@ class FunkinLua {
 			hscript = null;
 		}
 		#end
+		// 从 luaArray 中移除自身，防止已停止的实例继续持有 PlayState 引用
+		var g:PlayState = PlayState.instance;
+		if (g != null && g.luaArray != null && g.luaArray.contains(this))
+			g.luaArray.remove(this);
+		// 清除静态 lastCalledScript，防止 static 引用链阻止 GC
+		if (lastCalledScript == this)
+			lastCalledScript = null;
+	}
+
+	/**
+	 * 性能优化：探测脚本是否实现了某个 Lua 函数（懒探测 + 缓存）。
+	 * 缓存 true = 已确认存在（直接短路后续探测）；未缓存的函数每次探测一次并写入。
+	 * false 不缓存（允许脚本运行中动态 `onBeat = function()...end` 赋值，下次再探一次）。
+	 */
+	public function probeFunc(func:String):Bool {
+		if (lua == null) return false;
+		if (implementedFuncs != null) {
+			var cached:Bool = implementedFuncs.get(func);
+			if (cached) return true;
+		}
+		Lua.getglobal(lua, func);
+		var type:Int = Lua.type(lua, -1);
+		Lua.pop(lua, 1);
+		var exists:Bool = (type == Lua.LUA_TFUNCTION);
+		if (exists && implementedFuncs == null) implementedFuncs = new Map<String, Bool>();
+		if (exists) implementedFuncs.set(func, true);
+		return exists;
 	}
 
 	public function oldTweenFunction(tag:String, vars:String, tweenValue:Any, duration:Float, ease:String, funcName:String)

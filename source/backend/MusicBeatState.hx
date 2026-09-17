@@ -112,6 +112,11 @@ class MusicBeatState extends FlxState
 
 	override function destroy()
 	{
+		// 清理所有 Lua 脚本动态创建的 objects，断开闭包对 PlayState 的强引用
+		// 防止 FlxTimer/FlxTween/FlxSound 回调持有已销毁的 state
+		if (variables != null)
+			variables.clear();
+
 		removeTouchPad();
 		removeMobileControls();
 		
