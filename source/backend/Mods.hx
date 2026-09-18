@@ -3,6 +3,7 @@ package backend;
 import openfl.utils.Assets;
 
 import haxe.Json;
+import states.PlayState;
 
 typedef ModsList = {
 	enabled:Array<String>,
@@ -36,6 +37,10 @@ class Mods
 	// directoriesWithFile 结果缓存，避免重复的 FileSystem.exists 调用
 	static var _directoriesCache:Map<String, Array<String>> = null;
 
+	// getModDirectories 结果缓存：模组列表运行中几乎不变，
+	// 避免每次进歌/Freeplay 都 readDirectory 整个 mods 文件夹 + 逐目录 isDirectory（84 个模组时是固定开销）。
+	static var _modDirectoriesCache:Null<Array<String>> = null;
+
 	/// globalMods + mods 根 FileSystem.exists 结果缓存。
 	/// key = 路径（不含 currentModDirectory 前缀），value = 是否存在。
 	/// 独立于 currentModDirectory，所以 Freeplay 循环里切 currentModDirectory 也能持续命中。
@@ -44,8 +49,11 @@ class Mods
 	public static function invalidateDirectoriesCache()
 	{
 		_directoriesCache = null;
+		_modDirectoriesCache = null;
 		_globalExistsCache = new Map();
+		PlayState._songAudioModCache = null;
 		Paths.clearAtlasCache();
+		ScriptPreload.invalidate();
 	}
 
 	/// 查 globalMods + mods 根里有没有这个路径，带缓存。
@@ -100,8 +108,9 @@ class Mods
 		return globalMods;
 	}
 
-	inline public static function getModDirectories():Array<String>
+	public static function getModDirectories():Array<String>
 	{
+		if (_modDirectoriesCache != null) return _modDirectoriesCache;
 		var list:Array<String> = [];
 		#if MODS_ALLOWED
 		var modsFolder:String = Paths.mods();
@@ -114,6 +123,7 @@ class Mods
 			}
 		}
 		#end
+		_modDirectoriesCache = list;
 		return list;
 	}
 	

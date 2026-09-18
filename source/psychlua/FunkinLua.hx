@@ -64,6 +64,12 @@ class FunkinLua {
 	public static var customFunctions:Map<String, Dynamic> = new Map<String, Dynamic>();
 
 	public function new(scriptName:String) {
+		// 性能优化：优先取 LoadingState 后台线程预读的 Lua 文件内容（纯 I/O 预读，未创建 VM/未执行）。
+		// 命中时用 dostring(预读内容) 代替 dofile(读盘)，主线程跳过同步读盘（编译+执行仍在主线程，语义不变，onCreate 不受影响）。
+		// 未命中时走原 dofile 读盘路径。
+		var preloadedContent:String = backend.ScriptPreload.takeLuaContent(scriptName);
+		var isPreloaded:Bool = preloadedContent != null;
+
 		lua = LuaL.newstate();
 		LuaL.openlibs(lua);
 		implementedFuncs = new Map<String, Bool>();
@@ -1705,25 +1711,46 @@ class FunkinLua {
 		}
 
 		try{
-			var isString:Bool = !FileSystem.exists(scriptName);
-			var result:Dynamic = null;
-			if(!isString)
-				result = LuaL.dofile(lua, scriptName);
-			else
-				result = LuaL.dostring(lua, scriptName);
-
-			var resultStr:String = Lua.tostring(lua, result);
-			if(resultStr != null && result != 0) {
-				trace(resultStr);
-				#if (desktop || mobile)
-				CoolUtil.showPopUp(resultStr, 'Error on lua script!');
-				#else
-				luaTrace('$scriptName\n$resultStr', true, false, FlxColor.RED);
-				#end
-				lua = null;
-				return;
+			// 命中后台预读：用 dostring(预读内容) 代替 dofile(读盘)，跳过主线程同步 I/O。
+			// 编译 + 执行仍在主线程（dostring 内部编译字节码 + 执行顶层），onCreate 语义不变。
+			// 未命中：走原 dofile / dostring 读盘路径。
+			if (isPreloaded)
+			{
+				var result:Dynamic = LuaL.dostring(lua, preloadedContent);
+				var resultStr:String = Lua.tostring(lua, result);
+				if(resultStr != null && result != 0) {
+					trace(resultStr);
+					#if (desktop || mobile)
+					CoolUtil.showPopUp(resultStr, 'Error on lua script!');
+					#else
+					luaTrace('$scriptName\n$resultStr', true, false, FlxColor.RED);
+					#end
+					lua = null;
+					return;
+				}
 			}
-			if(isString) scriptName = 'unknown';
+			else
+			{
+				var isString:Bool = !FileSystem.exists(scriptName);
+				var result:Dynamic = null;
+				if(!isString)
+					result = LuaL.dofile(lua, scriptName);
+				else
+					result = LuaL.dostring(lua, scriptName);
+
+				var resultStr:String = Lua.tostring(lua, result);
+				if(resultStr != null && result != 0) {
+					trace(resultStr);
+					#if (desktop || mobile)
+					CoolUtil.showPopUp(resultStr, 'Error on lua script!');
+					#else
+					luaTrace('$scriptName\n$resultStr', true, false, FlxColor.RED);
+					#end
+					lua = null;
+					return;
+				}
+				if(isString) scriptName = 'unknown';
+			}
 		} catch(e:Dynamic) {
 			trace(e);
 			return;

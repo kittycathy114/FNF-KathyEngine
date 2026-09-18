@@ -345,18 +345,57 @@ class LoadingState extends MusicBeatState
 
 	public static function checkLoaded():Bool
 	{
-		for (key => bitmap in requestedBitmaps)
+		// 分帧缓存后台预解码的 Bitmap（每帧至多 4 张），避免最后一条线程完成时大量 bitmap 同帧 cacheBitmap 造成进度条卡住
+		var drained:Map<String, BitmapData> = requestedBitmaps;
+		requestedBitmaps = [];
+		var origDrained:Map<String, String> = originalBitmapKeys;
+		originalBitmapKeys = [];
+		if (drained != null)
 		{
-			if (bitmap != null && Paths.cacheBitmap(originalBitmapKeys.get(key), bitmap) != null)
+			var drainBudget:Int = 4;
+			for (key => bitmap in drained)
 			{
-			} // trace('finished preloading image $key');
-			else
-				trace('failed to cache image $key');
+				if (drainBudget <= 0)
+				{
+					// 未处理完的还回去，留给下一帧
+					if (bitmap != null) requestedBitmaps.set(key, bitmap);
+					originalBitmapKeys.set(key, origDrained.get(key));
+					break;
+				}
+				if (bitmap != null && Paths.cacheBitmap(origDrained.get(key), bitmap) != null)
+				{
+					// trace('finished preloading image $key');
+				}
+				else
+					trace('failed to cache image $key');
+				drainBudget--;
+			}
 		}
-		requestedBitmaps.clear();
-		originalBitmapKeys.clear();
+		// 未排完的 requestedBitmaps 留到下一帧继续
+
+		// 预加载线程全部完成后（此时 FlxGraphic 都已注册），从预加载列表中筛出 sparrow 图集
+		if (!_atlasQueueBuilt && loaded >= loadMax && initialThreadCompleted && !requestedBitmaps.keys().hasNext())
+		{
+			_atlasQueueBuilt = true;
+			for (img in imagesToPrepare)
+				if (img != null && img.length > 0 && Paths.sparrowXmlExists(img))
+					atlasQueue.push(img);
+		}
+
+		// 每帧至多构建一个 FlxAtlasFrames（XML 解析 + 帧切分），分摊到加载条期间，避免 create() 首帧卡顿
+		if (atlasQueueIdx < atlasQueue.length)
+		{
+			var key:String = atlasQueue[atlasQueueIdx++];
+			try
+			{
+				// FlxGraphic 已由上方 cacheBitmap 注册，image() 命中缓存，不会重复解码
+				Paths.getSparrowAtlas(key);
+			}
+			catch (e:Dynamic) {}
+		}
+
 		// trace('we checked if loaded');
-		return (loaded >= loadMax && initialThreadCompleted);
+		return (loaded >= loadMax && initialThreadCompleted && atlasQueueIdx >= atlasQueue.length && !requestedBitmaps.keys().hasNext());
 	}
 
 	public static function loadNextDirectory()
@@ -407,6 +446,12 @@ class LoadingState extends MusicBeatState
 	static var musicToPrepare:Array<String> = [];
 	static var songsToPrepare:Array<String> = [];
 
+	// 待预构建的 sparrow 图集队列：把 FlxAtlasFrames 构建（XML 解析 + 帧切分）
+	// 从 PlayState.create() 前移到 LoadingState 主线程分帧完成，首次进歌也能命中 _atlasCache。
+	static var atlasQueue:Array<String> = [];
+	static var atlasQueueIdx:Int = 0;
+	static var _atlasQueueBuilt:Bool = false;
+
 	public static function prepare(images:Array<String> = null, sounds:Array<String> = null, music:Array<String> = null)
 	{
 		if (images != null)
@@ -420,6 +465,32 @@ class LoadingState extends MusicBeatState
 	static var initialThreadCompleted:Bool = true;
 	static var dontPreloadDefaultVoices:Bool = false;
 
+	// Haxe 标准库没有 Sys.cpuCount()，这里按平台探测逻辑核心数：
+	// Windows 读 NUMBER_OF_PROCESSORS 环境变量；Linux/Android 数 /proc/cpuinfo 的 processor 行；其他保守返回 1。
+	static function _getCpuCount():Int
+	{
+		var count:Int = 1;
+		#if windows
+		var env:String = Sys.getEnv('NUMBER_OF_PROCESSORS');
+		if (env != null)
+		{
+			var c:Int = Std.parseInt(env);
+			if (c > 0) count = c;
+		}
+		#elseif (linux || android)
+		try
+		{
+			var cpuinfo:String = sys.io.File.getContent('/proc/cpuinfo');
+			count = 0;
+			for (line in cpuinfo.split('\n'))
+				if (StringTools.startsWith(line, 'processor')) count++;
+			if (count < 1) count = 1;
+		}
+		catch (e:Dynamic) {}
+		#end
+		return count;
+	}
+
 	static function _startPool()
 	{
 		// _startPool() 会被 prepareToSong() / getNextState() / _threadFunc() 各调用一次，
@@ -429,10 +500,16 @@ class LoadingState extends MusicBeatState
 		if (threadPool != null)
 			return;
 
-		// 使用「Loading Threads」设置（默认 1 = 单线程），限制在 [1, 16] 之间。
-		// 1 表示完全串行加载，最省内存、最稳；调大可并行预加载资源，但更耗内存、低端机可能 OOM。
+		// 使用「Loading Threads」设置（默认 2），限制在 [1, 16] 之间。
+		// 老设备/低核 CPU：线程数超过物理核心数反而会饿死主线程（渲染/进度条），
+		// 且并行解码会推高内存峰值。这里封顶到 CPU 核数，至少 1 个线程。
 		var pref:Int = ClientPrefs.data.loadingThreadCount;
 		var threadCount:Int = Std.int(Math.max(1, Math.min(pref < 1 ? 1 : pref, 16)));
+		#if sys
+		var cpuCount:Int = _getCpuCount();
+		if (threadCount > cpuCount)
+			threadCount = cpuCount;
+		#end
 		threadPool = new FixedThreadPool(threadCount);
 	}
 
@@ -456,6 +533,9 @@ class LoadingState extends MusicBeatState
 		soundsToPrepare = [];
 		musicToPrepare = [];
 		songsToPrepare = [];
+		atlasQueue = [];
+		atlasQueueIdx = 0;
+		_atlasQueueBuilt = false;
 
 		// 清空上一次遗留的角色 JSON 缓存，避免新谱面用了旧角色数据
 		Character.clearPreloadedJsonCache();
@@ -672,6 +752,127 @@ class LoadingState extends MusicBeatState
 			completedThread();
 		});
 
+		// 并行化：歌曲音频所在模组探测。
+		// 首次进歌 generateSong 会对全部模组逐次 exists 探测音频（冷缓存下可达数秒），
+		// 前移到后台线程并写入 PlayState._songAudioModCache，create() 直接命中。
+		threadsMax++;
+		threadPool.run(() ->
+		{
+			try
+			{
+				var song:SwagSong = PlayState.SONG;
+				if (PlayState._songAudioModCache == null) PlayState._songAudioModCache = new Map();
+				if (!PlayState._songAudioModCache.exists(song.song))
+				{
+					var si:String = (song.specialInst != null && song.specialInst.length > 0) ? song.specialInst : null;
+					var sv:String = (song.specialVocal != null && song.specialVocal.length > 0) ? song.specialVocal : null;
+					// 只判文件存在性，不触发 Sound 缓存，后台线程安全（与 PlayState.modHasSong 判定一致）
+					function modHasAudio(mod:String, fileBase:String):Bool
+						return FileSystem.exists(Paths.getSongAudioPath(song.song, fileBase, mod));
+					function modHasSong(mod:String):Bool
+					{
+						if (modHasAudio(mod, 'Inst') || modHasAudio(mod, 'Voices')) return true;
+						if (si != null && modHasAudio(mod, 'Inst-$si')) return true;
+						if (sv != null && modHasAudio(mod, 'Voices-$sv')) return true;
+						return false;
+					}
+					var found:String = '';
+					for (mod in Mods.getModDirectories())
+						if (modHasSong(mod)) { found = mod; break; }
+					PlayState._songAudioModCache.set(song.song, found);
+				}
+			}
+			catch (e:Dynamic) {}
+			completedThread();
+		});
+
+		// 并行化：预读 PlayState.create() 用到的 Lua/HScript 脚本文件内容（纯 I/O 预读，后台线程安全）。
+		// create() 的「HUD+脚本」段会在主线程对每个脚本 new FunkinLua / initHScript 同步读盘 + 编译执行。
+		// 后台把文件内容读进 ScriptPreload 缓存后，create() 命中缓存跳过同步读盘（低端机冷 I/O 是大头）。
+		threadsMax++;
+		threadPool.run(() ->
+		{
+			try
+			{
+				var songName:String = song.song;
+				// 预读 scripts/ 全局目录（create() 早期会遍历）
+				#if MODS_ALLOWED
+				for (luaFolder in Mods.directoriesWithFile(Paths.getSharedPath(), 'scripts/'))
+				{
+					for (file in Paths.readDirectory(luaFolder))
+					{
+						var f:String = luaFolder + file;
+						#if LUA_ALLOWED
+						if (file.toLowerCase().endsWith('.lua')) backend.ScriptPreload.preloadLua(f);
+						#end
+						#if HSCRIPT_ALLOWED
+						if (file.toLowerCase().endsWith('.hx')) backend.ScriptPreload.preloadHScript(f);
+						#end
+					}
+				}
+				#end
+
+			// 预读 data/$songName/ 下的 per-song 脚本（custom_events + custom_notetypes + 根目录脚本）
+				#if MODS_ALLOWED
+				for (dataFolder in Mods.directoriesWithFile(Paths.getSharedPath(), 'data/$songName/'))
+				{
+					// custom_events 子目录
+					var eventsFolder:String = dataFolder + 'custom_events/';
+					if (FileSystem.exists(eventsFolder))
+						for (file in Paths.readDirectory(eventsFolder))
+						{
+							var f:String = eventsFolder + file;
+							#if LUA_ALLOWED
+							if (file.toLowerCase().endsWith('.lua')) backend.ScriptPreload.preloadLua(f);
+							#end
+							#if HSCRIPT_ALLOWED
+							if (file.toLowerCase().endsWith('.hx')) backend.ScriptPreload.preloadHScript(f);
+							#end
+						}
+					// custom_notetypes 子目录
+					var typesFolder:String = dataFolder + 'custom_notetypes/';
+					if (FileSystem.exists(typesFolder))
+						for (file in Paths.readDirectory(typesFolder))
+						{
+							var f:String = typesFolder + file;
+							#if LUA_ALLOWED
+							if (file.toLowerCase().endsWith('.lua')) backend.ScriptPreload.preloadLua(f);
+							#end
+							#if HSCRIPT_ALLOWED
+							if (file.toLowerCase().endsWith('.hx')) backend.ScriptPreload.preloadHScript(f);
+							#end
+						}
+					// data/$songName/ 根目录脚本
+					for (file in Paths.readDirectory(dataFolder))
+					{
+						var f:String = dataFolder + file;
+						#if LUA_ALLOWED
+						if (file.toLowerCase().endsWith('.lua')) backend.ScriptPreload.preloadLua(f);
+						#end
+						#if HSCRIPT_ALLOWED
+						if (file.toLowerCase().endsWith('.hx')) backend.ScriptPreload.preloadHScript(f);
+						#end
+					}
+				}
+				#end
+
+				// 预读 stage 脚本（stages/$stage.lua / .hx），解析方式与 startLuasNamed/startHScriptsNamed 一致
+				var stageName:String = song.stage;
+				if (stageName == null || stageName.length < 1)
+					stageName = StageData.vanillaSongStage(folder);
+				#if MODS_ALLOWED
+				var stageLua:String = Paths.modFolders('stages/$stageName.lua');
+				if (!FileSystem.exists(stageLua)) stageLua = Paths.getSharedPath('stages/$stageName.lua');
+				if (FileSystem.exists(stageLua)) backend.ScriptPreload.preloadLua(stageLua);
+				var stageHx:String = Paths.modFolders('stages/$stageName.hx');
+				if (!FileSystem.exists(stageHx)) stageHx = Paths.getSharedPath('stages/$stageName.hx');
+				if (FileSystem.exists(stageHx)) backend.ScriptPreload.preloadHScript(stageHx);
+				#end
+			}
+			catch (e:Dynamic) {}
+			completedThread();
+		});
+
 		// 额外任务：预加载 PlayState.create() 中常用的游戏资源（避免主线程同步阻塞）
 		threadsMax++;
 		threadPool.run(() ->
@@ -696,26 +897,31 @@ class LoadingState extends MusicBeatState
 				var stageData:StageFile = null;
 				try { stageData = StageData.getStageFile(song.stage); } catch(_) {}
 				var isPixel:Bool = stageData != null && stageData.isPixelStage == true;
-				if (isPixel)
+				// 与 PlayState.cacheCountdown 保持一致：stageUI 存在时用自定义变体（uiPrefix/uiPostfix）
+				var psStageUI:String = "normal";
+				if (stageData != null && stageData.stageUI != null && stageData.stageUI.trim().length > 0)
+					psStageUI = stageData.stageUI;
+				else if (isPixel)
+					psStageUI = "pixel";
+				var psUiPrefix:String = "";
+				var psUiPostfix:String = "";
+				if (psStageUI != "normal")
 				{
-					imagesToPrepare.push('pixelUI/ready-pixel');
-					imagesToPrepare.push('pixelUI/set-pixel');
-					imagesToPrepare.push('pixelUI/date-pixel');
-					soundsToPrepare.push('intro3-pixel');
-					soundsToPrepare.push('intro2-pixel');
-					soundsToPrepare.push('intro1-pixel');
-					soundsToPrepare.push('introGo-pixel');
+					psUiPrefix = psStageUI.split("-pixel")[0].trim();
+					if (psStageUI == "pixel" || psStageUI.endsWith("-pixel")) psUiPostfix = "-pixel";
 				}
-				else
-				{
-					imagesToPrepare.push('ready');
-					imagesToPrepare.push('set');
-					imagesToPrepare.push('go');
-					soundsToPrepare.push('intro3');
-					soundsToPrepare.push('intro2');
-					soundsToPrepare.push('intro1');
-					soundsToPrepare.push('introGo');
+				var introImagesArray:Array<String> = switch(psStageUI) {
+					case "pixel": ['pixelUI/ready-pixel', 'pixelUI/set-pixel', 'pixelUI/date-pixel'];
+					case "normal": ["ready", "set", "go"];
+					default: ['${psUiPrefix}UI/ready${psUiPostfix}', '${psUiPrefix}UI/set${psUiPostfix}', '${psUiPrefix}UI/go${psUiPostfix}'];
 				}
+				var introSoundsSuffix:String = isPixel ? '-pixel' : '';
+				for (introImg in introImagesArray)
+					imagesToPrepare.push(introImg);
+				soundsToPrepare.push('intro3' + introSoundsSuffix);
+				soundsToPrepare.push('intro2' + introSoundsSuffix);
+				soundsToPrepare.push('intro1' + introSoundsSuffix);
+				soundsToPrepare.push('introGo' + introSoundsSuffix);
 
 				// Hold Cover 贴图（原在 PlayState.create() 中同步加载，长条首次命中时会卡一下）
 				if (ClientPrefs.data.holdCovers)

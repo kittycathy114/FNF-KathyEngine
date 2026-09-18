@@ -514,6 +514,9 @@ class PlayState extends MusicBeatState
 	private var lastCorrectSongPos:Float = -1.0;
 
 	public static var _lastLoadedModDirectory:String = '';
+	// 歌曲音频所在模组的探测结果缓存（song -> audioModDir，''=内置）。
+	// generateSong 每次进歌都要遍历全部 84 个模组探测音频是否存在，跨曲切换时是固定开销，会话内缓存可消除。
+	public static var _songAudioModCache:Map<String, String> = null;
 	public static var nextReloadAll:Bool = false;
 
 	public var luaTouchPad:TouchPad;
@@ -584,6 +587,7 @@ class PlayState extends MusicBeatState
 
 	override public function create()
 	{
+		var __t0:Float = Sys.time();
 		// 从设置读取血条平滑/溢出回落系数的默认值（游玩中脚本仍可直接覆盖本实例变量）
 		smoothHPSpeed = ClientPrefs.data.smoothHPSpeed;
 		healthOverflowDrain = ClientPrefs.data.healthOverflowDrain;
@@ -901,6 +905,7 @@ isReplaying = false;
 
 		if (!stageData.hide_girlfriend)
 		{
+			trace('[PlayState.create] gf创建前: ${Math.round((Sys.time() - __t0) * 1000)}ms');
 			if(SONG.gfVersion == null || SONG.gfVersion.length < 1) SONG.gfVersion = 'gf'; //Fix for the Chart Editor
 			gf = new Character(0, 0, SONG.gfVersion);
 			startCharacterPos(gf);
@@ -909,10 +914,12 @@ isReplaying = false;
 		}
 
 		playOpponent = ClientPrefs.getGameplaySetting('playOpponent', false);
+		trace('[PlayState.create] dad创建前: ${Math.round((Sys.time() - __t0) * 1000)}ms');
 		dad = new Character(0, 0, SONG.player2);
 		startCharacterPos(dad, true);
 		dadGroup.add(dad);
 
+		trace('[PlayState.create] boyfriend创建前: ${Math.round((Sys.time() - __t0) * 1000)}ms');
 		boyfriend = new Character(0, 0, SONG.player1, true);
 		startCharacterPos(boyfriend);
 		boyfriendGroup.add(boyfriend);
@@ -928,6 +935,7 @@ isReplaying = false;
 		
 		if(stageData.objects != null && stageData.objects.length > 0)
 		{
+			trace('[PlayState.create] stage对象创建前: ${Math.round((Sys.time() - __t0) * 1000)}ms');
 			var list:Map<String, FlxSprite> = StageData.addObjectsToState(stageData.objects, !stageData.hide_girlfriend ? gfGroup : null, dadGroup, boyfriendGroup, this);
 			for (key => spr in list)
 				if(!StageData.reservedNames.contains(key))
@@ -936,7 +944,8 @@ isReplaying = false;
 		else
 		{
 			add(gfGroup);
-			add(dadGroup);
+		trace('[PlayState.create] 角色+stage创建: ${Math.round((Sys.time() - __t0) * 1000)}ms');
+		add(dadGroup);
 			add(boyfriendGroup);
 		}
 		
@@ -1143,6 +1152,7 @@ isReplaying = false;
 		}
 
 		generateSong();
+		trace('[PlayState.create] generateSong: ${Math.round((Sys.time() - __t0) * 1000)}ms');
 
 		// 根据 holdNoteBehind 设置调整图层顺序
 		if (ClientPrefs.data.holdNoteBehind) {
@@ -1530,6 +1540,7 @@ isReplaying = false;
 		}
 
 		startCallback();
+		trace('[PlayState.create] HUD+脚本初始化完成: ${Math.round((Sys.time() - __t0) * 1000)}ms');
 		RecalculateRating(false, false);
 
 		FlxG.stage.addEventListener(KeyboardEvent.KEY_DOWN, onKeyPress);
@@ -1576,6 +1587,7 @@ isReplaying = false;
 		addTouchPadCamera();
 		#end
 
+		trace('[PlayState.create] create() 总耗时: ${Math.round((Sys.time() - __t0) * 1000)}ms');
 		super.create();
 		iconP1InitialY = iconP1.y;
    	 	iconP2InitialY = iconP2.y;
@@ -2586,21 +2598,30 @@ tempScore += '${lblScore}: ${songScore}';
 		}
 
 		var audioModDir:String = PlayState._lastLoadedModDirectory;
-		if (!modHasSong(audioModDir, songData.song))
+		if (PlayState._songAudioModCache != null && PlayState._songAudioModCache.exists(songData.song))
 		{
-			audioModDir = '';
-			#if MODS_ALLOWED
-			for (mod in Mods.getModDirectories())
-			{
-				if (modHasSong(mod, songData.song))
-				{
-					audioModDir = mod;
-					break;
-				}
-			}
-			#end
+			audioModDir = PlayState._songAudioModCache.get(songData.song);
 		}
-		if (audioModDir == null) audioModDir = '';
+		else
+		{
+			if (!modHasSong(audioModDir, songData.song))
+			{
+				audioModDir = '';
+				#if MODS_ALLOWED
+				for (mod in Mods.getModDirectories())
+				{
+					if (modHasSong(mod, songData.song))
+					{
+						audioModDir = mod;
+						break;
+					}
+				}
+				#end
+			}
+			if (audioModDir == null) audioModDir = '';
+			if (PlayState._songAudioModCache == null) PlayState._songAudioModCache = new Map();
+			PlayState._songAudioModCache.set(songData.song, audioModDir);
+		}
 
 		Mods.currentModDirectory = audioModDir;
 		try

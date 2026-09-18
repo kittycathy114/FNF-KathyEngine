@@ -103,8 +103,18 @@ class HScript extends Iris
 		{
 			var f:String = file.replace('\\', '/');
 			if(f.contains('/') && !f.contains('\n')) {
-				scriptThing = File.getContent(f);
-				scriptName = f;
+				// 性能优化：优先取 LoadingState 后台线程预读的内容（纯 I/O 预读），跳过主线程同步读盘。
+				var preloaded:String = backend.ScriptPreload.takeHContent(f);
+				if (preloaded != null)
+				{
+					scriptThing = preloaded;
+					scriptName = f;
+				}
+				else
+				{
+					scriptThing = File.getContent(f);
+					scriptName = f;
+				}
 			}
 		}
 		#if LUA_ALLOWED

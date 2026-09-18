@@ -802,6 +802,17 @@ inline static public function inst(song:String, ?specialInst:String = null, ?mod
 		return __frames;
 	}
 
+	// 判定该图片 key 是否配套 Sparrow XML（角色/Note 等图集），供 LoadingState 预构建 FlxAtlasFrames 使用。
+	// 与 getSparrowAtlas 内部一致：优先 mods 目录，再回退 assets 共享路径。
+	static public function sparrowXmlExists(key:String):Bool
+	{
+		#if MODS_ALLOWED
+		try { if (FileSystem.exists(modsXml(key))) return true; } catch (e:Dynamic) {}
+		#end
+		try { return FileSystem.exists(getPath('images/$key.xml', TEXT, null, true)); } catch (e:Dynamic) {}
+		return false;
+	}
+
 	inline static public function getPackerAtlas(key:String, ?parentFolder:String = null, ?allowGPU:Bool = true):FlxAtlasFrames
 	{
 		var imageLoaded:FlxGraphic = image(key, parentFolder, allowGPU);
