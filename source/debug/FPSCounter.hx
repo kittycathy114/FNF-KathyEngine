@@ -12,6 +12,8 @@ import debug.HaxelibInfo;
 import openfl.display.Sprite;
 import flixel.FlxState;
 import openfl.utils.Assets;
+import openfl.utils.AssetCache;
+import openfl.utils.AssetType;
 import backend.ClientPrefs;
 import backend.Paths;
 import StringTools;
@@ -83,6 +85,8 @@ class FPSCounter extends Sprite
 	private var _lastBgWidth:Float = -1;         // 上次背景宽度
 	private var _lastBgHeight:Float = -1;        // 上次背景高度
 	private var _lastVersionStr:String = null;   // 缓存 Application.version
+	private var _cachedAssetText:String = null;  // 缓存资源统计文本
+	private var _lastAssetQueryTime:Float = 0;   // 上次资源查询时间戳
 
 	public function new(x:Float = 10, y:Float = 10, color:flixel.util.FlxColor = 0xFF000000)
 	{
@@ -235,6 +239,14 @@ class FPSCounter extends Sprite
 		if (ClientPrefs.data.fpsShowRAM) textLines.push('RAM: ${formatMemory(memory)}');
 		if (ClientPrefs.data.fpsShowMemPeak) textLines.push('MEM Peak: ${formatMemory(memoryPeakMegas)}');
 		if (ClientPrefs.data.fpsShowObjects) textLines.push('Objects: $objectCount');
+
+		// 资源缓存 / 内嵌统计（仅 Kathy 详细模式显示，始终开启）
+		try
+		{
+			var assetInfo = getAssetDebugText();
+			for (line in assetInfo.split('\n')) textLines.push(line);
+		}
+		catch (e:Dynamic) {}
 		
 		// 版本信息
 		if (ClientPrefs.data.exgameversion)
@@ -453,6 +465,8 @@ class FPSCounter extends Sprite
 		_lastBgHeight = -1;
 		_lastVersionStr = null;
 		_lastMemQueryTime = 0;
+		_cachedAssetText = null;
+		_lastAssetQueryTime = 0;
 
 		// 若切换到 Psych 模式，重建 psychInstance 以应用新位置
 		if (ClientPrefs.data.fpsStyle == "Psych" && psychInstance != null)
@@ -638,6 +652,91 @@ class FPSCounter extends Sprite
 		}
 
 		return count;
+	}
+
+	// ---- 节流的资源统计（每 2 秒刷新一次，内嵌资源量基本不变，缓存量随游戏过程变化） ----
+
+	// Haxe Map 没有 .length，用迭代器遍历取长度
+	inline private function mapLen<K, V>(m:Map<K, V>):Int
+	{
+		var n:Int = 0;
+		if (m != null) for (_ in m) n++;
+		return n;
+	}
+
+	private function getAssetDebugText():String
+	{
+		var now = Timer.stamp();
+		if (now - _lastAssetQueryTime < 2.0 && _cachedAssetText != null)
+			return _cachedAssetText;
+		_lastAssetQueryTime = now;
+
+		var oflBmp:Int = 0, oflFont:Int = 0, oflSnd:Int = 0;
+		var flxCache:Int = 0;
+		var limeImg:Int = 0, limeAudio:Int = 0, limeFont:Int = 0;
+		var embImg:Int = 0, embSnd:Int = 0, embFont:Int = 0, embBin:Int = 0, embMClip:Int = 0;
+
+		// OpenFL 运行时缓存（AssetCache 有公开的 Map 字段，IAssetCache 接口则没有 length）
+		try
+		{
+			var c:AssetCache = cast Assets.cache;
+			if (c != null)
+			{
+				oflBmp  = mapLen(c.bitmapData);
+				oflFont = mapLen(c.font);
+				oflSnd  = mapLen(c.sound);
+			}
+		}
+		catch (e:Dynamic) {}
+
+		// Flixel FlxGraphic 缓存（_cache 是 BitmapFrontEnd 的私有字段，需 privateAccess）
+		try
+		{
+			@:privateAccess
+			var flxC:Int = mapLen(flixel.FlxG.bitmap._cache);
+			flxCache = flxC;
+		}
+		catch (e:Dynamic) {}
+
+		#if lime
+		// Lime 底层缓存（image/audio/font Map）
+		try
+		{
+			limeImg   = mapLen(lime.utils.Assets.cache.image);
+			limeAudio = mapLen(lime.utils.Assets.cache.audio);
+			limeFont  = mapLen(lime.utils.Assets.cache.font);
+		}
+		catch (e:Dynamic) {}
+		#end
+
+		// 内嵌资源总量（编译时打包进可执行文件的，运行时基本不变）
+		try { embImg   = Assets.list(AssetType.IMAGE).length;      } catch (e:Dynamic) {}
+		try { embSnd   = Assets.list(AssetType.SOUND).length;      } catch (e:Dynamic) {}
+		try { embFont  = Assets.list(AssetType.FONT).length;       } catch (e:Dynamic) {}
+		try { embBin   = Assets.list(AssetType.BINARY).length;     } catch (e:Dynamic) {}
+		try { embMClip = Assets.list(AssetType.MOVIE_CLIP).length; } catch (e:Dynamic) {}
+
+		var embTotal:Int = embImg + embSnd + embFont + embBin + embMClip;
+
+		// 组装两行文本：缓存一行 + 内嵌一行
+		var cacheParts:Array<String> = [];
+		cacheParts.push('OFL ${oflBmp}/${oflFont}/${oflSnd}');
+		cacheParts.push('Flx ${flxCache}');
+		#if lime
+		cacheParts.push('Lime ${limeImg}/${limeAudio}/${limeFont}');
+		#end
+		var cacheLine = 'Cache: ' + cacheParts.join(' | ');
+
+		var embParts:Array<String> = [];
+		embParts.push('IMG ${embImg}');
+		embParts.push('SND ${embSnd}');
+		if (embFont > 0)  embParts.push('FNT ${embFont}');
+		if (embBin > 0)   embParts.push('BIN ${embBin}');
+		if (embMClip > 0) embParts.push('MCLIP ${embMClip}');
+		var embLine = 'Embedded: ' + embParts.join(' ') + '  (${embTotal})';
+
+		_cachedAssetText = cacheLine + '\n' + embLine;
+		return _cachedAssetText;
 	}
 
 	// ---- 节流的内存查询 ----
