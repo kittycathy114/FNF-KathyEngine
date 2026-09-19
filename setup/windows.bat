@@ -31,7 +31,6 @@ haxelib install yagp 1.1.4 --quiet --skip-dependencies
 haxelib install flxsvg 1.1.0 --quiet --skip-dependencies
 haxelib install svg 1.2.0 --quiet --skip-dependencies
 haxelib install sl-windows-api 1.4.0 --quiet --skip-dependencies
-haxelib install extension-androidtools 2.2.0 --quiet --skip-dependencies
 haxelib git haxeui-core https://github.com/kittycathy332/haxeui-core.git --quiet
 haxelib git haxeui-flixel https://github.com/kittycathy332/haxeui-flixel.git master --quiet --skip-dependencies
 haxelib git funkin.vis https://github.com/FunkinCrew/funkVis 22b1ce089dd924f15cdc4632397ef3504d464e90 --quiet --skip-dependencies
