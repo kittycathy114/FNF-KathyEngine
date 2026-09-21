@@ -240,13 +240,15 @@ class FPSCounter extends Sprite
 		if (ClientPrefs.data.fpsShowMemPeak) textLines.push('MEM Peak: ${formatMemory(memoryPeakMegas)}');
 		if (ClientPrefs.data.fpsShowObjects) textLines.push('Objects: $objectCount');
 
-		// 资源缓存 / 内嵌统计（仅 Kathy 详细模式显示，始终开启）
+		#if debug
+		// 资源缓存 / 内嵌统计（仅 Kathy 详细模式 + debug 构建显示）
 		try
 		{
 			var assetInfo = getAssetDebugText();
 			for (line in assetInfo.split('\n')) textLines.push(line);
 		}
 		catch (e:Dynamic) {}
+		#end
 		
 		// 版本信息
 		if (ClientPrefs.data.exgameversion)
