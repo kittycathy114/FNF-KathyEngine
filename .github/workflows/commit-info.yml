@@ -2,6 +2,10 @@ name: Commit Info
 
 on:
   workflow_call:
+    outputs:
+      commit_hash:
+        description: 'Short commit hash (7 chars)'
+        value: ${{ jobs.commit-info.outputs.commit_hash }}
 
 jobs:
   commit-info:
