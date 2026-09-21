@@ -1,0 +1,18 @@
+name: Commit Info
+
+on:
+  workflow_call:
+
+jobs:
+  commit-info:
+    runs-on: ubuntu-latest
+    outputs:
+      commit_hash: ${{ steps.get.outputs.commit_hash }}
+    steps:
+      # GITHUB_SHA 在任何 GitHub Actions 运行中都有值，不需要 checkout + git rev-parse fallback
+      - id: get
+        name: Get Commit Hash
+        run: |
+          commit_hash="${GITHUB_SHA::7}"
+          echo "commit_hash=$commit_hash" >> $GITHUB_OUTPUT
+          echo "Latest commit hash: $commit_hash"

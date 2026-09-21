@@ -75,12 +75,35 @@ jobs:
         with:
           haxe-version: ${{ env.HAXE_VERSION }}
 
+      # Haxe 库 & hxcpp 编译缓存：setupCommand 会跑 haxelib install，
+      # 命中缓存可以跳过大量下载；hxcpp 缓存能避免重复编译 C++ 层。
+      - name: Cache Haxe & hxcpp
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.haxe
+            ~/.hxcpp
+          key: haxe-${{ runner.os }}-${{ inputs.name }}-${{ hashFiles('Project.xml', 'hxformat.json') }}
+          restore-keys: |
+            haxe-${{ runner.os }}-${{ inputs.name }}-
+            haxe-${{ runner.os }}-
+
+      # Android gradle 依赖缓存：首次运行后增量缓存 gradle wrapper + 依赖。
+      - name: Cache Gradle
+        if: inputs.name == 'Android'
+        uses: actions/cache@v4
+        with:
+          path: ~/.gradle/caches
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
       - name: Setup NDK
         if: inputs.name == 'Android'
         id: setup-ndk
         uses: nttld/setup-ndk@v1
         with:
-          ndk-version: r29
+          ndk-version: r27d
           add-to-path: false
 
       - name: Install VLC
@@ -94,10 +117,17 @@ jobs:
 
       - name: Config Android
         if: inputs.name == 'Android'
+        shell: bash
         run: |
-          haxelib run lime config ANDROID_SDK $ANDROID_HOME
-          haxelib run lime config ANDROID_NDK_ROOT ${{ steps.setup-ndk.outputs.ndk-path }}
-          haxelib run lime config JAVA_HOME $JAVA_HOME_17_arm64
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            java_home="$JAVA_HOME_17_arm64"
+          else
+            java_home="$JAVA_HOME_17_X64"
+          fi
+          echo "Using JAVA_HOME=$java_home"
+          haxelib run lime config ANDROID_SDK "$ANDROID_HOME"
+          haxelib run lime config ANDROID_NDK_ROOT "${{ steps.setup-ndk.outputs.ndk-path }}"
+          haxelib run lime config JAVA_HOME "$java_home"
           haxelib run lime config ANDROID_SETUP true
 
       - name: Compile

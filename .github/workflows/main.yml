@@ -21,7 +21,7 @@ jobs:
             artifactName: windowsBuild-x86_64
             artifactPath: export\release\windows\bin\*
           - name: Linux
-            os: ubuntu-22.04
+            os: ubuntu-24.04
             buildArgs: linux
             setupCommand: sh ./setup/unix.sh
             artifactName: linuxBuild-x86_64
@@ -39,7 +39,7 @@ jobs:
             artifactName: macOSBuild-arm64
             artifactPath: export/release/macos/bin/*
           - name: Android
-            os: macos-15
+            os: ubuntu-24.04
             buildArgs: "android -ONLY_ARMV7"
             setupCommand: sh ./setup/unix.sh
             artifactName: androidBuild
