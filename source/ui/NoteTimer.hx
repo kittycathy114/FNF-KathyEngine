@@ -102,6 +102,9 @@ class NoteTimer extends FlxSpriteGroup
 	}
 
 	private var lastStartTime:Float = 1e10;
+	private var prevShownNum:Int = -1; // 上一次显示的数字，用于检测变化触发跳动
+	private var textScale:Float = 1.0; // 数字文本的实时缩放
+	private var initialUnits:Float = 0; // 进入倒计时时的初始 beat/秒 数（跳剪模式用作 percent 分母）
 
 	override public function update(elapsed:Float):Void
 	{
@@ -141,23 +144,52 @@ class NoteTimer extends FlxSpriteGroup
 			if (show)
 			{
 				if (lastStartTime == 1e10 && timeTillNextNote > 3000)
+				{
 					lastStartTime = timeTillNextNote;
+					// 记录进入倒计时时的初始单位数（跳剪模式下 percent 用这个做分母）
+					var mode:String = backend.ClientPrefs.data.noteTimerDisplay;
+					if (mode == 'Beats' && backend.Conductor.crochet > 0)
+						initialUnits = Math.ceil(timeTillNextNote / backend.Conductor.crochet);
+					else
+						initialUnits = Math.ceil(timeTillNextNote * 0.001);
+				}
 
 				if (lastStartTime != 1e10)
 				{
-					var secsLeft:Float = Math.ceil(timeTillNextNote * 0.001);
-					var percent:Float = timeTillNextNote / lastStartTime;
+					var numLeft:Float;
+					var mode:String = backend.ClientPrefs.data.noteTimerDisplay;
+					var useBeats:Bool = (mode == 'Beats' && backend.Conductor.crochet > 0);
+					if (useBeats)
+						numLeft = Math.ceil(timeTillNextNote / backend.Conductor.crochet);
+					else
+						numLeft = Math.ceil(timeTillNextNote * 0.001);
+
+					// 圆环裁剪：丝滑连续 vs 按 beat/秒 跳变
+					var percent:Float;
+					if (backend.ClientPrefs.data.noteTimerStepped && initialUnits > 0)
+						percent = numLeft / initialUnits; // 跳变：percent 只在整数跳时变
+					else
+						percent = timeTillNextNote / lastStartTime; // 丝滑：每帧都在变
 
 					if (percent <= 0.0)
 					{
 						lastStartTime = 1e10;
+						initialUnits = 0;
+						prevShownNum = -1;
 						timerText.text = "";
 						circleShader.percent.value = [0.0];
 					}
 					else
 					{
 						circleShader.percent.value = [percent];
-						timerText.text = Std.int(secsLeft) + "";
+						var curNum:Int = Std.int(numLeft);
+						timerText.text = curNum + "";
+						// 数字变化时触发放大跳动（Beats 模式每拍都变 → 很密集；Seconds 模式每秒变一次）
+						if (curNum != prevShownNum)
+						{
+							prevShownNum = curNum;
+							textScale = 1.55; // 瞬时放大
+						}
 					}
 					updatePosition();
 				}
@@ -166,7 +198,10 @@ class NoteTimer extends FlxSpriteGroup
 					targetAlpha = 1.0;
 			}
 
-			// 原版写法：分别 lerp text，再把 alpha 拷给 circle
+			// 放大效果每帧 lerp 回 1.0，形成弹性衰减
+			textScale = FlxMath.lerp(textScale, 1.0, elapsed * 10);
+			timerText.scale.set(textScale, textScale);
+
 			timerText.alpha = FlxMath.lerp(timerText.alpha, targetAlpha, elapsed * 5);
 			timerCircle.alpha = timerText.alpha;
 		}

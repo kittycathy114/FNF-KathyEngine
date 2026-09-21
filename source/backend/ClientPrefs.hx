@@ -366,6 +366,9 @@ import openfl.display.StageQuality;
 	public var holdCovers:Bool = true; // 长条按住期间在箭头上显示 Hold Cover 光效（类似原版 FNF），末尾播放爆发动画
 	public var opponentHoldCovers:Bool = false; // 对手侧也显示 Hold Cover（需 CPU Strums 可见）
 	public var noteTimerEnabled:Bool = true; // 箭头倒计时：两箭头间隔 ≥ 3秒 时显示圆形进度圈 + 整数秒
+	public var noteTimerLayer:String = 'Above Notes'; // 箭头倒计时图层：'Above Notes' 压在箭头之上（默认），'Below Notes' 在箭头之下
+	public var noteTimerDisplay:String = 'Seconds'; // 箭头倒计时数字显示：'Seconds' 按秒取整（默认），'Beats' 按 Beat 取整
+	public var noteTimerStepped:Bool = false; // 圆环裁剪动效：true = 按 beat/秒 离散跳变（脉冲感），false = 丝滑连续裁剪（默认）
 
 	// Simple Info Display (Leather风格) 设置
 	public var fpsLayer:String = "Stage"; // FPS计数器所在图层: "Stage" 或 "Game"

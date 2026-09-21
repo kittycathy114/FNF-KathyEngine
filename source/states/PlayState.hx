@@ -1410,13 +1410,24 @@ isReplaying = false;
 		if (ClientPrefs.data.noteTimerEnabled)
 		{
 			noteTimer = new ui.NoteTimer(this);
+			// 根据 noteTimerLayer 设置决定图层：压在箭头之上 还是 在箭头之下
+			var aboveNotes:Bool = (ClientPrefs.data.noteTimerLayer == 'Above Notes');
 			if (ClientPrefs.data.legacyHUD)
 			{
-				add(noteTimer);
+				if (aboveNotes)
+					add(noteTimer); // 加入 members 末尾 → 最顶层
+				else
+					insert(members.indexOf(strumLineNotes), noteTimer); // 插入 strumLineNotes 之前 → 箭头之下
 				noteTimer.cameras = [camHUD];
 			}
 			else
-				uiGroup.add(noteTimer);
+			{
+				if (aboveNotes)
+					add(noteTimer); // 直接加入 state，比 noteGroup 晚 add → 箭头之上
+				else
+					uiGroup.add(noteTimer); // uiGroup 在 noteGroup 之前 add → 箭头之下
+				noteTimer.cameras = [camHUD];
+			}
 		}
 
 		startingSong = true;

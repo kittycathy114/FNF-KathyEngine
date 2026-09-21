@@ -158,6 +158,34 @@ class VisualsSettingsSubState extends BaseOptionsMenu
 			'noteTimerEnabled',
 			BOOL);
 		addOption(option);
+
+		var option:Option = new Option(Language.get('note_timer_layer'),
+			Language.get("note_timer_layer_desc"),
+			'noteTimerLayer',
+			STRING,
+			['Above Notes', 'Below Notes']);
+		option.valueLocalizations = [
+			'Above Notes' => Language.get('note_timer_layer_above'),
+			'Below Notes' => Language.get('note_timer_layer_below')
+		];
+		addOption(option);
+
+		var option:Option = new Option(Language.get('note_timer_display'),
+			Language.get("note_timer_display_desc"),
+			'noteTimerDisplay',
+			STRING,
+			['Seconds', 'Beats']);
+		option.valueLocalizations = [
+			'Seconds' => Language.get('note_timer_display_seconds'),
+			'Beats'   => Language.get('note_timer_display_beats')
+		];
+		addOption(option);
+
+		var option:Option = new Option(Language.get('note_timer_stepped'),
+			Language.get("note_timer_stepped_desc"),
+			'noteTimerStepped',
+			BOOL);
+		addOption(option);
 		
 		var option:Option = new Option(Language.get('time_bar'),
 			Language.get("timebar_desc"),
