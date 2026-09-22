@@ -153,6 +153,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: read
     steps:
       - name: Download Windows
         if: ${{ inputs.windows }}
