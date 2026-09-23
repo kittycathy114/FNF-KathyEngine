@@ -793,11 +793,11 @@ class FPSCounter extends Sprite
 		return _cachedMemMegas;
 	}
 
-	/** 缓存版本字符串 */
+	/** 缓存版本字符串（统一读 MainMenuState.kathyEngineVersion，带 rc/beta 后缀） */
 	inline private function getCachedVersion():String
 	{
 		if (_lastVersionStr != null) return _lastVersionStr;
-		var v:String = Application.current.meta.get('version');
+		var v:String = MainMenuState.kathyEngineVersion;
 		if (v == null) v = "0.0.0";
 		_lastVersionStr = v;
 		return v;

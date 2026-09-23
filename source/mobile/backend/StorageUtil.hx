@@ -72,8 +72,13 @@ class StorageUtil
 		else
 			AndroidPermissions.requestPermissions(['READ_EXTERNAL_STORAGE', 'WRITE_EXTERNAL_STORAGE']);
 
-		if (!AndroidEnvironment.isExternalStorageManager())
-			AndroidSettings.requestSetting('MANAGE_APP_ALL_FILES_ACCESS_PERMISSION');
+		// MANAGE_EXTERNAL_STORAGE 只在 API 30 (Android 11+) 存在
+		// API 29 (Android 10) 没有这个权限，直接跳过避免 NoSuchMethodError 闪退
+		if (AndroidVersion.SDK_INT >= AndroidVersionCode.R)
+		{
+			if (!AndroidEnvironment.isExternalStorageManager())
+				AndroidSettings.requestSetting('MANAGE_APP_ALL_FILES_ACCESS_PERMISSION');
+		}
 
 		// 延迟检查权限，给用户时间授予权限
 		// 使用 Sys.sleep 而不是 FlxTimer，因为此时 FlxG 可能还未初始化

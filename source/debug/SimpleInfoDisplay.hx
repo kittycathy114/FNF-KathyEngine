@@ -9,6 +9,7 @@ import openfl.system.System;
 import openfl.text.TextField;
 import openfl.text.TextFormat;
 import backend.ClientPrefs;
+import states.MainMenuState;
 
 class SimpleInfoDisplay extends TextField
 {
@@ -98,7 +99,8 @@ class SimpleInfoDisplay extends TextField
 
     function version_Function():String
     {
-        var version:String = Application.current.meta.get('version');
+        // 统一读 MainMenuState.kathyEngineVersion，带 rc/beta/alpha 后缀
+        var version:String = MainMenuState.kathyEngineVersion;
         if(version == null) version = "0.0.0";
         return "v" + version;
     }

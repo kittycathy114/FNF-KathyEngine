@@ -28,10 +28,18 @@ class MainMenuState extends MusicBeatState
 {
 	public static var psychEngineVersion:String = '1.0.4';
 	public static var osEngineVersion:String = '1.5.1';
+
+	/**
+	 * 游戏内展示版本号（带 rc/beta/alpha 后缀）。
+	 * 发版时改这里 + Project.xml version/versionName 两处。
+	 * 不用 lime 的 Application.current.meta 是因为 lime 8.3.2 不解析 Project.xml 的 versionName 属性。
+	 */
+	private static final _DISPLAY_VERSION:String = '1.1.1-rc.2';
+
 	public static var kathyEngineVersion(get, never):String;
 	static function get_kathyEngineVersion():String
 	{
-		var ver:String = (Application.current != null) ? Application.current.meta.get('version') : '1.0.0';
+		var ver:String = _DISPLAY_VERSION;
 		#if debug
 		ver += " dev";
 		#end

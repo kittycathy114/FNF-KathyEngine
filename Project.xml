@@ -2,7 +2,7 @@
 <project>
 	<!-- _________________________ Application Settings _________________________ -->
 
-	<app title="Kathy Engine" file="KathyEngine" packageName="com.kittycathy.kathyengine" package="com.kittycathy.kathyengine" main="Main" version="1.1.1-rc.1" company="KittyCathy" />
+	<app title="Kathy Engine" file="KathyEngine" packageName="com.kittycathy.kathyengine" package="com.kittycathy.kathyengine" main="Main" version="1.1.0" versionName="1.1.1-rc.2" company="KittyCathy" />
 
 	<!--Switch Export with Unique ApplicationID and Icon-->
 	<set name="APP_ID" value="0x0100f6c013bbc114" />
@@ -119,6 +119,7 @@
 	<haxelib name="flixel" version="5.9.0"/>
 	<haxelib name="openfl"/>
 	<haxelib name="lime"/>
+	<haxelib name="extension-androidtools" if="android"/>
 	<haxelib name="flixel-addons" version="4.0.2"/>
 	<haxelib name="flixel-ui" version="2.6.5"/>
 	<haxelib name="tjson" version="1.4.0"/>
@@ -218,6 +219,16 @@
 	<!-- Android Theme Configuration -->
 	<config:android>
 		<app android:theme="@android:style/Theme.NoTitleBar.Fullscreen" />
+		<!-- 补回 git 版默认有但 8.3.2 砍掉的存储权限 -->
+		<!-- MANAGE_EXTERNAL_STORAGE 是 Android 11+ 所有文件访问按钮不灰的关键 -->
+		<permission>android.permission.ACCESS_MEDIA_LOCATION</permission>
+		<permission>android.permission.MANAGE_EXTERNAL_STORAGE</permission>
+		<permission>android.permission.READ_MEDIA_IMAGES</permission>
+		<permission>android.permission.READ_MEDIA_VIDEO</permission>
+		<permission>android.permission.READ_MEDIA_AUDIO</permission>
+		<permission>android.permission.READ_MEDIA_VISUAL_USER_SELECTED</permission>
+		<permission>android.permission.READ_EXTERNAL_STORAGE</permission>
+		<permission>android.permission.WRITE_EXTERNAL_STORAGE</permission>
 	</config:android>
 
 	<!-- Allow Access to Engine Files in iOS -->
