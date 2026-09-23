@@ -130,8 +130,36 @@ jobs:
           haxelib run lime config JAVA_HOME "$java_home"
           haxelib run lime config ANDROID_SETUP true
 
+      # Android 的 :app:packageRelease 失败时，AGP 只抛一层
+      # "A failure occurred while executing ... IncrementalSplitterRunnable"，
+      # 不带 stacktrace 完全看不出真因（签名/IO/OOM 都长这样）。这里做三件事：
+      #   1) 打包前后打印磁盘与内存余量，用来排除"No space left on device"；
+      #   2) 给 Gradle daemon 显式加大堆（默认堆对 ~900MB 资源的打包偏小）；
+      #   3) 通过 ANDROID_GRADLE_TASK 给 gradlew 追加 --stacktrace，下次能直接看到 Caused by。
+      - name: Android pre-build diagnostics
+        if: inputs.name == 'Android'
+        shell: bash
+        run: |
+          echo "--- disk before build ---"
+          df -h "$RUNNER_TEMP" /
+          echo "--- memory before build ---"
+          free -m
+          echo "--- gradle user home ---"
+          mkdir -p ~/.gradle
+          printf 'org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8\n' >> ~/.gradle/gradle.properties
+          echo "ANDROID_GRADLE_TASK=assembleRelease --stacktrace" >> $GITHUB_ENV
+
       - name: Compile
         run: haxelib run lime build ${{ inputs.buildArgs }}
+
+      - name: Android post-build diagnostics
+        if: always() && inputs.name == 'Android'
+        shell: bash
+        run: |
+          echo "--- disk after build ---"
+          df -h "$RUNNER_TEMP" /
+          echo "--- biggest build dirs ---"
+          du -sh export/release/android/* 2>/dev/null | sort -h | tail -n 10 || true
 
       - name: Make IPA
         if: inputs.name == 'iOS'
