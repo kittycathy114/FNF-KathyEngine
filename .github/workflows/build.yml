@@ -103,7 +103,7 @@ jobs:
         id: setup-ndk
         uses: nttld/setup-ndk@v1
         with:
-          ndk-version: r27d
+          ndk-version: r30
           add-to-path: false
 
       - name: Install VLC
