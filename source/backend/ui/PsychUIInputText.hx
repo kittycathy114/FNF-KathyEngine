@@ -407,6 +407,10 @@ class PsychUIInputText extends FlxSpriteGroup
 			if(focusOn.unfocus != null) focusOn.unfocus();
 			focusOn.resetCaret();
 		}
+		// 失焦到空白时必须关闭输入法，否则 textInputEnabled 会一直为 true，
+		// 导致 Windows 上 IME 持续激活，非英文输入法态下键盘 UI 输入被吞掉。
+		if (v == null && FlxG.stage.window.textInputEnabled)
+			FlxG.stage.window.textInputEnabled = false;
 		return (focusOn = v);
 	}
 
