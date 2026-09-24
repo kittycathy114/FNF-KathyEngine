@@ -134,8 +134,10 @@ class PlayState extends MusicBeatState
 	var msTimeTxtTween2:FlxTween;
 	// 标记 msTimeTxt 当前是否处于 Kade 风格（20px/1px描边），用于切换回 Kathy 时恢复原样式
 	var msTimeTxtKadeStyle:Bool = false;
-	// Kade 风格下 ms 文本是否处于逐帧淡出中（每帧 alpha -= 0.02，Kade 原版逻辑）
+	// Kade 风格下 ms 文本是否处于淡出中（按 120Hz 固定步进，不再逐帧）
 	var msTimingShownActive:Bool = false;
+	// 淡出步进的时间累加器（秒）
+	var msTimeTxtFadeAccum:Float = 0;
 	var scoreTxtTweenAngle:FlxTween;
 
 	// 存储打击数据供 HitGraph 使用 [diff, judge, time]
@@ -3584,18 +3586,24 @@ tempScore += '${lblScore}: ${songScore}';
 			_deferredInitStep++;
 		}
 
-		// Kade 风格 ms 文本淡出：每帧 alpha -= 0.02（Kade 原版逻辑，非线性 Tween）
+		// Kade 风格 ms 文本淡出：按 240Hz 步进衰减（1/240 秒一步，每步 -0.005，约 0.83 秒淡完），与帧率解耦
 		if (msTimingShownActive)
 		{
-			msTimeTxt.alpha -= 0.02;
-			if (msTimeTxt.alpha <= 0)
+			msTimeTxtFadeAccum += elapsed;
+			while (msTimingShownActive && msTimeTxtFadeAccum >= 1 / 240)
 			{
-				msTimeTxt.alpha = 0;
-				msTimingShownActive = false;
-				// 归零运动，避免淡出结束后仍在屏幕外继续漂移
-				msTimeTxt.velocity.set(0, 0);
-				msTimeTxt.acceleration.set(0, 0);
+				msTimeTxtFadeAccum -= 1 / 240;
+				msTimeTxt.alpha -= 0.01;
+				if (msTimeTxt.alpha <= 0)
+				{
+					msTimeTxt.alpha = 0;
+					msTimingShownActive = false;
+					// 归零运动，避免淡出结束后仍在屏幕外继续漂移
+					msTimeTxt.velocity.set(0, 0);
+					msTimeTxt.acceleration.set(0, 0);
+				}
 			}
+			if (msTimeTxtFadeAccum > 0.1) msTimeTxtFadeAccum = 0; // 卡顿后不追帧
 		}
 
 		// 移动端右上角暂停按钮：跟随移动控制整体可见性（暂停/结算时会自动隐藏）
@@ -5461,7 +5469,7 @@ tempScore += '${lblScore}: ${songScore}';
 				msTimeTxt.acceleration.y = 600;
 				msTimeTxt.velocity.y = -150;
 				msTimeTxt.velocity.x = FlxG.random.float(0, 10);
-				// 复用同一个文本：Kade 原版淡出——不建 tween，改为 update 中每帧 alpha -= 0.02
+				// 复用同一个文本：Kade 原版淡出——不建 tween，改为 update 中按固定 120Hz 步进衰减
 				if (msTimeTxtTween1 != null) {
 					msTimeTxtTween1.cancel();
 					msTimeTxtTween1.destroy();
@@ -5471,8 +5479,9 @@ tempScore += '${lblScore}: ${songScore}';
 					msTimeTxtTween2.cancel();
 					msTimeTxtTween2.destroy();
 				}
-				// 标记开始 Kade 逐帧淡出；本次命中已把 alpha 重置为 1
+				// 标记开始 Kade 定时淡出；本次命中已把 alpha 重置为 1，同时清空步进累加器
 				msTimingShownActive = true;
+				msTimeTxtFadeAccum = 0;
 			}
 			else {
 				// 从 Kade 风格切回 Kathy：恢复原样式并清零运动
@@ -5485,6 +5494,9 @@ tempScore += '${lblScore}: ${songScore}';
 				}
 				msTimeTxt.velocity.set(0, 0);
 				msTimeTxt.acceleration.set(0, 0);
+				// 切回 Kathy 风格：关掉 Kade 定时淡出，避免与 Kathy 的 alpha Tween 打架
+				msTimingShownActive = false;
+				msTimeTxtFadeAccum = 0;
 			if (isPixelStage) {
 				msTimeTxt.font = Paths.font("pixel.otf");
 				msTimeTxt.size = 16;
@@ -5842,6 +5854,14 @@ tempScore += '${lblScore}: ${songScore}';
 				// 重算 width/height 与 offset，导致贴图位置偏移。
 				camelliaScaleBounce(rating);
 				if (ClientPrefs.data.exratingDisplay) camelliaScaleBounce(theEXrating);
+				// "combo" 单词：与 numScore 同款入场（抬高 5px 后 cubeIn 落回原位）。
+				// 此前这里只有缩放/淡出，没有下落，导致数字在下坠而单词静止。
+				if (showThisCombo)
+				{
+					var comboWordTargetY:Float = comboSpr.y;
+					comboSpr.y -= 5;
+					FlxTween.tween(comboSpr, {y: comboWordTargetY}, 0.1 / playbackRate, {ease: FlxEase.cubeIn});
+				}
 			}
 
 			var daLoop:Int = 0;
@@ -5949,8 +5969,13 @@ tempScore += '${lblScore}: ${songScore}';
 			if (ClientPrefs.data.msTimingOffsetMode == 'numScore') {
 				if (showThisCombo)
 					msTimeTxt.x = comboSpr.x + comboSpr.width + 5 - 20 - 40 + ClientPrefs.data.comboOffset[6];
-				else
-					msTimeTxt.x = FlxG.width * 0.35 + 100 + ClientPrefs.data.comboOffset[2] + ClientPrefs.data.comboOffset[6] + 60 - 20 - 40;
+				else {
+					// 不显示 "combo" 单词时紧跟数字末位：以 3 位数为基准（与 NoteOffsetState 预览一致），
+					// 再按 numScore 的 43px/位 间距补偿实际位数差，否则位数变化（如 Default 模式 1→4 位）时文本不跟随。
+					// 数字整体不显示时（OG Funkin combo≤10）退回 3 位基准，避免 xThing=0 把文本推到屏幕极左。
+					var numDigits:Int = showThisComboNum ? separatedScore.length : 3;
+					msTimeTxt.x = FlxG.width * 0.35 + 100 + ClientPrefs.data.comboOffset[2] + ClientPrefs.data.comboOffset[6] + 60 - 20 - 40 + 43 * (numDigits - 3);
+				}
 			}
 		comboJustBroke = false; // 本次命中已消费断连标记
 
