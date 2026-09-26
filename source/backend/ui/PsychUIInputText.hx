@@ -4,8 +4,10 @@ import backend.Paths;
 import backend.Language;
 import flixel.FlxObject;
 import flixel.input.keyboard.FlxKey;
+import flixel.math.FlxPoint;
 import flixel.util.FlxDestroyUtil;
 import flash.events.KeyboardEvent;
+import lime.math.Rectangle;
 import lime.system.Clipboard;
 
 enum abstract AccentCode(Int) from Int from UInt to Int to UInt
@@ -112,6 +114,13 @@ class PsychUIInputText extends FlxSpriteGroup
 
 	var _nextAccent:AccentCode = NONE;
 	public var inInsertMode:Bool = false;
+
+	// IME / SDL text input 通道 —— 处理中文等需要输入法组合的文本
+	var _textInputListening:Bool = false;
+
+	// textInputRect 位置缓存，避免每帧无意义调用
+	var _lastTextInputRectX:Float = -1;
+	var _lastTextInputRectY:Float = -1;
 	function onKeyDown(e:KeyboardEvent)
 	{
 		if(focusOn != this) return;
@@ -119,6 +128,11 @@ class PsychUIInputText extends FlxSpriteGroup
 		var keyCode:Int = e.keyCode;
 		var charCode:Int = e.charCode;
 		var flxKey:FlxKey = cast keyCode;
+
+		// 当 SDL onTextInput 通道正在监听时，所有字符输入由它处理，
+		// KEY_DOWN 不再调用 _typeLetter，否则同一个按键会触发两次插入。
+		// 这是解决"英文直输重复"和"中文IME无法输出"问题的关键。
+		var skipTypeLetter:Bool = _textInputListening;
 
 		// Fix missing cedilla
 		switch(keyCode)
@@ -318,8 +332,11 @@ class PsychUIInputText extends FlxSpriteGroup
 				if(broadcastInputTextEvent) PsychUIEventHandler.event(CHANGE_EVENT, this);
 			
 			case SPACE: //space or last accent pressed
-				if(_nextAccent != NONE) _typeLetter(getAccentCharCode(_nextAccent));
-				else _typeLetter(charCode);
+				if (!skipTypeLetter)
+				{
+					if(_nextAccent != NONE) _typeLetter(getAccentCharCode(_nextAccent));
+					else _typeLetter(charCode);
+				}
 				_nextAccent = NONE;
 
 			case A, O: //these support all accents
@@ -338,7 +355,7 @@ class PsychUIInputText extends FlxSpriteGroup
 				if(_nextAccent != NONE)
 					charCode += grave - capital + _nextAccent;
 
-				_typeLetter(charCode);
+				if (!skipTypeLetter) _typeLetter(charCode);
 				_nextAccent = NONE;
 
 			case E, I, U: //these support grave, acute and circumflex
@@ -360,18 +377,20 @@ class PsychUIInputText extends FlxSpriteGroup
 				if(_nextAccent == GRAVE || _nextAccent == ACUTE || _nextAccent == CIRCUMFLEX) //Supported accents
 					charCode += grave - capital + _nextAccent;
 				else if(_nextAccent == TILDE) //Unsupported accent
-					_typeLetter(getAccentCharCode(_nextAccent));
+				{
+					if (!skipTypeLetter) _typeLetter(getAccentCharCode(_nextAccent));
+				}
 
-				_typeLetter(charCode);
+				if (!skipTypeLetter) _typeLetter(charCode);
 				_nextAccent = NONE;
 
 			case N: //it only supports tilde
 				if(_nextAccent == TILDE)
 					charCode += 0xD1 - 0x4E;
-				else
+				else if (!skipTypeLetter)
 					_typeLetter(getAccentCharCode(_nextAccent));
 
-				_typeLetter(charCode);
+				if (!skipTypeLetter) _typeLetter(charCode);
 				_nextAccent = NONE;
 
 			case ESCAPE:
@@ -385,9 +404,12 @@ class PsychUIInputText extends FlxSpriteGroup
 					if((charCode = getAccentCharCode(_nextAccent)) < 1)
 						return;
 
-				if(lastAccent != NONE) _typeLetter(getAccentCharCode(lastAccent));
-				else if(_nextAccent != NONE) _typeLetter(getAccentCharCode(_nextAccent));
-				_typeLetter(charCode);
+				if (!skipTypeLetter)
+				{
+					if(lastAccent != NONE) _typeLetter(getAccentCharCode(lastAccent));
+					else if(_nextAccent != NONE) _typeLetter(getAccentCharCode(_nextAccent));
+					_typeLetter(charCode);
+				}
 				_nextAccent = NONE;
 		}
 		updateCaret();
@@ -399,6 +421,45 @@ class PsychUIInputText extends FlxSpriteGroup
 		focusOn = null;
 	}
 
+	/**
+	 * lime SDL onTextInput 回调 —— 处理 IME（如中文拼音）组合后的完整文本。
+	 * SDL_TEXTINPUT 事件在字符最终确认后触发，value 可能包含多字节 Unicode 字符。
+	 * 这个通道是处理中文/日文/韩文等需要输入法组合的语言的唯一正确方式，
+	 * 因为 KeyboardEvent.charCode 在 IME 激活期间不可靠（openfl 文档明确说明）。
+	 */
+	function _onWindowTextInput(value:String):Void
+	{
+		if (focusOn != this || value == null || value.length == 0) return;
+
+		var lastText = text;
+
+		// 如果有选区，先删除
+		if (selectIndex > -1 && selectIndex != caretIndex)
+			deleteSelection();
+
+		// 插入 IME 提交的完整 Unicode 字符串
+		var inserted:String = filter(value);
+		if (inserted.length > 0 && (maxLength == 0 || (Std.int(text.length) + Std.int(inserted.length)) <= maxLength))
+		{
+			var insLen:Int = Std.int(inserted.length);
+			if (inInsertMode)
+			{
+				var restStart:Int = Std.int(Math.min(caretIndex + insLen, Std.int(text.length)));
+				text = text.substring(0, caretIndex) + inserted + text.substring(restStart);
+			}
+			else
+			{
+				text = text.substring(0, caretIndex) + inserted + text.substring(caretIndex);
+			}
+
+			caretIndex += insLen;
+			if (onChange != null) onChange(lastText, text);
+			if (broadcastInputTextEvent) PsychUIEventHandler.event(CHANGE_EVENT, this);
+		}
+		_caretTime = 0;
+		updateCaret();
+	}
+
 	public var unfocus:Void->Void;
 	public static function set_focusOn(v:PsychUIInputText)
 	{
@@ -406,11 +467,23 @@ class PsychUIInputText extends FlxSpriteGroup
 		{
 			if(focusOn.unfocus != null) focusOn.unfocus();
 			focusOn.resetCaret();
+			// 旧实例失焦时，移除其 onTextInput 监听
+			if (focusOn._textInputListening)
+			{
+				FlxG.stage.window.onTextInput.remove(focusOn._onWindowTextInput);
+				focusOn._textInputListening = false;
+			}
 		}
 		// 失焦到空白时必须关闭输入法，否则 textInputEnabled 会一直为 true，
 		// 导致 Windows 上 IME 持续激活，非英文输入法态下键盘 UI 输入被吞掉。
 		if (v == null && FlxG.stage.window.textInputEnabled)
 			FlxG.stage.window.textInputEnabled = false;
+		else if (v != null && !v._textInputListening)
+		{
+			// 新实例获得焦点时，注册 onTextInput 以接收 IME 组合后的完整文本
+			FlxG.stage.window.onTextInput.add(v._onWindowTextInput);
+			v._textInputListening = true;
+		}
 		return (focusOn = v);
 	}
 
@@ -476,6 +549,9 @@ class PsychUIInputText extends FlxSpriteGroup
 					else caret.visible = false;
 				}
 			}
+
+			// 更新 IME 候选框定位
+			updateTextInputRect();
 		}
 		else
 		{
@@ -491,6 +567,33 @@ class PsychUIInputText extends FlxSpriteGroup
 		selectIndex = -1;
 		caretIndex = 0;
 		updateCaret();
+	}
+
+	/**
+	 * 计算 caret 的窗口屏幕坐标，设置 SDL textInputRect。
+	 * 这让 Windows/macOS 上 IME 候选框定位到 caret 附近，而不是飘在屏幕某个角落。
+	 * 坐标转换：FlxSprite 本地坐标 → 屏幕坐标（camera 校正） → 窗口 client 坐标（lime SDL 原生）。
+	 * 只在位置变化时才调用 SDL API，避免无意义开销。
+	 */
+	function updateTextInputRect():Void
+	{
+		if (!exists || caret == null || !caret.exists) return;
+
+		var pos:FlxPoint = caret.getScreenPosition(camera);
+		// caret.y 已经是 textObj.y + 2 这样的偏移，但 getScreenPosition 会自动加 camera
+		var x:Float = pos.x;
+		var y:Float = pos.y;
+
+		// 加一个最小尺寸让 SDL 有参考
+		var h:Float = textObj != null && textObj.exists ? textObj.height : 20;
+
+		if (Math.abs(x - _lastTextInputRectX) < 1 && Math.abs(y - _lastTextInputRectY) < 1) return;
+
+		_lastTextInputRectX = x;
+		_lastTextInputRectY = y;
+
+		var rect:Rectangle = new Rectangle(x, y, 2, h);
+		FlxG.stage.window.setTextInputRect(rect);
 	}
 
 	public function updateCaret()
@@ -566,7 +669,22 @@ class PsychUIInputText extends FlxSpriteGroup
 	override public function destroy()
 	{
 		_boundaries = null;
-		if(focusOn == this) focusOn = null;
+		if (focusOn == this)
+		{
+			// 先移除 onTextInput 监听，再置空 focusOn
+			if (_textInputListening)
+			{
+				FlxG.stage.window.onTextInput.remove(_onWindowTextInput);
+				_textInputListening = false;
+			}
+			focusOn = null;
+		}
+		else if (_textInputListening)
+		{
+			// 虽然不是当前焦点，但保险起见也清理掉
+			FlxG.stage.window.onTextInput.remove(_onWindowTextInput);
+			_textInputListening = false;
+		}
 		FlxG.stage.removeEventListener(KeyboardEvent.KEY_DOWN, onKeyDown);
 		super.destroy();
 	}
