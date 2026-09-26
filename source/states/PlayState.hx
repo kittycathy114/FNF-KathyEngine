@@ -6655,6 +6655,13 @@ tempScore += '${lblScore}: ${songScore}';
 	// 空按箭头处理：根据 ghostTappingMode 走不同分支
 	private function handleGhostTap(key:Int):Void
 	{
+		// Bool 兼容层同步 —— 模组运行时改 ghostTapping Bool 能生效
+		var curMode:String = ClientPrefs.data.ghostTappingMode;
+		var expectBool:Bool = curMode != 'off';
+		if (ClientPrefs.data.ghostTapping != expectBool)
+		{
+			ClientPrefs.data.ghostTappingMode = ClientPrefs.data.ghostTapping ? 'always' : 'off';
+		}
 		switch (ClientPrefs.data.ghostTappingMode)
 		{
 			case 'always':

@@ -88,13 +88,12 @@ import openfl.display.StageQuality;
 	//   'off'          — 完全禁用：空按总是触发完整 miss 惩罚（noteMissPress）
 	public var ghostTappingMode:String = 'always';
 
-	// Bool 兼容层 —— 供旧模组/脚本调用：
-	//   ghostTapping=true  → ghostTappingMode='always'
-	//   ghostTapping=false → ghostTappingMode='off'
-	//   读取时：mode != 'off' 视为 true（有惩罚能力），mode == 'off' 视为 false
-	public var ghostTapping(get, set):Bool;
-	private function get_ghostTapping():Bool return ghostTappingMode != 'off';
-	private function set_ghostTapping(v:Bool):Void { ghostTappingMode = v ? 'always' : 'off'; }
+	// Bool 兼容层（真实字段，FlxSave 可反射）—— 供旧模组/脚本调用：
+	//   读取：ghostTappingMode != 'off'
+	//   写入 true  → ghostTappingMode='always'
+	//   写入 false → ghostTappingMode='off'
+	// 注意：主逻辑一律读 ghostTappingMode，此 Bool 仅为模组兼容
+	public var ghostTapping:Bool = true;
 	public var preciseHit:Bool = true; // 毫秒级精确判定：按键瞬间用音频时钟同步 songPosition，并实时计算判定窗口（替代上一帧缓存的 canBeHit）
 
 	// ===== 低延迟 / 性能模式 =====
@@ -640,10 +639,17 @@ class ClientPrefs {
 				Reflect.setField(data, key, Reflect.field(FlxG.save.data, key));
 		
 		// 旧存档兼容：ghostTapping Bool → ghostTappingMode String
-		if (Reflect.hasField(FlxG.save.data, 'ghostTapping') && !Reflect.hasField(FlxG.save.data, 'ghostTappingMode'))
+		if (Reflect.hasField(FlxG.save.data, 'ghostTapping'))
 		{
 			var oldVal:Dynamic = Reflect.field(FlxG.save.data, 'ghostTapping');
-			data.ghostTappingMode = (oldVal == true) ? 'always' : 'off';
+			if (!Reflect.hasField(FlxG.save.data, 'ghostTappingMode'))
+			{
+				data.ghostTappingMode = (oldVal == true) ? 'always' : 'off';
+			}
+			// 让 Bool 与 String 保持一致（迁移后 Bool 仅作兼容读取）
+			data.ghostTapping = data.ghostTappingMode != 'off';
+			// 从存档数据删除 Bool 键，下次保存就只剩 String
+			Reflect.deleteField(FlxG.save.data, 'ghostTapping');
 		}
 		// 旧存档兼容：上一版模式名 → 新版
 		if (data.ghostTappingMode == 'psych') data.ghostTappingMode = 'always';
