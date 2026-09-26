@@ -418,6 +418,10 @@ class PlayState extends MusicBeatState
 	public var practiceMode:Bool = false;
 	public var pressMissDamage:Float = 0.05;
 
+	// Ghost Tap 冷却（375ms，仅 whenSinging 模式启用，原版 Funkin 防连按）
+	public static final GHOST_TAP_DELAY_MS:Float = 375.0; // 原版 Funkin: 3/8 秒
+	public var ghostTapTimer:Array<Float> = [0, 0, 0, 0];
+
 	public var botplaySine:Float = 0;
 	public var botplayTxt:FlxText;
 	public var replayTxt:FlxText;
@@ -681,7 +685,7 @@ class PlayState extends MusicBeatState
 				downScroll: ClientPrefs.data.downScroll,
 				middleScroll: ClientPrefs.data.middleScroll,
 				opponentStrums: ClientPrefs.data.opponentStrums,
-				ghostTapping: ClientPrefs.data.ghostTapping,
+				ghostTappingMode: ClientPrefs.data.ghostTappingMode,
 				noReset: ClientPrefs.data.noReset,
 				guitarHeroSustains: ClientPrefs.data.guitarHeroSustains,
 				sustainTailFix: ClientPrefs.data.sustainTailFix,
@@ -697,7 +701,7 @@ class PlayState extends MusicBeatState
 			if (Reflect.hasField(replayGameplaySettings, 'downScroll')) ClientPrefs.data.downScroll = replayGameplaySettings.downScroll;
 			if (Reflect.hasField(replayGameplaySettings, 'middleScroll')) ClientPrefs.data.middleScroll = replayGameplaySettings.middleScroll;
 			if (Reflect.hasField(replayGameplaySettings, 'opponentStrums')) ClientPrefs.data.opponentStrums = replayGameplaySettings.opponentStrums;
-			if (Reflect.hasField(replayGameplaySettings, 'ghostTapping')) ClientPrefs.data.ghostTapping = replayGameplaySettings.ghostTapping;
+			if (Reflect.hasField(replayGameplaySettings, 'ghostTappingMode')) ClientPrefs.data.ghostTappingMode = replayGameplaySettings.ghostTappingMode;
 			if (Reflect.hasField(replayGameplaySettings, 'noReset')) ClientPrefs.data.noReset = replayGameplaySettings.noReset;
 			if (Reflect.hasField(replayGameplaySettings, 'guitarHeroSustains')) ClientPrefs.data.guitarHeroSustains = replayGameplaySettings.guitarHeroSustains;
 			if (Reflect.hasField(replayGameplaySettings, 'sustainTailFix')) ClientPrefs.data.sustainTailFix = replayGameplaySettings.sustainTailFix;
@@ -1564,7 +1568,7 @@ isReplaying = false;
 		if(ClientPrefs.data.hitsoundVolume > 0) Paths.sound('hitsound');
 		if (ClientPrefs.data.hitsound != 'none' && ClientPrefs.data.hitsound != null && ClientPrefs.data.hitsound.length > 0)
 			Paths.sound('hitsounds/' + ClientPrefs.data.hitsound);
-		if(!ClientPrefs.data.ghostTapping) for (i in 1...4) Paths.sound('missnote$i');
+		if(ClientPrefs.data.ghostTappingMode != 'always') for (i in 1...4) Paths.sound('missnote$i');
 		Paths.image('alphabet');
 
 		// 打击音对象池：预建 N 个 FlxSound 实例复用，避免高密度谱每击 new + GC 卡顿（可在设置中开关/调整大小）
@@ -3609,6 +3613,19 @@ tempScore += '${lblScore}: ${songScore}';
 		// 移动端右上角暂停按钮：跟随移动控制整体可见性（暂停/结算时会自动隐藏）
 		if (mobilePauseBtn != null)
 			mobilePauseBtn.visible = controls.mobileC && mobileControls.instance.visible;
+
+		// Ghost Tap 冷却递减：whenSinging 模式启用（集成 Funkin 防连按），屏幕上无玩家音符时才开始递减
+		if (ClientPrefs.data.ghostTappingMode == 'whenSinging' && !paused && !hasPlayerNotesOnScreen())
+		{
+			for (i in 0...4)
+			{
+				if (ghostTapTimer[i] > 0)
+				{
+					ghostTapTimer[i] -= elapsed * 1000;
+					if (ghostTapTimer[i] < 0) ghostTapTimer[i] = 0;
+				}
+			}
+		}
 
 		// 回放模式下的自动按键逻辑
 		if(isReplaying && startedCountdown && !paused && !endingSong)
@@ -6540,21 +6557,129 @@ tempScore += '${lblScore}: ${songScore}';
 
 	function noteMissPress(direction:Int = 1):Void //You pressed a key when there was no notes to press for this key
 	{
-		if(ClientPrefs.data.ghostTapping) return; //fuck it
-
 		noteMissCommon(direction);
 		playShortHitSound(Paths.soundRandom('missnote', 1, 3), FlxG.random.float(0.1, 0.2));
 		stagesFunc(function(stage:BaseStage) stage.noteMissPress(direction));
 		callOnScripts('noteMissPress', [direction]);
 	}
 
-	// 处理空按：ghostTapping 时触发脚本回调，否则计入 miss；并记录按键
+	// Ghost Miss 惩罚：扣血跟随健康模型 + healthLoss 倍率，分数 -10（与普通 miss 一致）
+	function ghostNoteMiss(direction:Int):Void
+	{
+		// 扣血 —— 完全跟随 noteMissCommon 的逻辑，不复用函数以避免 hideHoldCover / guitarHeroSustains 等 ghost tap 无关副作用
+		var subtract:Float = pressMissDamage;
+		var healthModel:String = ClientPrefs.getGameplaySetting('healthmodel', 'default');
+		if (healthModel == 'kade')
+			health -= 0.04 * healthLoss;
+		else if (healthModel == 'forever')
+		{
+			if (foreverMissPunish <= 0.01) foreverMissPunish = 1.0;
+			health -= 0.035 * foreverMissPunish * healthLoss;
+			foreverMissPunish += 0.075;
+		}
+		else
+			health -= subtract * healthLoss;
+		if (health < 0) health = 0;
+
+		var lastCombo:Int = combo;
+		combo = 0;
+		if (lastCombo > 0) comboJustBroke = true;
+
+		songScore -= 10;
+		if (!endingSong) songMisses++;
+
+		// 角色 miss 动画
+		var char:Character = playerSideChar();
+		if(char != null && char.hasMissAnimations)
+		{
+			var animToPlay:String = singAnimations[Std.int(Math.abs(Math.min(singAnimations.length-1, direction)))] + 'miss';
+			char.playAnim(animToPlay, true);
+
+			if(char != gf && lastCombo > 5 && gf != null && gf.hasAnimation('sad'))
+			{
+				gf.playAnim('sad');
+				gf.specialAnim = true;
+			}
+		}
+
+		// 静音 vocals
+		if (playOpponent && opponentVocals != null && opponentVocals.length > 0) opponentVocals.volume = 0;
+		else if (vocals != null && vocals.exists) vocals.volume = 0;
+
+		playShortHitSound(Paths.soundRandom('missnote', 1, 3), FlxG.random.float(0.1, 0.2));
+		callOnScripts('ghostNoteMiss', [direction]);
+	}
+
+	// V-Slice Ghost Tap：检查该方向是否允许空按不惩罚
+	function mayGhostTap(direction:Int):Bool
+	{
+		// 冷却中 → 不允许空按
+		if (ghostTapTimer[direction] > 0) return false;
+		// 玩家侧判定范围内有音符 → 不允许空按（原版 getNotesMayHit 语义）
+		if (hasPlayerNotesInRange()) return false;
+		return true;
+	}
+
+	// V-Slice Ghost Tap 辅助：玩家侧判定范围内是否有音符（原版 getNotesMayHit）
+	function hasPlayerNotesInRange():Bool
+	{
+		for (n in notes.members)
+		{
+			if (n == null || !n.exists) continue;
+			if (!isPlayerNote(n)) continue;
+			if (n.wasGoodHit || n.tooLate || n.blockHit) continue;
+			var timeUntilHit:Float = n.strumTime - Conductor.songPosition;
+			var earlyWindow:Float = Conductor.safeZoneOffset * n.earlyHitMult;
+			var lateWindow:Float = Conductor.safeZoneOffset * n.lateHitMult;
+			if (timeUntilHit > -lateWindow && timeUntilHit < earlyWindow) return true;
+		}
+		return false;
+	}
+
+	// V-Slice Ghost Tap 辅助：屏幕上是否有玩家音符（包括还没到判定线的、刚过判定线还没消失的）
+	// 原版 updateGhostTapTimer 用这个（getNotesOnScreen 语义）—— 屏幕上无音符时冷却才开始递减
+	function hasPlayerNotesOnScreen():Bool
+	{
+		var earlyCutoff:Float = Conductor.songPosition - Conductor.safeZoneOffset;
+		var lateCutoff:Float = Conductor.songPosition + Conductor.safeZoneOffset * 3;
+		for (n in notes.members)
+		{
+			if (n == null || !n.exists) continue;
+			if (!isPlayerNote(n)) continue;
+			if (n.wasGoodHit || n.blockHit) continue;
+			if (n.strumTime >= earlyCutoff && n.strumTime <= lateCutoff) return true;
+		}
+		return false;
+	}
+
+	// 空按箭头处理：根据 ghostTappingMode 走不同分支
 	private function handleGhostTap(key:Int):Void
 	{
-		if (ClientPrefs.data.ghostTapping)
-			callOnScripts('onGhostTap', [key]);
-		else
-			noteMissPress(key);
+		switch (ClientPrefs.data.ghostTappingMode)
+		{
+			case 'always':
+				// 始终允许 — 空按永不惩罚
+				callOnScripts('onGhostTap', [key]);
+
+			case 'whenSinging':
+				// 唱歌时启用惩罚 — 有音符时惩罚（+ 375ms 冷却期），无音符时空按不惩罚
+				// mayGhostTap 已同时包含冷却期检查 + 判定窗口音符检查
+				if (mayGhostTap(key))
+					callOnScripts('onGhostTap', [key]);
+				else
+					ghostNoteMiss(key);
+
+			case 'whenNotSinging':
+				// 唱歌时禁用惩罚（反向）— 判定窗口有音符时空按不惩罚，无音符时空按惩罚
+				if (hasPlayerNotesInRange())
+					callOnScripts('onGhostTap', [key]);
+				else
+					ghostNoteMiss(key);
+
+			case _: // 'off' 及其他未知值
+				// 完全禁用 — 空按总是触发完整 miss 惩罚
+				noteMissPress(key);
+		}
 		addToKeysPressed(key);
 	}
 
@@ -6843,6 +6968,10 @@ tempScore += '${lblScore}: ${songScore}';
 		if(result == LuaUtils.Function_Stop) return;
 
 		note.wasGoodHit = true;
+
+		// whenSinging 模式：处理/击中音符后重置该方向冷却（集成 Funkin 防连按）
+		if (ClientPrefs.data.ghostTappingMode == 'whenSinging' && note.noteData >= 0 && note.noteData < 4)
+			ghostTapTimer[note.noteData] = GHOST_TAP_DELAY_MS;
 
 		if (note.hitsoundVolume > 0 && !note.hitsoundDisabled)
 		{
@@ -7332,7 +7461,16 @@ tempScore += '${lblScore}: ${songScore}';
 			if (Reflect.hasField(originalGameplaySettings, 'downScroll')) ClientPrefs.data.downScroll = originalGameplaySettings.downScroll;
 			if (Reflect.hasField(originalGameplaySettings, 'middleScroll')) ClientPrefs.data.middleScroll = originalGameplaySettings.middleScroll;
 			if (Reflect.hasField(originalGameplaySettings, 'opponentStrums')) ClientPrefs.data.opponentStrums = originalGameplaySettings.opponentStrums;
-			if (Reflect.hasField(originalGameplaySettings, 'ghostTapping')) ClientPrefs.data.ghostTapping = originalGameplaySettings.ghostTapping;
+			if (Reflect.hasField(originalGameplaySettings, 'ghostTappingMode'))
+			{
+				var m:String = originalGameplaySettings.ghostTappingMode;
+				if (m == 'psych') m = 'always';
+				else if (m == 'vslice' || m == 'cooldown') m = 'whenSinging';
+				else if (m == 'disabled') m = 'off';
+				ClientPrefs.data.ghostTappingMode = m;
+			}
+			else if (Reflect.hasField(originalGameplaySettings, 'ghostTapping')) // 旧 Bool 存档兼容
+				ClientPrefs.data.ghostTappingMode = (originalGameplaySettings.ghostTapping == true) ? 'always' : 'off';
 			if (Reflect.hasField(originalGameplaySettings, 'noReset')) ClientPrefs.data.noReset = originalGameplaySettings.noReset;
 			if (Reflect.hasField(originalGameplaySettings, 'guitarHeroSustains')) ClientPrefs.data.guitarHeroSustains = originalGameplaySettings.guitarHeroSustains;
 			if (Reflect.hasField(originalGameplaySettings, 'sustainTailFix')) ClientPrefs.data.sustainTailFix = originalGameplaySettings.sustainTailFix;

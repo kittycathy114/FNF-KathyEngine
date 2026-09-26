@@ -883,7 +883,7 @@ class LoadingState extends MusicBeatState
 				soundsToPrepare.push('hitsound');
 				if (ClientPrefs.data.hitsound != 'none' && ClientPrefs.data.hitsound != null && ClientPrefs.data.hitsound.length > 0)
 					soundsToPrepare.push('hitsounds/' + ClientPrefs.data.hitsound);
-				if (!ClientPrefs.data.ghostTapping)
+				if (ClientPrefs.data.ghostTappingMode != 'always')
 				{
 					soundsToPrepare.push('missnote1');
 					soundsToPrepare.push('missnote2');

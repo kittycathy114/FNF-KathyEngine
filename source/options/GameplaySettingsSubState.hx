@@ -112,8 +112,9 @@ class GameplaySettingsSubState extends BaseOptionsMenu
 
 		var option:Option = new Option(Language.get('ghost_tapping'),
 			Language.get("ghosttapping_desc"),
-			'ghostTapping',
-			BOOL);
+			'ghostTappingMode',
+			STRING,
+			['off', 'whenNotSinging', 'whenSinging', 'always']);
 		addOption(option);
 
 		var option:Option = new Option(Language.get('precise_hit_timing'),

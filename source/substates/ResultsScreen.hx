@@ -448,7 +448,7 @@ class ResultsScreen extends FlxSubState
 						downScroll: ClientPrefs.data.downScroll,
 						middleScroll: ClientPrefs.data.middleScroll,
 						opponentStrums: ClientPrefs.data.opponentStrums,
-						ghostTapping: ClientPrefs.data.ghostTapping,
+						ghostTappingMode: ClientPrefs.data.ghostTappingMode,
 						noReset: ClientPrefs.data.noReset,
 						guitarHeroSustains: ClientPrefs.data.guitarHeroSustains,
 						sustainTailFix: ClientPrefs.data.sustainTailFix,

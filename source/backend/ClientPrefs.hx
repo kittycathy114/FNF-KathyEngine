@@ -81,7 +81,20 @@ import openfl.display.StageQuality;
 	// Range: hue -180..180, saturation/brightness -100..100. All 0 = no shift (texture renders as-is).
 	public var arrowHSV:Array<Array<Int>> = [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]];
 
-	public var ghostTapping:Bool = true;
+	// Ghost Tapping 模式 —— 控制"空按箭头"惩罚的触发时机：
+	//   'always'       — 始终允许：空按永不惩罚
+	//   'whenSinging'  — 唱歌时启用惩罚（FPS Plus + Funkin 原版）：玩家判定窗口有音符时空按惩罚，无音符时空按不惩罚，集成 375ms 冷却期防连按
+	//   'whenNotSinging' — 唱歌时禁用惩罚（反向）：玩家判定窗口无音符时空按惩罚，有音符时空按不惩罚
+	//   'off'          — 完全禁用：空按总是触发完整 miss 惩罚（noteMissPress）
+	public var ghostTappingMode:String = 'always';
+
+	// Bool 兼容层 —— 供旧模组/脚本调用：
+	//   ghostTapping=true  → ghostTappingMode='always'
+	//   ghostTapping=false → ghostTappingMode='off'
+	//   读取时：mode != 'off' 视为 true（有惩罚能力），mode == 'off' 视为 false
+	public var ghostTapping(get, set):Bool;
+	private function get_ghostTapping():Bool return ghostTappingMode != 'off';
+	private function set_ghostTapping(v:Bool):Void { ghostTappingMode = v ? 'always' : 'off'; }
 	public var preciseHit:Bool = true; // 毫秒级精确判定：按键瞬间用音频时钟同步 songPosition，并实时计算判定窗口（替代上一帧缓存的 canBeHit）
 
 	// ===== 低延迟 / 性能模式 =====
@@ -625,6 +638,18 @@ class ClientPrefs {
 		for (key in Reflect.fields(data))
 			if (key != 'gameplaySettings' && Reflect.hasField(FlxG.save.data, key))
 				Reflect.setField(data, key, Reflect.field(FlxG.save.data, key));
+		
+		// 旧存档兼容：ghostTapping Bool → ghostTappingMode String
+		if (Reflect.hasField(FlxG.save.data, 'ghostTapping') && !Reflect.hasField(FlxG.save.data, 'ghostTappingMode'))
+		{
+			var oldVal:Dynamic = Reflect.field(FlxG.save.data, 'ghostTapping');
+			data.ghostTappingMode = (oldVal == true) ? 'always' : 'off';
+		}
+		// 旧存档兼容：上一版模式名 → 新版
+		if (data.ghostTappingMode == 'psych') data.ghostTappingMode = 'always';
+		else if (data.ghostTappingMode == 'vslice') data.ghostTappingMode = 'whenSinging';
+		else if (data.ghostTappingMode == 'cooldown') data.ghostTappingMode = 'whenSinging';
+		else if (data.ghostTappingMode == 'disabled') data.ghostTappingMode = 'off';
 		
 		// 确保 soundTrayStyle 被正确初始化
 		if (data.soundTrayStyle == null) {
