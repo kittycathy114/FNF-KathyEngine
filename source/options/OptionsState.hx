@@ -64,6 +64,8 @@ class OptionsState extends MusicBeatState
 
 	// HaxeUI 右上角按钮（取代原来的 adminButton / clearFilesButton）
 	private var haxeUITopRightButton:Button = null;
+	// HaxeUI 导入导出按钮（在原按钮下方）
+	private var haxeUIIOButton:Button = null;
 
 	// ===== 性能诊断（卡顿已优化完毕，逻辑暂时注释禁用；需要时可取消注释恢复）=====
 	private var _diagStart:Float = 0;
@@ -358,6 +360,7 @@ class OptionsState extends MusicBeatState
 
 		// 右上角按钮（Windows 为管理员权限，移动端为清空复制文件），改用 HaxeUI 实现
 		addHaxeUITopRightButton();
+		addHaxeUIIOButton();
 		diagTick('HaxeUI按钮');
 
 		// 初始化选择器目标位置
@@ -421,11 +424,37 @@ class OptionsState extends MusicBeatState
 		haxeUITopRightButton.height = 40;
 		// 禁止键盘焦点：否则回车/确认键会被 HaxeUI 动作系统路由到该按钮并触发点击（如桌面弹 UAC）
 		haxeUITopRightButton.allowFocus = false;
-		// 使用 UI 字体（含中文字形），避免中文按钮文字显示为方框；字号与原 Flixel 按钮一致
-		haxeUITopRightButton.styleString = "font-name: " + Paths.font(Language.get('uitab_font')) + "; font-size: 12px;";
+		haxeUITopRightButton.styleString = "font-name: " + Paths.font("unifont-16.0.02.otf") + "; font-size: 16px;";
 		haxeUITopRightButton.registerEvent(MouseEvent.CLICK, function(_) clickFn());
 		// 加入 HaxeUI Screen，会自动挂到当前 FlixelState 之上渲染
 		Screen.instance.addComponent(haxeUITopRightButton);
+	}
+
+	// 在 HaxeUI 按钮下方添加「设置导入/导出」按钮
+	private function addHaxeUIIOButton():Void {
+		if (haxeUIIOButton != null) return;
+
+		// 首次使用时初始化 HaxeUI Toolkit（幂等）
+		if (!Toolkit.initialized) {
+			Toolkit.autoScale = false;
+			Toolkit.init();
+		}
+
+		var btnY:Int = 20;
+		// 如果右上角已有按钮，在它下方
+		if (haxeUITopRightButton != null)
+			btnY = Std.int(haxeUITopRightButton.y + haxeUITopRightButton.height + 6);
+
+		haxeUIIOButton = new Button();
+		haxeUIIOButton.text = Language.get("settings_io_button");
+		haxeUIIOButton.x = FlxG.width - 220;
+		haxeUIIOButton.y = btnY;
+		haxeUIIOButton.width = 200;
+		haxeUIIOButton.height = 40;
+		haxeUIIOButton.allowFocus = false;
+		haxeUIIOButton.styleString = "font-name: " + Paths.font("unifont-16.0.02.otf") + "; font-size: 16px;";
+		haxeUIIOButton.registerEvent(MouseEvent.CLICK, function(_) { ClientPrefs.saveSettings(); FlxG.switchState(new options.OptionsIOState()); });
+		Screen.instance.addComponent(haxeUIIOButton);
 	}
 
 	override function closeSubState()

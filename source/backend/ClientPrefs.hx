@@ -8,6 +8,11 @@ import states.TitleState;
 import states.MainMenuState;
 import openfl.display.StageQuality;
 
+import haxe.Json;
+import haxe.io.Bytes;
+import haxe.io.BytesOutput;
+import haxe.io.BytesInput;
+
 // Add a variable here and it will get automatically saved
 @:structInit class SaveVariables {
 	// Mobile and Mobile Controls Releated
@@ -854,5 +859,543 @@ class ClientPrefs {
 		FlxG.sound.muteKeys = (!Controls.instance.mobileC && turnOn) ? TitleState.muteKeys : emptyArray;
 		FlxG.sound.volumeDownKeys = (!Controls.instance.mobileC && turnOn) ? TitleState.volumeDownKeys : emptyArray;
 		FlxG.sound.volumeUpKeys = (!Controls.instance.mobileC && turnOn) ? TitleState.volumeUpKeys : emptyArray;
+	}
+
+	/** 检查一个 Dynamic 值是否是可 Reflect 的匿名对象（而非 null、数组或基本类型） */
+	public static function _dynaIsObject(val:Dynamic):Bool
+	{
+		if (val == null) return false;
+		try {
+			// Reflect.fields 对基本类型和 null 会抛异常或返回空数组
+			var fields = Reflect.fields(val);
+			return fields != null && fields.length >= 0;
+		} catch (e:Dynamic) { return false; }
+	}
+
+	/**
+	 * 类型安全的 Reflect.setField。
+	 * 只有类型兼容时才写值，否则跳过。返回 true 表示类型不匹配已跳过。
+	 * 支持 Bool、Int、Float、String、Array<Int> 的安全写入。
+	 * 用途：导出文件里的字段类型可能和新版代码不一致（比如 Bool 被改成 String），
+	 *       用这个函数避免类型不匹配导致崩溃或数据损坏。
+	 */
+	public static function _safeSetField(target:Dynamic, key:String, newVal:Dynamic):Bool
+	{
+		try
+		{
+			var curVal:Dynamic = Reflect.field(target, key);
+
+			// 当前值类型判断
+			var curIsBool   = curVal is Bool;
+			var curIsInt    = curVal is Int;
+			var curIsFloat  = curVal is Float;
+			var curIsString = curVal is String;
+			var curIsArray  = curVal is Array;
+
+			// 新值类型判断
+			var newIsBool   = newVal is Bool;
+			var newIsInt    = newVal is Int;
+			var newIsFloat  = newVal is Float;
+			var newIsString = newVal is String;
+			var newIsArray  = newVal is Array;
+
+			if (curIsBool && newIsBool)                     // Bool ↔ Bool
+			{
+				Reflect.setField(target, key, newVal);
+				return false;
+			}
+			else if ((curIsInt || curIsFloat) && (newIsInt || newIsFloat))  // Int/Float ↔ Int/Float（互通）
+			{
+				Reflect.setField(target, key, curIsInt ? Std.int(newVal) : newVal);
+				return false;
+			}
+			else if (curIsString && newIsString)            // String ↔ String
+			{
+				Reflect.setField(target, key, newVal);
+				return false;
+			}
+			else if (curIsArray && newIsArray)              // Array ↔ Array
+			{
+				Reflect.setField(target, key, newVal);
+				return false;
+			}
+
+			// 类型不匹配，跳过
+			return true; // 返回 true = 已跳过（调用方用来计数）
+		}
+		catch (e:Dynamic) { return true; } // 任何异常也跳过
+	}
+
+	// ========================================================================
+	// 设置导入导出功能 (Settings Import / Export)
+	// ========================================================================
+
+	// ---------- 导出 ----------
+
+	/**
+	 * 序列化 ClientPrefs 到 JSON-compatible 的 Dynamic 对象。
+	 * config 决定包含哪些分区。
+	 */
+	public static function buildExportData(config:ExportConfig):Dynamic
+	{
+		var obj:Dynamic = cast {};
+		Reflect.setField(obj, 'version', 1);
+		Reflect.setField(obj, 'engine', 'KathyEngine');
+		Reflect.setField(obj, 'exportDate', Date.now().toString());
+		var sectionsArr:Array<String> = [];
+		Reflect.setField(obj, 'sections', sectionsArr);
+
+		// 1. SaveVariables 主设置
+		if (config.includePrefs)
+		{
+			var prefsObj:Dynamic = cast {};
+			for (key in Reflect.fields(data))
+			{
+				// gameplaySettings 单独处理
+				if (key == 'gameplaySettings') continue;
+				var val:Dynamic = Reflect.field(data, key);
+				Reflect.setField(prefsObj, key, val);
+			}
+			Reflect.setField(obj, 'prefs', prefsObj);
+			sectionsArr.push('prefs');
+		}
+
+		// 2. Keyboard 键位（FlxKey 枚举 → Int）
+		if (config.includeKeyboard)
+		{
+			var kbObj:Dynamic = cast {};
+			for (name => keys in keyBinds)
+			{
+				var intKeys:Array<Int> = [];
+				for (k in keys) intKeys.push(Std.int(k));
+				Reflect.setField(kbObj, name, intKeys);
+			}
+			Reflect.setField(obj, 'keyboard', kbObj);
+			sectionsArr.push('keyboard');
+		}
+
+		// 3. Gamepad 键位
+		if (config.includeGamepad)
+		{
+			var gpObj:Dynamic = cast {};
+			for (name => keys in gamepadBinds)
+			{
+				var intKeys:Array<Int> = [];
+				for (k in keys) intKeys.push(Std.int(k));
+				Reflect.setField(gpObj, name, intKeys);
+			}
+			Reflect.setField(obj, 'gamepad', gpObj);
+			sectionsArr.push('gamepad');
+		}
+
+		// 4. Mobile 键位
+		if (config.includeMobile)
+		{
+			var mbObj:Dynamic = cast {};
+			for (name => keys in mobileBinds)
+			{
+				var intKeys:Array<Int> = [];
+				for (k in keys) intKeys.push(Std.int(k));
+				Reflect.setField(mbObj, name, intKeys);
+			}
+			Reflect.setField(obj, 'mobile', mbObj);
+			sectionsArr.push('mobile');
+		}
+
+		// 5. gameplaySettings Map → 普通对象
+		if (config.includeGameplay)
+		{
+			var gsObj:Dynamic = cast {};
+			for (name => value in data.gameplaySettings)
+				Reflect.setField(gsObj, name, value);
+			Reflect.setField(obj, 'gameplay', gsObj);
+			sectionsArr.push('gameplay');
+		}
+
+		return obj;
+	}
+
+	/** 将导出数据编码为目标格式的字符串 */
+	public static function encodeExport(data:Dynamic, format:String):String
+	{
+		var jsonStr:String = Json.stringify(data);
+
+		switch (format)
+		{
+			case 'json':
+				return jsonStr;
+			case 'base64':
+				var bytes:Bytes = Bytes.ofString(jsonStr);
+				return EncodingUtils.base64Encode(bytes);
+			case 'zlib':
+				var raw:Bytes = Bytes.ofString(jsonStr);
+				#if sys
+				var compressed:Bytes = EncodingUtils.zlibCompress(raw);
+				if (compressed != null)
+					return EncodingUtils.base64Encode(compressed);
+				else
+					return EncodingUtils.base64Encode(raw); // 压缩失败降级到 base64
+				#else
+				// 非 sys 目标（html5 等）无 zlib，降级 base64
+				return EncodingUtils.base64Encode(raw);
+				#end
+		}
+		return jsonStr;
+	}
+
+	/** 一键导出：build + encode */
+	public static function exportSettings(config:ExportConfig):String
+	{
+		return encodeExport(buildExportData(config), config.format);
+	}
+
+	// ---------- 导入 ----------
+
+	/**
+	 * 从字符串解码。自动检测格式（通过前缀 b64: / zlib: 或尝试 JSON 解析）。
+	 * 返回 null 表示无法解析。
+	 */
+	public static function decodeImport(raw:String):Null<Dynamic>
+	{
+		if (raw == null || raw.trim().length == 0) return null;
+
+		var trimmed = raw.trim();
+
+		// 尝试直接 JSON 解析
+		try {
+			var obj = Json.parse(trimmed);
+			if (obj != null && _dynaIsObject(obj))
+				return obj;
+		} catch (e:Dynamic) { /* 不是纯 JSON，继续尝试 */ }
+
+		// 尝试 Base64 解码
+		try {
+			var decoded = EncodingUtils.base64Decode(trimmed);
+			if (decoded != null)
+			{
+				// 先尝试作为 zlib 解压
+				#if sys
+				var decompressed = EncodingUtils.zlibDecompress(decoded);
+				if (decompressed != null)
+				{
+					var jsonStr2:String = decompressed.toString();
+					var obj2 = Json.parse(jsonStr2);
+					if (obj2 != null && _dynaIsObject(obj2))
+						return obj2;
+				}
+				#end
+
+				// 直接作为 JSON 字符串解析
+				var jsonStr:String = decoded.toString();
+				var obj3 = Json.parse(jsonStr);
+				if (obj3 != null && _dynaIsObject(obj3))
+					return obj3;
+			}
+		} catch (e2:Dynamic) { /* 忽略 */ }
+
+		return null;
+	}
+
+	/**
+	 * 验证导入数据结构，返回可报告的 ImportResult（不含实际应用）。
+	 * 用于 UI 预览"即将修改哪些选项"。
+	 */
+	public static function previewImport(raw:String):ImportResult
+	{
+		var result:ImportResult = new ImportResult();
+		var importObj:Dynamic = decodeImport(raw);
+		if (importObj == null)
+		{
+			result.success = false;
+			result.errorMsg = '无法解析：输入不是有效的 JSON / Base64 / Zlib+Base64 格式';
+			return result;
+		}
+
+		// 检查 version 字段是否存在（可选）
+		if (!Reflect.hasField(importObj, 'prefs') && !Reflect.hasField(importObj, 'keyboard') &&
+			!Reflect.hasField(importObj, 'gamepad') && !Reflect.hasField(importObj, 'mobile') &&
+			!Reflect.hasField(importObj, 'gameplay'))
+		{
+			result.success = false;
+			result.errorMsg = '数据格式不合法：未找到任何可识别的设置分区 (prefs/keyboard/gamepad/mobile/gameplay)';
+			return result;
+		}
+
+		// 检测各分区
+		if (Reflect.hasField(importObj, 'prefs'))
+		{
+			var prefsData:Dynamic = importObj.prefs;
+			if (_dynaIsObject(prefsData))
+			{
+				result.appliedFieldCount = Reflect.fields(prefsData).length;
+				result.loadedSections.push('prefs');
+			}
+			else
+				result.skippedSections.push('prefs');
+		}
+		if (Reflect.hasField(importObj, 'keyboard'))
+		{
+			if (_dynaIsObject(importObj.keyboard)) result.loadedSections.push('keyboard');
+			else result.skippedSections.push('keyboard');
+		}
+		if (Reflect.hasField(importObj, 'gamepad'))
+		{
+			if (_dynaIsObject(importObj.gamepad)) result.loadedSections.push('gamepad');
+			else result.skippedSections.push('gamepad');
+		}
+		if (Reflect.hasField(importObj, 'mobile'))
+		{
+			if (_dynaIsObject(importObj.mobile)) result.loadedSections.push('mobile');
+			else result.skippedSections.push('mobile');
+		}
+		if (Reflect.hasField(importObj, 'gameplay'))
+		{
+			if (_dynaIsObject(importObj.gameplay)) result.loadedSections.push('gameplay');
+			else result.skippedSections.push('gameplay');
+		}
+
+		result.success = result.loadedSections.length > 0;
+		if (!result.success)
+			result.errorMsg = '数据存在但没有可应用的有效分区';
+
+		return result;
+	}
+
+	/**
+	 * 实际应用导入数据。返回 ImportResult（包含成功/失败信息）。
+	 * @param raw 原始输入字符串
+	 * @param applySections 可选——指定要应用的分区；null = 应用所有检测到的分区
+	 */
+	public static function applyImport(raw:String, ?applySections:Null<Array<String>>):ImportResult
+	{
+		var result = previewImport(raw);
+		if (!result.success) return result;
+
+		var importObj:Dynamic = decodeImport(raw);
+		if (importObj == null)
+		{
+			result.success = false;
+			result.errorMsg = '解析失败';
+			return result;
+		}
+
+		// 决定要应用哪些分区
+		var toApply:Array<String> = [];
+		if (applySections != null)
+		{
+			for (s in applySections)
+				if (result.loadedSections.contains(s)) toApply.push(s);
+		}
+		else
+		{
+			toApply = result.loadedSections.copy();
+		}
+
+		try
+		{
+			var typeMismatchSkipped:Int = 0;
+
+			// 1. prefs —— 覆盖 ClientPrefs.data 的字段
+			if (toApply.contains('prefs') && Reflect.hasField(importObj, 'prefs'))
+			{
+				var prefsData:Dynamic = Reflect.field(importObj, 'prefs');
+				if (_dynaIsObject(prefsData))
+				{
+					for (key in Reflect.fields(prefsData))
+					{
+						if (key == 'gameplaySettings') continue;
+						if (Reflect.hasField(data, key))
+						{
+							var newVal:Dynamic = Reflect.field(prefsData, key);
+							if (newVal != null)
+							{
+								if (_safeSetField(data, key, newVal))
+									typeMismatchSkipped++;
+							}
+						}
+					}
+				}
+			}
+
+			// 2. keyboard
+			if (toApply.contains('keyboard') && Reflect.hasField(importObj, 'keyboard'))
+			{
+				var kbData:Dynamic = Reflect.field(importObj, 'keyboard');
+				if (_dynaIsObject(kbData))
+				{
+					for (name in Reflect.fields(kbData))
+					{
+						if (keyBinds.exists(name))
+						{
+							var arr = Reflect.field(kbData, name);
+							var newKeys:Array<FlxKey> = [];
+							var keyArr:Array<Dynamic> = cast arr; for (k in keyArr) newKeys.push(cast Std.int(k));
+							keyBinds.set(name, newKeys);
+						}
+					}
+				}
+			}
+
+			// 3. gamepad
+			if (toApply.contains('gamepad') && Reflect.hasField(importObj, 'gamepad'))
+			{
+				var gpData:Dynamic = Reflect.field(importObj, 'gamepad');
+				if (_dynaIsObject(gpData))
+				{
+					for (name in Reflect.fields(gpData))
+					{
+						if (gamepadBinds.exists(name))
+						{
+							var arr = Reflect.field(gpData, name);
+							var newKeys:Array<FlxGamepadInputID> = [];
+							var keyArr:Array<Dynamic> = cast arr; for (k in keyArr) newKeys.push(cast Std.int(k));
+							gamepadBinds.set(name, newKeys);
+						}
+					}
+				}
+			}
+
+			// 4. mobile
+			if (toApply.contains('mobile') && Reflect.hasField(importObj, 'mobile'))
+			{
+				var mbData:Dynamic = Reflect.field(importObj, 'mobile');
+				if (_dynaIsObject(mbData))
+				{
+					for (name in Reflect.fields(mbData))
+					{
+						if (mobileBinds.exists(name))
+						{
+							var arr = Reflect.field(mbData, name);
+							var newKeys:Array<MobileInputID> = [];
+							var keyArr:Array<Dynamic> = cast arr; for (k in keyArr) newKeys.push(cast Std.int(k));
+							mobileBinds.set(name, newKeys);
+						}
+					}
+				}
+			}
+
+			// 5. gameplaySettings
+			if (toApply.contains('gameplay') && Reflect.hasField(importObj, 'gameplay'))
+			{
+				var gsData:Dynamic = Reflect.field(importObj, 'gameplay');
+				if (_dynaIsObject(gsData))
+				{
+					for (name in Reflect.fields(gsData))
+					{
+						var val:Dynamic = Reflect.field(gsData, name);
+						data.gameplaySettings.set(name, val);
+					}
+				}
+			}
+
+			// 保存
+			saveSettings();
+			reloadVolumeKeys();
+
+			result.typeMismatchCount = typeMismatchSkipped;
+			if (typeMismatchSkipped > 0)
+				result.errorMsg = Std.string(typeMismatchSkipped) + ' 个字段因类型不匹配被跳过（新版已变更这些设置的类型）';
+
+			result.success = true;
+		}
+		catch (e:Dynamic)
+		{
+			result.success = false;
+			result.errorMsg = '应用过程出错: ' + e;
+			FlxG.log.error('ClientPrefs.applyImport 异常: ' + e);
+		}
+
+		return result;
+	}
+}
+
+/** 简单的 Base64 + Zlib 工具（独立类，避免污染 ClientPrefs 主类） */
+class EncodingUtils
+{
+	private static var _b64Chars:String = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+	/** 将 Bytes 做 Base64 编码 */
+	public static function base64Encode(input:Bytes):String
+	{
+		var len:Int = input.length;
+		var out:String = '';
+		var i:Int = 0;
+		while (i + 3 <= len)
+		{
+			var n:Int = (input.get(i) << 16) | (input.get(i + 1) << 8) | input.get(i + 2);
+			out += _b64Chars.charAt((n >> 18) & 0x3F);
+			out += _b64Chars.charAt((n >> 12) & 0x3F);
+			out += _b64Chars.charAt((n >> 6) & 0x3F);
+			out += _b64Chars.charAt(n & 0x3F);
+			i += 3;
+		}
+		var remaining = len - i;
+		if (remaining == 1)
+		{
+			var n2:Int = input.get(i) << 16;
+			out += _b64Chars.charAt((n2 >> 18) & 0x3F);
+			out += _b64Chars.charAt((n2 >> 12) & 0x3F);
+			out += '==';
+		}
+		else if (remaining == 2)
+		{
+			var n3:Int = (input.get(i) << 16) | (input.get(i + 1) << 8);
+			out += _b64Chars.charAt((n3 >> 18) & 0x3F);
+			out += _b64Chars.charAt((n3 >> 12) & 0x3F);
+			out += _b64Chars.charAt((n3 >> 6) & 0x3F);
+			out += '=';
+		}
+		return out;
+	}
+
+	/** 解码 Base64 字符串为 Bytes；非法输入返回 null */
+	public static function base64Decode(input:String):Null<Bytes>
+	{
+		if (input == null) return null;
+		// 去除空白
+		var s:String = ~/[ \t\r\n]/g.replace(input, '');
+		var sLen:Int = s.length;
+		if (sLen % 4 != 0) return null;
+
+		var out:BytesOutput = new BytesOutput();
+		var i:Int = 0;
+		while (i < sLen)
+		{
+			var c0:Int = _b64Index(s.charAt(i));
+			var c1:Int = _b64Index(s.charAt(i + 1));
+			var c2:Int = _b64Index(s.charAt(i + 2));
+			var c3:Int = _b64Index(s.charAt(i + 3));
+			if (c0 < 0 || c1 < 0) return null;
+
+			var n:Int = (c0 << 18) | (c1 << 12);
+			if (c2 >= 0) n |= (c2 << 6);
+			if (c3 >= 0) n |= c3;
+
+			out.writeByte((n >> 16) & 0xFF);
+			if (s.charAt(i + 2) != '=') out.writeByte((n >> 8) & 0xFF);
+			if (s.charAt(i + 3) != '=') out.writeByte(n & 0xFF);
+
+			i += 4;
+		}
+		return out.getBytes();
+	}
+
+	private static function _b64Index(c:String):Int
+	{
+		var idx = _b64Chars.indexOf(c);
+		if (idx >= 0) return idx;
+		if (c == '=') return -2; // padding
+		return -1;
+	}
+
+	/** Zlib 压缩（Haxe 4 无内置 haxe.io.Compress，始终返回 null 降级） */
+	public static function zlibCompress(input:Bytes):Null<Bytes>
+	{
+		// Haxe 4 无内置 zlib 支持；如需压缩，可引入 hxcompress 等第三方库
+		return null;
+	}
+	public static function zlibDecompress(input:Bytes):Null<Bytes>
+	{
+		return null;
 	}
 }
