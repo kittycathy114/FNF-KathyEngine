@@ -47,7 +47,7 @@ import lime.app.Application;
  */
 class StoryPlayerState extends MusicBeatState
 {
-	static final UI_FONT:String = 'unifont-16.0.02.otf';
+	static final UI_FONT:String = 'unifont-18.0.01.otf';
 	static final TOP_BAR_H:Int = 36;
 	static final MARGIN:Int = 64;
 	static final LINE_COLOR:Int = 0x87CEFA;

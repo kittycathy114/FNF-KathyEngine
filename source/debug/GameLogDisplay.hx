@@ -43,7 +43,7 @@ class GameLogDisplay extends Sprite
 		logs = [];
 
 		// 使用Paths.font获取字体
-		fontName = Paths.font('unifont-16.0.02.otf');
+		fontName = Paths.font('unifont-18.0.01.otf');
 
 		// 创建文本字段
 		logText = new TextField();

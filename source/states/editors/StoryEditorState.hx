@@ -49,7 +49,7 @@ import lime.app.Application;
  */
 class StoryEditorState extends MusicBeatState implements PsychUIEventHandler.PsychUIEvent
 {
-	static final UI_FONT:String = 'unifont-16.0.02.otf';
+	static final UI_FONT:String = 'unifont-18.0.01.otf';
 	static final MARGIN:Int = 64;
 	static final NARRATOR:String = '(旁白)';
 

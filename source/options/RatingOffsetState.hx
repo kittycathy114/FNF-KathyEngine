@@ -8,7 +8,7 @@ import states.stages.StageWeek1 as BackgroundStage;
 
 class RatingOffsetState extends MusicBeatState
 {
-	static final UI_FONT:String = 'unifont-16.0.02.otf';
+	static final UI_FONT:String = 'unifont-18.0.01.otf';
 
 	var stageDirectory:String = 'week1';
 	var boyfriend:Character;

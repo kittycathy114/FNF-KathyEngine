@@ -424,7 +424,7 @@ class OptionsState extends MusicBeatState
 		haxeUITopRightButton.height = 40;
 		// 禁止键盘焦点：否则回车/确认键会被 HaxeUI 动作系统路由到该按钮并触发点击（如桌面弹 UAC）
 		haxeUITopRightButton.allowFocus = false;
-		haxeUITopRightButton.styleString = "font-name: " + Paths.font("unifont-16.0.02.otf") + "; font-size: 16px;";
+		haxeUITopRightButton.styleString = "font-name: " + Paths.font("unifont-18.0.01.otf") + "; font-size: 16px;";
 		haxeUITopRightButton.registerEvent(MouseEvent.CLICK, function(_) clickFn());
 		// 加入 HaxeUI Screen，会自动挂到当前 FlixelState 之上渲染
 		Screen.instance.addComponent(haxeUITopRightButton);
@@ -452,7 +452,7 @@ class OptionsState extends MusicBeatState
 		haxeUIIOButton.width = 200;
 		haxeUIIOButton.height = 40;
 		haxeUIIOButton.allowFocus = false;
-		haxeUIIOButton.styleString = "font-name: " + Paths.font("unifont-16.0.02.otf") + "; font-size: 16px;";
+		haxeUIIOButton.styleString = "font-name: " + Paths.font("unifont-18.0.01.otf") + "; font-size: 16px;";
 		haxeUIIOButton.registerEvent(MouseEvent.CLICK, function(_) { ClientPrefs.saveSettings(); FlxG.switchState(new options.OptionsIOState()); });
 		Screen.instance.addComponent(haxeUIIOButton);
 	}

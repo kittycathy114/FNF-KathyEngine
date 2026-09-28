@@ -68,7 +68,7 @@ class SpineViewerState extends MusicBeatState
 
 	// UI font: use the project's unifont so CJK glyphs and symbols render
 	// correctly in the editor chrome (buttons, labels, lists, etc.).
-	static final UI_FONT:String = 'unifont-16.0.02.otf';
+	static final UI_FONT:String = 'unifont-18.0.01.otf';
 
 
 	var uiCam:FlxCamera;

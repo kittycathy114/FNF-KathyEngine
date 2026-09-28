@@ -918,7 +918,7 @@ if(_shouldReset) Conductor.songPosition = 0;
 
 		var tipText:FlxText = new FlxText(FlxG.width - 210, FlxG.height - 30, 200, (controls.mobileC ? Language.get('charting_forhelptextm') : Language.get('charting_forhelptextpc')), 20);
 		tipText.cameras = [camUI];
-		tipText.setFormat(Paths.font("unifont-16.0.02.otf"), 18, FlxColor.WHITE, RIGHT);
+		tipText.setFormat(Paths.font("unifont-18.0.01.otf"), 18, FlxColor.WHITE, RIGHT);
 		tipText.borderColor = FlxColor.BLACK;
 		tipText.scrollFactor.set();
 		tipText.borderSize = 1;
@@ -937,7 +937,7 @@ if(_shouldReset) Conductor.songPosition = 0;
 		add(tipBg);
 		
 		fullTipText = new FlxText(0, 0, FlxG.width - 200);
-		fullTipText.setFormat(Paths.font("unifont-16.0.02.otf"), 24, FlxColor.WHITE, CENTER);
+		fullTipText.setFormat(Paths.font("unifont-18.0.01.otf"), 24, FlxColor.WHITE, CENTER);
 		fullTipText.cameras = [camUI];
 		fullTipText.scrollFactor.set();
 		fullTipText.visible = fullTipText.active = false;

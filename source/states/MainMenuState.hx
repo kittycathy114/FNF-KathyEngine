@@ -157,7 +157,7 @@ class MainMenuState extends MusicBeatState
 
 		var isMrExtended:Bool = ClientPrefs.data.windowTitlePreset == 'Psych Engine: MintRhythm Extended';
 		var kathyLabel:String = isMrExtended ? (ClientPrefs.data.language == 'zh_cn' || ClientPrefs.data.language == 'zh_tw' ? '薄荷韵律 (M.R. Extended)' : 'MintRhythm Extended') : 'Kathy Engine';
-		var mrVerFont:String = isMrExtended ? 'unifont-16.0.02.otf' : 'vcr.ttf';
+		var mrVerFont:String = isMrExtended ? 'unifont-18.0.01.otf' : 'vcr.ttf';
 		var mrVer:FlxText = new FlxText(12, FlxG.height - 66, 0, '${kathyLabel} v' + kathyEngineVersion, 12);
 		mrVer.scrollFactor.set();
 		mrVer.setFormat(Paths.font(mrVerFont), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
@@ -175,7 +175,7 @@ class MainMenuState extends MusicBeatState
 			var isZh:Bool = ClientPrefs.data.language == 'zh_cn' || ClientPrefs.data.language == 'zh_tw';
 			var label:String = isZh ? '薄荷韵律 (M.R. Extended)' : 'MintRhythm Extended';
 			mrVer.text = '${label} v' + kathyEngineVersion;
-			var font:String = isMrExtended ? 'unifont-16.0.02.otf' : 'vcr.ttf';
+			var font:String = isMrExtended ? 'unifont-18.0.01.otf' : 'vcr.ttf';
 			mrVer.setFormat(Paths.font(font), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 			psychVer.setFormat(Paths.font(font), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 			fnfVer.setFormat(Paths.font(font), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);

@@ -404,7 +404,7 @@ class EventHandler
         if (values.length > 0) text += '\nValues: ${values.join(", ")}';
 
         var debugText:FlxText = new FlxText(20, 0, FlxG.width - 40, text, 16);
-        debugText.setFormat(Paths.font("unifont-16.0.02.otf"), 16, FlxColor.CYAN, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+        debugText.setFormat(Paths.font("unifont-18.0.01.otf"), 16, FlxColor.CYAN, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
         debugText.borderSize = 3;
         debugText.scrollFactor.set();
         debugText.cameras = [playState.camArchived];

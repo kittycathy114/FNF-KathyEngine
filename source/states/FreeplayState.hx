@@ -459,7 +459,7 @@ class FreeplayState extends MusicBeatState
 		diffText.font = scoreText.font;
 
 		modText = new FlxText(scoreText.x, 0, 0, '', 16);
-		modText.font = Paths.font("unifont-16.0.02.otf"); // 使用 unifont 以兼容多语言模组名与装饰符号
+		modText.font = Paths.font("unifont-18.0.01.otf"); // 使用 unifont 以兼容多语言模组名与装饰符号
 		var modDir:String = backend.Mods.currentModDirectory;
 		var modName:String = (modDir != null && modDir.length > 0) ? modDir : 'Friday Night Funkin\'';
 		modText.text = '◆ ' + modName + ' ◆';
@@ -561,7 +561,7 @@ class FreeplayState extends MusicBeatState
 
 		// "SONGFILTER" 字样：放在文本框左侧、全大写、使用 unifont
 		searchLabel = new FlxText(0, 0, 0, 'SONGFILTER', 16);
-		searchLabel.setFormat(Paths.font("unifont-16.0.02.otf"), 24, FlxColor.WHITE);
+		searchLabel.setFormat(Paths.font("unifont-18.0.01.otf"), 24, FlxColor.WHITE);
 		// 重新赋值文本以按新字体重算宽度（setFormat 不会自动更新 width）
 		searchLabel.text = 'SONGFILTER: ';
 
@@ -569,7 +569,7 @@ class FreeplayState extends MusicBeatState
 		var labelGap:Int = 8;
 		var boxX:Float = searchLabel.width + labelGap;
 
-		searchTxt = new PsychUIInputText(boxX, 0, SEARCH_BOX_W, '', 24, Paths.font("unifont-16.0.02.otf"), true);
+		searchTxt = new PsychUIInputText(boxX, 0, SEARCH_BOX_W, '', 24, Paths.font("unifont-18.0.01.otf"), true);
 		searchTxt.name = 'freeplay_search';
 		searchTxt.maxLength = 32;
 		// 标签在垂直方向上与输入框居中对齐
