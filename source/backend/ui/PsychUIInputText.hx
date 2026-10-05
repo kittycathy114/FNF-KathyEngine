@@ -601,6 +601,12 @@ class PsychUIInputText extends FlxSpriteGroup
 		if(textObj == null || !textObj.exists) return;
 
 		var textField = textObj.textField;
+		// 防御性 clamp，任何路径进来都要保证不越界
+		var len:Int = textField.text != null ? textField.text.length : 0;
+		if(caretIndex > len) caretIndex = len;
+		if(caretIndex < 0) caretIndex = 0;
+		if(selectIndex > len) selectIndex = len;
+		if(selectIndex < -1) selectIndex = -1;
 		textField.setSelection(caretIndex, caretIndex);
 		_caretTime = 0;
 		if(caret != null && caret.exists)
@@ -773,6 +779,11 @@ class PsychUIInputText extends FlxSpriteGroup
 			}
 		}
 		text = v;
+		// 防止 caretIndex / selectIndex 在文本变短后越界（openfl TextField.setSelection 内部 getLineOffset 会数组越界崩溃）
+		if(caretIndex > v.length) caretIndex = v.length;
+		if(caretIndex < 0) caretIndex = 0;
+		if(selectIndex > v.length) selectIndex = v.length;
+		if(selectIndex < -1) selectIndex = -1;
 		updateCaret();
 		return v;
 	}
