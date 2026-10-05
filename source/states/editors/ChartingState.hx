@@ -2085,10 +2085,7 @@ if(_shouldReset) Conductor.songPosition = 0;
 			if(trackInfo != null)
 			{
 					var diffX:Float = touch.x - trackInfo.trackX;
-					// 触屏 touch.y 是屏幕坐标，而 grid.y/note.chartY 是世界坐标（已含摄像头纵向滚动）。
-					// 不转成世界坐标比较，滚动后 diffY 与判定全都会偏移，导致白线附近点不出箭头。
-					var touchWorldY:Float = touch.y + FlxG.camera.scroll.y;
-					var diffY:Float = touchWorldY - trackInfo.grid.y;
+					var diffY:Float = touch.y - trackInfo.grid.y;
 					if(!touchPad.buttonY.pressed)
 						diffY -= diffY % (GRID_SIZE / (curQuant/16));
 
@@ -2141,12 +2138,12 @@ if(_shouldReset) Conductor.songPosition = 0;
 						dummyArrow.x = gridLayout.startX + finalUIColumn * GRID_SIZE + spacingOffset;
 					}
 
-					if(touchPad.buttonY.pressed || touchWorldY >= trackInfo.grid.y || !trackInfo.prevGrid.visible)
+					if(touchPad.buttonY.pressed || touch.y >= trackInfo.grid.y || !trackInfo.prevGrid.visible)
 						dummyArrow.y = trackInfo.grid.y + diffY;
 					else
 					{
 						var t:Float = (diffY - (GRID_SIZE / (curQuant/16)));
-						if(touchWorldY >= trackInfo.grid.y) t *= curZoom;
+						if(touch.y >= trackInfo.grid.y) t *= curZoom;
 						dummyArrow.y = trackInfo.grid.y + t;
 					}
 
@@ -2225,7 +2222,7 @@ if(_shouldReset) Conductor.songPosition = 0;
 						{
 							var closeNotes:Array<MetaNote> = curRenderedNotes.members.filter(function(note:MetaNote)
 							{
-								var chartY:Float = touchWorldY - note.chartY;
+								var chartY:Float = touch.y - note.chartY;
 								if(note.isEvent && noteData < 0)
 								{
 									var eventDiffX:Float = touch.x - trackInfo.trackX;
@@ -2275,7 +2272,7 @@ if(_shouldReset) Conductor.songPosition = 0;
 						if(selectedNotes.length == 1) onSelectNote();
 								forceDataUpdate = true;
 							}
-							else if(!holdingAlt && touchWorldY >= trackInfo.grid.y && touchWorldY < trackInfo.grid.y + trackInfo.grid.height + (trackInfo.nextGrid.visible ? trackInfo.nextGrid.height : 0)) // Add note（与预览一致，放行到下一小节区域）
+							else if(!holdingAlt && touch.y >= trackInfo.grid.y && touch.y < trackInfo.grid.y + trackInfo.grid.height + (trackInfo.nextGrid.visible ? trackInfo.nextGrid.height : 0)) // Add note（与预览一致，放行到下一小节区域）
 							{
 								// 触摸 Y（均匀像素）→ 步 → ramp 感知毫秒，放置与显示一致
 								var stepAtMouse:Float = (diffY / (GRID_SIZE * curZoom)) + cachedSectionRow[curSec];
