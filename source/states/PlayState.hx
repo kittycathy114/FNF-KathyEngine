@@ -2534,6 +2534,9 @@ tempScore += '${lblScore}: ${songScore}';
 	{
 		startingSong = false;
 
+		// A3: onEndCountdown — Ready-Set-Go 全部播完，正式开唱前
+		callOnScripts('onEndCountdown');
+
 		@:privateAccess
 		FlxG.sound.playMusic(inst._sound, 1, false);
 		#if FLX_PITCH FlxG.sound.music.pitch = playbackRate; #end
@@ -3814,7 +3817,7 @@ tempScore += '${lblScore}: ${songScore}';
 		}
 		else FlxG.camera.followLerp = 0;
 		callOnScripts('onUpdate', [elapsed]);
-
+		ExtraFunctions.frameCount++;
 		super.update(elapsed);
 
 		if (ClientPrefs.data.iconbopstyle == "Kathy") {
@@ -4385,6 +4388,14 @@ tempScore += '${lblScore}: ${songScore}';
 		callOnScripts('onUpdatePost', [elapsed]);
 	}
 
+	// ============ A1: onDraw / onDrawPost 回调 ============
+	override function draw():Void
+	{
+		callOnScripts('onDraw');
+		super.draw();
+		callOnScripts('onDrawPost');
+	}
+
 	// Health icon updaters
 	var iconSizeResetTime:Float = 0; // 压扁风格(Squash)的恢复计时器：beat 触发后从 ICON_SQUASH_TIME 递减到 0，期间平滑恢复为正常大小
 	var ICON_SQUASH_TIME:Float = 2.0; // 压扁风格恢复时长（秒），数值越大回弹越慢越柔和
@@ -4866,6 +4877,10 @@ tempScore += '${lblScore}: ${songScore}';
 	function doDeathCheck(?skipHealthCheck:Bool = false) {
 		if (((skipHealthCheck && instakillOnMiss) || health <= 0) && !practiceMode && !isDead && gameOverTimer == null)
 		{
+			// A2: onDeath — 纯通知回调，脚本收到"血量归零"信号；
+			// 不返回 Function_Stop，阻止死亡请用 onGameOver（原版已有）或 onCustomGameOver
+			callOnScripts('onDeath', null, true);
+
 			var ret:Dynamic = callOnScripts('onGameOver', null, true);
 			if(ret != LuaUtils.Function_Stop)
 			{
@@ -4890,23 +4905,36 @@ tempScore += '${lblScore}: ${songScore}';
 				FlxTween.globalManager.clear();
 				FlxG.camera.setFilters([]);
 
-				if(GameOverSubstate.deathDelay > 0)
+				// A4: onCustomGameOver — 默认死亡流程已开始，但还没弹 GameOverSubstate；
+				// 返回 Function_Stop 阻止默认 GameOverSubstate，脚本可以自己做自定义结束
+				var customRet:Dynamic = callOnScripts('onCustomGameOver', null, true);
+				if (customRet != LuaUtils.Function_Stop)
 				{
-					gameOverTimer = new FlxTimer().start(GameOverSubstate.deathDelay, function(_)
+					if(GameOverSubstate.deathDelay > 0)
+					{
+						gameOverTimer = new FlxTimer().start(GameOverSubstate.deathDelay, function(_)
+						{
+							vocals.stop();
+							opponentVocals.stop();
+							FlxG.sound.music.stop();
+							openSubState(new GameOverSubstate(boyfriend));
+							gameOverTimer = null;
+						});
+					}
+					else
 					{
 						vocals.stop();
 						opponentVocals.stop();
 						FlxG.sound.music.stop();
 						openSubState(new GameOverSubstate(boyfriend));
-						gameOverTimer = null;
-					});
+					}
 				}
 				else
 				{
+					// 被脚本拦截：停止音乐但不弹默认结束界面
 					vocals.stop();
 					opponentVocals.stop();
 					FlxG.sound.music.stop();
-					openSubState(new GameOverSubstate(boyfriend));
 				}
 
 				// MusicBeatState.switchState(new GameOverState(boyfriend.getScreenPosition().x, boyfriend.getScreenPosition().y));

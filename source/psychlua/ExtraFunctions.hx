@@ -1,11 +1,17 @@
 package psychlua;
 
 import flixel.util.FlxSave;
+import flixel.FlxObject;
+import flixel.util.FlxColor;
 import openfl.utils.Assets;
+import openfl.geom.Point;
 #if sys
 import sys.FileSystem;
 #end
 import backend.Paths;
+import backend.CoolUtil;
+import states.PlayState;
+import objects.Character;
 
 //
 // Things to trivialize some dumb stuff like splitting strings on older Lua
@@ -13,6 +19,9 @@ import backend.Paths;
 
 class ExtraFunctions
 {
+	// G 类：帧计数器 — 由 PlayState 每帧 update 时自增，供 Lua getFrameCount 使用
+	public static var frameCount:Int = 0;
+
 	public static function implement(funk:FunkinLua)
 	{
 		var lua:State = funk.lua;
@@ -293,6 +302,131 @@ class ExtraFunctions
 			#else
 				FunkinLua.luaTrace("launchExternalExe: This function is only available on Windows!", false, false, FlxColor.RED);
 				return false;
+			#end
+		});
+
+		// ============ D 类：数学/向量工具函数 ============
+
+		Lua_helper.add_callback(lua, "distance", function(a:Dynamic, b:Dynamic, ?c:Dynamic = null, ?d:Dynamic = null):Float {
+			if (c != null && d != null)
+			{
+				var dx:Float = c - a;
+				var dy:Float = d - b;
+				return Math.sqrt(dx * dx + dy * dy);
+			}
+			var obj1:FlxObject = LuaUtils.getObjectDirectly(a);
+			var obj2:FlxObject = LuaUtils.getObjectDirectly(b);
+			if (obj1 != null && obj2 != null)
+			{
+				// 不用 getMidpoint()，直接用 x/y 计算，避免 Haxe 编译器类型转换问题
+				var dx:Float = obj1.x - obj2.x;
+				var dy:Float = obj1.y - obj2.y;
+				return Math.sqrt(dx * dx + dy * dy);
+			}
+			var dx2:Float = b - a;
+			return Math.sqrt(dx2 * dx2);
+		});
+
+		Lua_helper.add_callback(lua, "angleBetween", function(a:Dynamic, b:Dynamic, ?c:Dynamic = null, ?d:Dynamic = null):Float {
+			if (c != null && d != null)
+				return Math.atan2(d - b, c - a) * 180 / Math.PI;
+			var obj1:FlxObject = LuaUtils.getObjectDirectly(a);
+			var obj2:FlxObject = LuaUtils.getObjectDirectly(b);
+			if (obj1 != null && obj2 != null)
+			{
+				// 直接用 x/y 计算角度，避免 Haxe 编译器类型转换问题
+				return Math.atan2(obj2.y - obj1.y, obj2.x - obj1.x) * 180 / Math.PI;
+			}
+			return 0;
+		});
+
+		Lua_helper.add_callback(lua, "lerp", function(a:Float, b:Float, t:Float):Float {
+			return a + (b - a) * t;
+		});
+
+		Lua_helper.add_callback(lua, "clamp", function(v:Float, min:Float, max:Float):Float {
+			if (v < min) return min;
+			if (v > max) return max;
+			return v;
+		});
+
+		Lua_helper.add_callback(lua, "makeFlxPoint", function(x:Float = 0, y:Float = 0):openfl.geom.Point {
+			return new openfl.geom.Point(x, y);
+		});
+
+		Lua_helper.add_callback(lua, "hueShift", function(color:String, amount:Float):String {
+			var c:FlxColor = CoolUtil.colorFromString(color);
+			var r:Float = c.red / 255;
+			var g:Float = c.green / 255;
+			var bl:Float = c.blue / 255;
+			var maxVal:Float = Math.max(r, Math.max(g, bl));
+			var minVal:Float = Math.min(r, Math.min(g, bl));
+			var d:Float = maxVal - minVal;
+			var h:Float = 0;
+			if (d != 0)
+			{
+				if (maxVal == r) h = ((g - bl) / d) % 6;
+				else if (maxVal == g) h = ((bl - r) / d) + 2;
+				else h = ((r - g) / d) + 4;
+				h *= 60;
+				if (h < 0) h += 360;
+			}
+			var s:Float = maxVal == 0 ? 0 : d / maxVal;
+			var v:Float = maxVal;
+			h = (h + amount + 360) % 360;
+			var c2:Float = v * s;
+			var x2:Float = c2 * (1 - Math.abs((h / 60) % 2 - 1));
+			var m:Float = v - c2;
+			var rp:Float = 0, gp:Float = 0, bp:Float = 0;
+			if (h < 60) { rp = c2; gp = x2; }
+			else if (h < 120) { rp = x2; gp = c2; }
+			else if (h < 180) { gp = c2; bp = x2; }
+			else if (h < 240) { gp = x2; bp = c2; }
+			else if (h < 300) { rp = x2; bp = c2; }
+			else { rp = c2; bp = x2; }
+			return FlxColor.fromRGB(Std.int((rp + m) * 255), Std.int((gp + m) * 255), Std.int((bp + m) * 255)).toHexString(false, false);
+		});
+
+		// ============ G 类：其他实用函数 ============
+
+		Lua_helper.add_callback(lua, "getFPS", function():Float {
+			// Flixel 5.9.0 的 FlxG 没有 fps 字段，用帧间隔估算
+			return FlxG.elapsed > 0 ? 1.0 / FlxG.elapsed : 0.0;
+		});
+
+		// Flixel 5.9.0 的 FlxG 没有帧计数字段，用 ExtraFunctions.frameCount 统计
+		Lua_helper.add_callback(lua, "getFrameCount", function():Int {
+			return ExtraFunctions.frameCount;
+		});
+
+		Lua_helper.add_callback(lua, "getPlayingCharacterAnim", function(character:String):String {
+			var game:PlayState = PlayState.instance;
+			if (game == null) return '';
+			var char:Character = switch(character.toLowerCase()) {
+				case 'dad' | 'opponent': game.dad;
+				case 'gf' | 'girlfriend': game.gf;
+				default: game.boyfriend;
+			};
+			if (char != null && char.animation != null && char.animation.curAnim != null)
+				return char.animation.curAnim.name;
+			return '';
+		});
+
+		Lua_helper.add_callback(lua, "characterExists", function(name:String):Bool {
+			#if MODS_ALLOWED
+			var paths:Array<String> = [
+				Paths.getPath('characters/' + name + '.xml'),
+				Paths.modFolders('characters/' + name + '.xml'),
+				Paths.getSharedPath('characters/' + name + '.xml'),
+				Paths.getSharedPath('characters/' + name + '.txt'),
+				Paths.modFolders('characters/' + name + '.txt')
+			];
+			for (p in paths) if (FileSystem.exists(p)) return true;
+			return false;
+			#else
+			var xmlPath:String = Paths.getPath('characters/' + name + '.xml');
+			var txtPath:String = Paths.getPath('characters/' + name + '.txt');
+			return Assets.exists(xmlPath) || Assets.exists(txtPath);
 			#end
 		});
 	}
