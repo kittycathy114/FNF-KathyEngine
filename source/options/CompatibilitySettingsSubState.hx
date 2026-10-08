@@ -48,6 +48,18 @@ class CompatibilitySettingsSubState extends BaseOptionsMenu
 			psychlua.LuaCompatRouter.VERSIONS.copy());
 		addOption(option);
 
+		// 模组兼容性检测（扫描模组脚本，报告 Kathy / Psych 各版本的兼容性）
+		option = new Option(Language.get('mod_compat_checker'),
+			Language.get("mod_compat_checker_desc"),
+			'modCompatChecker',
+			BUTTON);
+		option.onChange = function()
+		{
+			persistentUpdate = false;
+			openSubState(new ModCompatCheckerSubState());
+		};
+		addOption(option);
+
 		#if !mobile
 		// 窗口标题
 		option = new Option(Language.get('fake_window_title'),
