@@ -274,15 +274,18 @@ class Controls
 	@:noCompletion
 	private function get_requestedInstance():Dynamic
 	{
-		if (isInSubstate)
+		// 状态切换期间 MusicBeatSubstate.instance 可能被 destroy 清成 null，
+		// 但 isInSubstate 仍为 true（没人在 switchState 路径上清理）。
+		// 此时 fallback 到顶层 MusicBeatState，避免 Controls 全路径 null 崩溃。
+		if (isInSubstate && MusicBeatSubstate.instance != null)
 			return MusicBeatSubstate.instance;
-		else
-			return MusicBeatState.getState();
+		return MusicBeatState.getState();
 	}
 
 	@:noCompletion
 	private function get_requestedMobileC():IMobileControls
 	{
+		if (requestedInstance == null) return null;
 		return requestedInstance.mobileControls;
 	}
 
