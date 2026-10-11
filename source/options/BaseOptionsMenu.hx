@@ -12,6 +12,7 @@ import backend.InputFormatter;
 import flixel.text.FlxText;
 
 import flixel.addons.display.FlxBackdrop;
+import flixel.FlxSubState;
 import flixel.addons.display.FlxGridOverlay;
 import backend.CoolUtil;
 import flixel.input.touch.FlxTouch;
@@ -460,7 +461,7 @@ class BaseOptionsMenu extends MusicBeatSubstate
 				}
 			}
 
-			if(controls.RESET || touchPad.buttonC.justPressed)
+			if(controls.RESET || (touchPad != null && touchPad.buttonC != null && touchPad.buttonC.justPressed))
 			{
 				var leOption:Option = optionsArray[curSelected];
 				if(!leOption.disabled)
@@ -908,13 +909,33 @@ class BaseOptionsMenu extends MusicBeatSubstate
 		super.destroy();
 	}
 
+	/**
+	 * 统一在打开子状态前移除自身 touchPad，避免与子状态的 touchPad 重叠渲染。
+	 * （MusicBeatSubstate 有独立的 touchPad 成员，Controls.requestedInstance 切换到子状态后，
+	 *  本 touchPad 虽然不再响应输入，但仍残留在父 state 的成员列表里被继续 draw）
+	 */
+	override function openSubState(SubState:FlxSubState):Void
+	{
+		persistentDraw = false;
+		removeTouchPad();
+		super.openSubState(SubState);
+	}
+
 	override function closeSubState()
 	{
-		super.closeSubState();
-		controls.isInSubstate = false;
-		removeTouchPad();
+		super.closeSubState(); // 销毁内层 subState（MusicBeatSubstate.destroy 会把 instance 置 null）
+		
+		// 关键：必须在重建 touchPad 之后、让 Controls 仍走 MusicBeatSubstate 分支。
+		// 因为顶层 OptionsState 的 touchPad 在 openSelectedSubState 时已被 removeTouchPad 清掉，
+		// 之后 OptionsState 就不知道我们打开了几层 BaseOptionsMenu 子类，不会自动重建 touchPad。
+		// 所以 Controls.requestedInstance 必须保持在 MusicBeatSubstate 链上，指向当前 BaseOptionsMenu 子类自己。
+		MusicBeatSubstate.instance = cast(this, MusicBeatSubstate);
+		controls.isInSubstate = true;
+		
+		removeTouchPad(); // 双保险：如果内层销毁时没清干净
 		addTouchPad('LEFT_FULL', 'A_B_C');
 		addTouchPadCamera(); // removeTouchPad 已销毁 touchPadCam，这里必须重建，否则 isTouchOnUIControls 失效、虚拟键会被当成列表拖拽吞掉
+		persistentDraw = true;
 #if mobile
 		// 重置触屏拖拽滚动状态，避免从子状态返回后残留的手指/选中污染虚拟键输入
 		touchScrollActive = false;

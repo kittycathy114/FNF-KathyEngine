@@ -120,7 +120,13 @@ class MusicBeatSubstate extends FlxSubState
 
 	override function destroy()
 	{
-		controls.isInSubstate = false;
+		// 关键：MusicBeatSubstate.instance 是 Controls.requestedInstance 选 touchPad 的唯一依据。
+		// 如果 instance 还指向已销毁的内层 subState，或者在它 destroy 期间被置 null，
+		// Controls 就会要么查到 null.touchPad（崩溃/无效输入），要么 fallback 到顶层 MusicBeatState
+		// （其 touchPad 在进入 subState 时已被 removeTouchPad 清掉）。
+		// 这里先把 instance 置 null，让父级 closeSubState 重建自己的 instance 引用。
+		if (instance == this) instance = null;
+		
 		removeTouchPad();
 		removeMobileControls();
 		
