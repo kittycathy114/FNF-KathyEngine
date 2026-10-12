@@ -3,6 +3,7 @@ package objects;
 import backend.animation.PsychAnimationController;
 import backend.NoteTypesConfig;
 import backend.ClientPrefs;
+import backend.ExtraKeysHandler;
 
 import shaders.RGBPalette;
 import shaders.RGBPalette.RGBShaderReference;
@@ -162,14 +163,20 @@ class Note extends FlxSprite
 		return Conductor.stepCrochet * 1.0;
 	}
 	public static var swagWidth:Float = 160 * 0.7;
+	// 当前 mania 档位下每列的动画前缀（purple/blue/green/red/rombus/circle...）。
+	// 由 PlayState.applyMania() 按 extrakeys.json 动态填充；4 键默认值保持向后兼容。
 	public static var colArray:Array<String> = ['purple', 'blue', 'green', 'red'];
 
 	/**
-	 * 把 noteData 映射到样式索引（style）。标准4键下 style == noteData % 4。
+	 * 把 noteData 映射到全局样式索引（用于 RGB shader 颜色表）。
+	 * 标准4键下 style == noteData % 4；多键时查 extrakeys.json 的 keys[mania].notes 映射。
 	 */
 	public static function styleIndex(noteData:Int):Int
 	{
-		return noteData % 4;
+		var mania = 3;
+		if (PlayState.SONG != null && PlayState.SONG.mania != null) mania = PlayState.SONG.mania;
+		if (ExtraKeysHandler.instance == null) return noteData % 4;
+		return ExtraKeysHandler.instance.globalIndex(mania, noteData);
 	}
 	public static var defaultNoteSkin(default, never):String = 'noteSkins/NOTE_assets';
 

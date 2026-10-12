@@ -54,6 +54,7 @@ import backend.Song;
 import backend.StageData;
 import backend.Highscore;
 import backend.Difficulty;
+import backend.ExtraKeysHandler;
 
 import objects.Character;
 import objects.HealthIcon;
@@ -1317,6 +1318,9 @@ if(_shouldReset) Conductor.songPosition = 0;
 		audioOffsetStepper.value = Reflect.hasField(PlayState.SONG, 'offset') ? PlayState.SONG.offset : 0;
 		Conductor.offset = audioOffsetStepper.value;
 
+		if (maniaStepper != null)
+			maniaStepper.value = (PlayState.SONG.mania != null) ? PlayState.SONG.mania : 3;
+
 		specialInstInputText.text = PlayState.SONG.specialInst != null ? PlayState.SONG.specialInst : '';
 		specialVocalInputText.text = PlayState.SONG.specialVocal != null ? PlayState.SONG.specialVocal : '';
 		specialEventsInputText.text = PlayState.SONG.specialEvents != null ? PlayState.SONG.specialEvents : '';
@@ -2306,9 +2310,9 @@ if(_shouldReset) Conductor.songPosition = 0;
 								selectedNotes.push(noteAdded);
 								addUndoAction(ADD_NOTE, {notes: [noteAdded]});
 
-								// 播放角色对应箭头动画
-								var targetChar:Character = (noteData >= 4) ? dad : boyfriend;
-								var direction:Int = noteData % 4;
+								// 播放角色对应箭头动画（多键：列数以当前轨道数计算）
+								var targetChar:Character = (noteData >= GRID_COLUMNS_PER_PLAYER) ? dad : boyfriend;
+								var direction:Int = noteData % GRID_COLUMNS_PER_PLAYER;
 								if(targetChar != null && targetChar.visible)
 									playCharacterSing(targetChar, direction);
 							}
@@ -2586,9 +2590,9 @@ if(_shouldReset) Conductor.songPosition = 0;
 								selectedNotes.push(noteAdded);
 								addUndoAction(ADD_NOTE, {notes: [noteAdded]});
 
-								// 播放角色对应箭头动画
-								var targetChar:Character = (noteData >= 4) ? dad : boyfriend;
-								var direction:Int = noteData % 4;
+								// 播放角色对应箭头动画（多键：列数以当前轨道数计算）
+								var targetChar:Character = (noteData >= GRID_COLUMNS_PER_PLAYER) ? dad : boyfriend;
+								var direction:Int = noteData % GRID_COLUMNS_PER_PLAYER;
 								if(targetChar != null && targetChar.visible)
 									playCharacterSing(targetChar, direction);
 							}
@@ -2676,15 +2680,15 @@ if(_shouldReset) Conductor.songPosition = 0;
 			{
 				if(note.mustPress)
 				{
-					// 玩家音符（noteData 0-3或4-7，取决于mustHitSection）
-					var direction:Int = noteData % 4;
+					// 玩家音符（多键：方向 = noteData % 轨道列数）
+					var direction:Int = noteData % GRID_COLUMNS_PER_PLAYER;
 					if(boyfriend != null && boyfriend.visible)
 						playCharacterSing(boyfriend, direction);
 				}
 				else
 				{
-					// 对手音符（noteData 0-3或4-7，取决于mustHitSection）
-					var direction:Int = noteData % 4;
+					// 对手音符（多键：方向 = noteData % 轨道列数）
+					var direction:Int = noteData % GRID_COLUMNS_PER_PLAYER;
 					if(dad != null && dad.visible)
 						playCharacterSing(dad, direction);
 				}
@@ -2752,7 +2756,7 @@ if(_shouldReset) Conductor.songPosition = 0;
 			var noteStrumTime:Float = note.strumTime;
 			if(noteStrumTime > lilLastStrumCheckTime && noteStrumTime <= lilNow)
 			{
-				playLilSing(note.mustPress, Std.int(note.noteData) % 4);
+				playLilSing(note.mustPress, Std.int(note.noteData) % GRID_COLUMNS_PER_PLAYER);
 			}
 		}
 		lilLastStrumCheckTime = lilNow;
@@ -2858,7 +2862,7 @@ if(_shouldReset) Conductor.songPosition = 0;
 				for(note in secData.sectionNotes)
 				{
 					if(note == null) continue;
-					if(note[1] < 4) playCount++; else oppCount++;
+					if(note[1] < GRID_COLUMNS_PER_PLAYER) playCount++; else oppCount++;
 				}
 			}
 			if(curSecData != null)
@@ -2867,7 +2871,7 @@ if(_shouldReset) Conductor.songPosition = 0;
 				{
 					if(note == null) continue;
 					if(note[0] > Conductor.songPosition) continue;
-					if(note[1] < 4) playCount++; else oppCount++;
+					if(note[1] < GRID_COLUMNS_PER_PLAYER) playCount++; else oppCount++;
 				}
 			}
 			var str:String =  '$curTime / $songLength' +
@@ -3521,25 +3525,48 @@ var vortexPlaying:Bool = (vortexEnabled && FlxG.sound.music != null && FlxG.soun
 		};
 	}
 
-	// 小节键数（原生 4 键，固定返回 3 = 4 键）
+	// 小节键数（Extra Keys：从谱面 SONG.mania 读取，3 = 标准 4 键）
 	public static function getSectionMania(secNum:Int):Int
 	{
+		if (PlayState.SONG != null && PlayState.SONG.mania != null)
+			return PlayState.SONG.mania;
 		return 3;
 	}
 
-	// 某小节的轨道列数（回退原生4键，固定4列）
+	// 某小节的轨道列数（Extra Keys：mania + 1；4 键 = 4 列，6 键 = 6 列...）
 	public static function getSectionColumns(secNum:Int):Int
 	{
-		return 4;
+		return getSectionMania(secNum) + 1;
 	}
 
-	// 根据小节（固定4列）同步：Note.colArray（颜色前缀）、网格列数、网格与箭头、轨道色块。
+	// 根据小节（按谱面 mania）同步：Note.colArray（颜色前缀）、singAnimations、网格列数、网格与箭头、轨道色块。
 	function applySectionColumns(secNum:Int):Void
 	{
 		var cols = getSectionColumns(secNum);
+		var mania = getSectionMania(secNum);
 
-		// 标准4键颜色前缀
-		Note.colArray = ['purple', 'blue', 'green', 'red'];
+		// Extra Keys：按 mania 档位从 extrakeys.json 填充每列的颜色前缀与 sing 动画名。
+		// 4 键档位结果与原生硬编码完全一致（purple/blue/green/red + singLEFT/DOWN/UP/RIGHT）。
+		ExtraKeysHandler.ensure();
+		var newColArray:Array<String> = [];
+		var newSingAnims:Array<String> = [];
+		var ek = ExtraKeysHandler.instance.data;
+		if (ek != null && ek.keys != null && ek.keys.length > mania) {
+			var mode = ek.keys[mania];
+			var laneCount:Int = (mode != null && mode.notes != null) ? mode.notes.length : cols;
+			for (i in 0...laneCount) {
+				var g:Int = (mode.notes != null && i < mode.notes.length) ? mode.notes[i] : i;
+				var anim = (ek.animations != null && g >= 0 && g < ek.animations.length) ? ek.animations[g] : null;
+				newColArray.push(anim != null ? anim.note : 'purple');
+				newSingAnims.push(anim != null ? ('sing' + anim.sing) : 'singLEFT');
+			}
+		} else {
+			// 兜底 4 键
+			newColArray = ['purple', 'blue', 'green', 'red'];
+			newSingAnims = ['singLEFT', 'singDOWN', 'singUP', 'singRIGHT'];
+		}
+		Note.colArray = newColArray;
+		singAnimations = newSingAnims;
 
 		if (cols != GRID_COLUMNS_PER_PLAYER)
 		{
@@ -4607,8 +4634,8 @@ var vortexPlaying:Bool = (vortexEnabled && FlxG.sound.music != null && FlxG.soun
 			resetSelectedNotes();
 			selectedNotes.push(noteAdded);
 
-			var targetChar:Character = (dragStartNoteData >= 4) ? dad : boyfriend;
-			var direction:Int = dragStartNoteData % 4;
+			var targetChar:Character = (dragStartNoteData >= GRID_COLUMNS_PER_PLAYER) ? dad : boyfriend;
+			var direction:Int = dragStartNoteData % GRID_COLUMNS_PER_PLAYER;
 			if(targetChar != null && targetChar.visible)
 				playCharacterSing(targetChar, direction);
 		}
@@ -6164,6 +6191,7 @@ for (i in 0...GRID_PLAYERS)
 	var bpmStepper:PsychUINumericStepper;
 	var scrollSpeedStepper:PsychUINumericStepper;
 	var audioOffsetStepper:PsychUINumericStepper;
+	var maniaStepper:PsychUINumericStepper; // Extra Keys：键数档位 stepper
  	var specialInstInputText:PsychUIInputText;
 	var specialVocalInputText:PsychUIInputText;
 	var specialEventsInputText:PsychUIInputText;
@@ -6243,6 +6271,16 @@ for (i in 0...GRID_PLAYERS)
 			updateWaveform();
 		};
 
+		// Extra Keys：键数档位（0=1键 ... 17=18键；4 键 = 3）。改键数会重建网格列数与轨道色块。
+		maniaStepper = new PsychUINumericStepper(objX + 330, objY, 1, 3, 0, 17, 0, 80);
+		maniaStepper.onValueChange = function()
+		{
+			PlayState.SONG.mania = Std.int(maniaStepper.value);
+			if (PlayState.SONG.keyCount != null) PlayState.SONG.keyCount = Std.int(maniaStepper.value) + 1;
+			applySectionColumns(curSec);
+			updateJsonData();
+		};
+
 
 		tab_group.add(new FlxText(songNameInputText.x, songNameInputText.y - 15, 80, Language.get('charting_songname')).setFormat(Paths.font(Language.get('uitab_font')), 12));
 		tab_group.add(songNameInputText);
@@ -6251,6 +6289,8 @@ for (i in 0...GRID_PLAYERS)
 	#if (mac || mobile)
 		tab_group.add(reloadJsonButton);
 	#end
+		tab_group.add(new FlxText(maniaStepper.x, maniaStepper.y - 15, 100, Language.get('charting_mania')).setFormat(Paths.font(Language.get('uitab_font')), 12));
+		tab_group.add(maniaStepper);
 
 	// Find characters
 	var characters:Array<String> = [];
@@ -8561,13 +8601,21 @@ for (i in 0...GRID_PLAYERS)
 			if(raw.notes != null)
 			{
 				var notes:Array<Dynamic> = raw.notes;
+				// 当前键数：多键谱保留 absolute lane + 原 mustHitSection（0.6.3 无多键概念，
+				// 强制翻转会损坏数据；写入 mania 字段供支持多键的 0.7.3 EK 类引擎识别）。
+				var mania:Int = (raw.mania != null) ? Std.int(raw.mania) : 3;
+				var isMultiKey:Bool = (mania != 3);
+
 				for (sec in notes)
 				{
 					if(sec == null) continue;
-					// 新版 noteData 已归一化（0-3=玩家 / 4-7=对手），与 mustHitSection 无关；
-					// 旧版 0.6.3 靠 mustHitSection 翻转归属，故强制 true 使其解读与归一化数据一致（音符归属 100% 正确）。
-					// 代价：旧版镜头会一直聚焦 BF，原谱对手镜头段丢失（纯视觉差异）。
-					sec.mustHitSection = true;
+					if (!isMultiKey)
+					{
+						// 4 键：新版 noteData 已归一化（0-3=玩家 / 4-7=对手），与 mustHitSection 无关；
+						// 旧版 0.6.3 靠 mustHitSection 翻转归属，故强制 true 使其解读与归一化数据一致（音符归属 100% 正确）。
+						// 代价：旧版镜头会一直聚焦 BF，原谱对手镜头段丢失（纯视觉差异）。
+						sec.mustHitSection = true;
+					}
 					Reflect.deleteField(sec, 'bpmRamp');
 
 					if(sec.sectionNotes != null)

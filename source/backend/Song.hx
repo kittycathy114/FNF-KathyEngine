@@ -24,6 +24,14 @@ typedef SwagSong =
 	// 谱面由哪个编辑器/引擎生成，仅作元信息展示，不参与任何玩法逻辑
 	@:optional var generatedBy:String;
 
+	// Extra Keys：键数档位（0=1键 ... 17=18键）。缺省 = 3（标准 4 键）。
+	// 对应 extrakeys.json 里 keys 数组的下标。
+	@:optional var mania:Int;
+
+	// 兼容其他多键引擎的字段名（如 Matt/MattV3 的 "keyCount": 6 表示 6 键）。
+	// onLoadJson 里会把 keyCount 映射成 mania = keyCount - 1。
+	@:optional var keyCount:Int;
+
 	@:optional var gameOverChar:String;
 	@:optional var gameOverSound:String;
 	@:optional var gameOverLoop:String;
@@ -85,6 +93,14 @@ class Song
 			if(Reflect.hasField(songJson, 'player3')) Reflect.deleteField(songJson, 'player3');
 		}
 
+		// Extra Keys：在按列折叠之前先确定列数。
+		// legacy 谱面无 mania 字段 → 兜底 3（4 键），行为与原版一致；
+		// 多键谱面（keyCount:6 或 mania:5）→ sectCols=6，轨道号 0-5 玩家 / 6-11 敌人。
+		var mania:Int = 3;
+		if (songJson.keyCount != null) mania = Std.int(songJson.keyCount) - 1;
+		else if (songJson.mania != null) mania = Std.int(songJson.mania);
+		var sectCols:Int = mania + 1;
+
 		if(songJson.events == null)
 		{
 			songJson.events = [];
@@ -128,8 +144,11 @@ class Song
 
 			for (note in section.sectionNotes)
 			{
-				var gottaHitNote:Bool = (note[1] < 4) ? section.mustHitSection : !section.mustHitSection;
-				note[1] = (note[1] % 4) + (gottaHitNote ? 0 : 4);
+				// 列数从硬编码 4 改成按 mania 档位动态计算。
+				// legacy 相对车道：0..sectCols-1 = 当前小节归属方，sectCols..2*sectCols-1 = 另一方。
+				// psych_v1 绝对车道：0..sectCols-1 永远是玩家，sectCols..2*sectCols-1 永远是对手。
+				var gottaHitNote:Bool = (note[1] < sectCols) ? section.mustHitSection : !section.mustHitSection;
+				note[1] = (note[1] % sectCols) + (gottaHitNote ? 0 : sectCols);
 
 				if(!Std.isOfType(note[3], String))
 					note[3] = Note.defaultNoteTypes[note[3]];
@@ -340,6 +359,13 @@ class Song
 		// 防御：谱面可能完全没有 notes 字段，避免 PlayState 遍历 SONG.notes 时 Null Object Reference 崩溃。
 		if (songJson.notes == null)
 			songJson.notes = [];
+
+		// Extra Keys：mania 字段兜底为 3（标准 4 键），与 Psych EK 行为一致。
+		// 兼容 "keyCount" 字段（其他多键引擎风格）：keyCount=6 → mania=5。
+		if (songJson.keyCount != null && songJson.mania == null)
+			songJson.mania = Std.int(songJson.keyCount) - 1;
+		if (songJson.mania == null)
+			songJson.mania = 3;
 
 		return songJson;
 	}

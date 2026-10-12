@@ -220,6 +220,9 @@ import haxe.io.BytesInput;
 	public var holdScoreBonus:Bool = false; // 特性3: 长条命中期间持续加分直到长条结束(参考原版Funkin)
 	public var holdTailLeniency:Bool = false; // 特性2宽容: 尾条判定(释放时机)是否放宽判定窗口
 	public var holdTailLeniencyMs:Float = 20.0; // 特性2宽容量(ms)，默认20，范围0-50
+	// Extra Keys 相关设置
+	public var touchLaneMode:String = 'auto'; // 触屏多键轨道：'auto' = 跟随谱面键数 / '4k' = 固定 4 键
+	public var showKeyPreview:Bool = true; // 开局在每个 strum 下方短暂显示对应按键名（EK KeybindShowcase）
 	public var inputSystem:String = 'default'; // 输入判定系统: 'default' (传统) 或 'rhythm' (Rhythm模式，只允许击中最近的音符)
 	public var discordRPC:Bool = true;
 	public var loadingScreen:Bool = true;
@@ -545,9 +548,47 @@ class ClientPrefs {
 
 	public static function loadDefaultKeys()
 	{
+		// Extra Keys：从 extrakeys.json 注册多键档位的默认键位（"{mania}_key_{i}"）。
+		// 必须在 copy 到 defaultKeys 之前完成，否则用户 reset 键位后多键档位会丢失。
+		registerExtraKeysDefaults();
+
 		defaultKeys = keyBinds.copy();
 		defaultButtons = gamepadBinds.copy();
 		defaultMobileBinds = mobileBinds.copy();
+	}
+
+	/** 从 extrakeys.json 把每个 mania 档位的默认键盘键位灌进 keyBinds。
+	 *  action 命名："{mania}_key_{lane}"，与 PlayState.applyMania 生成的 keysArray 对齐。
+	 *  已存在的 action（用户在设置里改过）不覆盖。 */
+	static function registerExtraKeysDefaults():Void
+	{
+		try {
+			ExtraKeysHandler.ensure();
+			var ek = ExtraKeysHandler.instance.data;
+			if (ek == null || ek.keybinds == null) return;
+
+			for (mania in 0...ek.keybinds.length) {
+				var lanes = ek.keybinds[mania];
+				if (lanes == null) continue;
+				for (i in 0...lanes.length) {
+					var actionName:String = Std.string(mania) + '_key_' + i;
+					if (keyBinds.exists(actionName)) continue;
+
+					var keys:Array<FlxKey> = [];
+					if (lanes[i] != null) {
+						for (kc in lanes[i]) {
+							try {
+								keys.push(cast kc); // int keycode -> FlxKey
+							} catch (e:Dynamic) {}
+						}
+					}
+					if (keys.length > 0) keyBinds.set(actionName, keys);
+				}
+			}
+			trace('[EK] Registered ' + ek.keybinds.length + ' mania-mode default keybinds.');
+		} catch (e:Dynamic) {
+			trace('[EK] registerExtraKeysDefaults failed: $e');
+		}
 	}
 
 	public static function saveSettings() {

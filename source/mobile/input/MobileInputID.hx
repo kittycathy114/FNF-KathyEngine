@@ -94,6 +94,16 @@ enum abstract MobileInputID(Int) from Int to Int
 	var NOTE_6 = 46;
 	var NOTE_7 = 47;
 	var NOTE_8 = 48;
+	// 多键额外音符（10~18 键，索引 9~17），供动态触屏按钮使用
+	var NOTE_9 = 51;
+	var NOTE_10 = 52;
+	var NOTE_11 = 53;
+	var NOTE_12 = 54;
+	var NOTE_13 = 55;
+	var NOTE_14 = 56;
+	var NOTE_15 = 57;
+	var NOTE_16 = 58;
+	var NOTE_17 = 59;
 
 	@:from
 	public static inline function fromString(s:String)

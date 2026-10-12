@@ -27,6 +27,8 @@ import openfl.display.Shape;
 import flixel.graphics.FlxGraphic;
 import flixel.util.FlxSignal.FlxTypedSignal;
 import openfl.geom.Matrix;
+import states.PlayState;
+import backend.ExtraKeysHandler;
 
 /**
  * A zone with 4 hint's (A hitbox).
@@ -47,6 +49,9 @@ class Hitbox extends MobileInputManager implements IMobileControls
 	public var buttonExtra2:TouchButton = new TouchButton(0, 0, [MobileInputID.EXTRA_2]);
 	public var buttonExtra3:TouchButton = new TouchButton(0, 0, [MobileInputID.EXTRA_3]);
 	public var buttonExtra4:TouchButton = new TouchButton(0, 0, [MobileInputID.EXTRA_4]);
+
+	// Extra Keys：多键谱面动态生成的第 5 列及以后音符按钮（不入字段，需手动管理生命周期）
+	public var dynamicNoteButtons:Array<TouchButton> = [];
 
 	public var instance:MobileInputManager;
 	public var onButtonDown:FlxTypedSignal<TouchButton->Void> = new FlxTypedSignal<TouchButton->Void>();
@@ -84,12 +89,77 @@ class Hitbox extends MobileInputManager implements IMobileControls
 			default: count = 0;
 		}
 
+		// Extra Keys：当前谱面键数（touchLaneMode='4k' 时强制 4 键；谱面未加载时 4 键）
+		var totalCols:Int = 4;
+		if (ClientPrefs.data.touchLaneMode != '4k' && PlayState.SONG != null)
+		{
+			var mania:Null<Int> = PlayState.SONG.mania;
+			totalCols = ((mania != null) ? mania : 3) + 1;
+		}
+
 		if (count == 0)
 		{
-			add(buttonLeft = createHint(0, 0, Std.int(FlxG.width / 4), FlxG.height, 0xFFC24B99));
-			add(buttonDown = createHint(FlxG.width / 4, 0, Std.int(FlxG.width / 4), FlxG.height, 0xFF00FFFF));
-			add(buttonUp = createHint(FlxG.width / 2, 0, Std.int(FlxG.width / 4), FlxG.height, 0xFF12FA05));
-			add(buttonRight = createHint((FlxG.width / 2) + (FlxG.width / 4), 0, Std.int(FlxG.width / 4), FlxG.height, 0xFFF9393F));
+			if (totalCols <= 4)
+			{
+				// 标准 4 键
+				add(buttonLeft = createHint(0, 0, Std.int(FlxG.width / 4), FlxG.height, 0xFFC24B99));
+				add(buttonDown = createHint(FlxG.width / 4, 0, Std.int(FlxG.width / 4), FlxG.height, 0xFF00FFFF));
+				add(buttonUp = createHint(FlxG.width / 2, 0, Std.int(FlxG.width / 4), FlxG.height, 0xFF12FA05));
+				add(buttonRight = createHint((FlxG.width / 2) + (FlxG.width / 4), 0, Std.int(FlxG.width / 4), FlxG.height, 0xFFF9393F));
+			}
+			else
+			{
+				// Extra Keys：按谱面键数等分底部轨道，每列映射 NOTE_X 枚举，颜色取自 extrakeys.json
+				var bottomH:Int = Std.int(FlxG.height / 4) * 3;
+				var noteCols:Array<Int> = null;
+				var mania:Int = (PlayState.SONG != null && PlayState.SONG.mania != null) ? PlayState.SONG.mania : 3;
+				ExtraKeysHandler.ensure();
+				var ek = ExtraKeysHandler.instance.data;
+				if (ek != null && ek.keys != null && ek.keys.length > mania && ek.keys[mania].notes != null)
+					noteCols = ek.keys[mania].notes;
+				for (i in 0...totalCols)
+				{
+					var zoneW:Int = Std.int(FlxG.width / totalCols);
+					var colColor:Int = 0xFF999999;
+					if (noteCols != null && i < noteCols.length && ek.colors != null && noteCols[i] < ek.colors.length)
+						colColor = FlxColor.fromString('#${ek.colors[noteCols[i]].inner}');
+					var ids:Array<MobileInputID> = [noteIDForIndex(i)];
+					var btn:TouchButton = createHint(i * zoneW, offsetSec, zoneW, bottomH, colColor);
+					btn.IDs = ids;
+					if (i < 4)
+					{
+						// 前 4 列复用标准字段（兼容原有 hitbox 字段引用）
+						switch (i)
+						{
+							case 0: buttonLeft = btn;
+							case 1: buttonDown = btn;
+							case 2: buttonUp = btn;
+							default: buttonRight = btn;
+						}
+					}
+					else
+					{
+						dynamicNoteButtons.push(btn);
+					}
+					add(btn);
+				}
+
+				// 顶部 1/4 区域等分为 count 个额外键
+				var extraColors:Array<Int> = [0xFF0066FF, 0xA6FF00, 0xFF00A6FF, 0xFFFFA600];
+				for (i in 0...count)
+				{
+					var zoneW:Int = Std.int(FlxG.width / count);
+					var btn:TouchButton = createHint(i * zoneW, offsetFir, zoneW, Std.int(FlxG.height / 4), extraColors[i]);
+					switch (i)
+					{
+						case 0: buttonExtra = btn;
+						case 1: buttonExtra2 = btn;
+						case 2: buttonExtra3 = btn;
+						default: buttonExtra4 = btn;
+					}
+					add(btn);
+				}
+			}
 		}
 		else
 		{
@@ -127,8 +197,32 @@ class Hitbox extends MobileInputManager implements IMobileControls
 		updateTrackedButtons();
 
 		instance = this;
+	}
 
-		// 回退原生4键 Hitbox：由默认逻辑生成4个音符按钮，不再按 mania 动态生成多键按钮。
+	/** 音符列索引 -> 触屏 NOTE 枚举值（0..3 -> NOTE_LEFT..NOTE_RIGHT，4..17 -> NOTE_4..NOTE_17） */
+	static function noteIDForIndex(index:Int):MobileInputID
+	{
+		return switch (index)
+		{
+			case 0: MobileInputID.NOTE_LEFT;
+			case 1: MobileInputID.NOTE_DOWN;
+			case 2: MobileInputID.NOTE_UP;
+			case 3: MobileInputID.NOTE_RIGHT;
+			case 4: MobileInputID.NOTE_4;
+			case 5: MobileInputID.NOTE_5;
+			case 6: MobileInputID.NOTE_6;
+			case 7: MobileInputID.NOTE_7;
+			case 8: MobileInputID.NOTE_8;
+			case 9: MobileInputID.NOTE_9;
+			case 10: MobileInputID.NOTE_10;
+			case 11: MobileInputID.NOTE_11;
+			case 12: MobileInputID.NOTE_12;
+			case 13: MobileInputID.NOTE_13;
+			case 14: MobileInputID.NOTE_14;
+			case 15: MobileInputID.NOTE_15;
+			case 16: MobileInputID.NOTE_16;
+			default: MobileInputID.NOTE_17;
+		}
 	}
 
 	/**
@@ -143,6 +237,14 @@ class Hitbox extends MobileInputManager implements IMobileControls
 		_animatingButtons.clear();
 		_targetAlphas.clear();
 		_targetLabelAlphas.clear();
+
+		// Extra Keys：动态多键按钮不在字段里，手动销毁
+		for (btn in dynamicNoteButtons)
+		{
+			if (btn != null && btn.exists)
+				FlxDestroyUtil.destroy(btn);
+		}
+		dynamicNoteButtons = [];
 
 		for (fieldName in Reflect.fields(this))
 		{
@@ -289,57 +391,58 @@ class Hitbox extends MobileInputManager implements IMobileControls
 		// hitboxHideIdle=true 时游戏内完全禁用，设置界面也应保持隐藏
 		if (ClientPrefs.data.hitboxHideIdle)
 		{
-			for (fieldName in Reflect.fields(this))
+			forEachAllButtons(function(btn:TouchButton)
 			{
-				var button = Reflect.field(this, fieldName);
-				if (Std.isOfType(button, TouchButton))
-				{
-					var btn:TouchButton = cast button;
-					btn.alpha = 0;
-					if (btn.label != null)
-						btn.label.alpha = 0;
-					_animatingButtons.set(btn, false);
-				}
-			}
+				btn.alpha = 0;
+				if (btn.label != null)
+					btn.label.alpha = 0;
+				_animatingButtons.set(btn, false);
+			});
 			return;
 		}
 		var hideAlpha:Float = 0.00001;
-		for (fieldName in Reflect.fields(this))
+		forEachAllButtons(function(btn:TouchButton)
 		{
-			var button = Reflect.field(this, fieldName);
-			if (Std.isOfType(button, TouchButton))
-			{
-				var btn:TouchButton = cast button;
-				// 立即以 controlsAlpha 可见，再开始计时
-				btn.alpha = ClientPrefs.data.controlsAlpha;
-				if (btn.label != null)
-					btn.label.alpha = ClientPrefs.data.controlsAlpha;
-				_animatingButtons.set(btn, true);
-				_targetAlphas.set(btn, hideAlpha);
-				_targetLabelAlphas.set(btn, ClientPrefs.data.controlsAlpha);
-			}
-		}
+			// 立即以 controlsAlpha 可见，再开始计时
+			btn.alpha = ClientPrefs.data.controlsAlpha;
+			if (btn.label != null)
+				btn.label.alpha = ClientPrefs.data.controlsAlpha;
+			_animatingButtons.set(btn, true);
+			_targetAlphas.set(btn, hideAlpha);
+			_targetLabelAlphas.set(btn, ClientPrefs.data.controlsAlpha);
+		});
 		// 0.6s 后真正开始渐隐（用 tween 延迟，不阻塞调用栈）
 		FlxTween.tween(this, {}, 0.6, {
 			ease: FlxEase.linear,
 			onComplete: (twn:FlxTween) ->
 			{
-				for (fieldName in Reflect.fields(this))
+				forEachAllButtons(function(btn:TouchButton)
 				{
-					var button = Reflect.field(this, fieldName);
-					if (Std.isOfType(button, TouchButton))
+					if (_animatingButtons.exists(btn) && _animatingButtons.get(btn))
 					{
-						var btn:TouchButton = cast button;
-						if (_animatingButtons.exists(btn) && _animatingButtons.get(btn))
-						{
-							_animatingButtons.set(btn, true);
-							_targetAlphas.set(btn, hideAlpha);
-							_targetLabelAlphas.set(btn, hideAlpha);
-						}
+						_animatingButtons.set(btn, true);
+						_targetAlphas.set(btn, hideAlpha);
+						_targetLabelAlphas.set(btn, hideAlpha);
 					}
-				}
+				});
 			}
 		});
+	}
+
+	/** 遍历全部触屏按钮：字段按钮 + Extra Keys 动态多键按钮 */
+	function forEachAllButtons(callback:TouchButton->Void):Void
+	{
+		for (fieldName in Reflect.fields(this))
+		{
+			var button = Reflect.field(this, fieldName);
+			if (Std.isOfType(button, TouchButton))
+				callback(cast button);
+		}
+		for (btn in dynamicNoteButtons)
+		{
+			if (btn != null)
+				callback(btn);
+		}
 	}
 
 	function createHintGraphic(Width:Int, Height:Int, ?isLane:Bool = false):FlxGraphic

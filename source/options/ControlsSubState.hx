@@ -1,6 +1,7 @@
 package options;
 
 import backend.InputFormatter;
+import backend.ExtraKeysHandler;
 import flixel.addons.display.FlxBackdrop;
 import flixel.addons.display.FlxGridOverlay;
 import backend.CoolUtil;
@@ -14,40 +15,12 @@ import flixel.input.gamepad.FlxGamepadManager;
 class ControlsSubState extends MusicBeatSubstate
 {
 	var curSelected:Int = 0;
+	var curEKPage:Int = 3; // Extra Keys：当前显示的键数档位页（4键=3，0=1键 ... 17=18键）
 	var curAlt:Bool = false;
 
 	//Show on gamepad - Display name - Save file key - Rebind display name
-	var options:Array<Dynamic> = [
-		[true, 'NOTES'],
-		[true, 'Left', 'note_left', 'Note Left'],
-		[true, 'Down', 'note_down', 'Note Down'],
-		[true, 'Up', 'note_up', 'Note Up'],
-		[true, 'Right', 'note_right', 'Note Right'],
-		[true],
-		[true, 'UI'],
-		[true, 'Left', 'ui_left', 'UI Left'],
-		[true, 'Down', 'ui_down', 'UI Down'],
-		[true, 'Up', 'ui_up', 'UI Up'],
-		[true, 'Right', 'ui_right', 'UI Right'],
-		[true],
-		[true, 'Reset', 'reset', 'Reset'],
-		[true, 'Accept', 'accept', 'Accept'],
-		[true, 'Back', 'back', 'Back'],
-		[true, 'Pause', 'pause', 'Pause'],
-		[false],
-		[false, 'VOLUME'],
-		[false, 'Mute', 'volume_mute', 'Volume Mute'],
-		[false, 'Up', 'volume_up', 'Volume Up'],
-		[false, 'Down', 'volume_down', 'Volume Down'],
-		[false],
-		[false, 'DEBUG'],
-		[false, 'Key 1', 'debug_1', 'Debug Key #1'],
-		[false, 'Key 2', 'debug_2', 'Debug Key #2'],
-		[false, 'Key 3', 'debug_3', 'Debug Key #3'],
-		[false, 'Key 4', 'debug_4', 'Debug Key #4'],
-		[false, 'WINDOW'],
-		[false, 'Fullscreen', 'fullscreen', 'Fullscreen Toggel']
-	];
+	//（Extra Keys：多键动作由 createTexts 按 curEKPage 动态生成，这里不再硬编码）
+	var options:Array<Dynamic> = [];
 	var curOptions:Array<Int>;
 	var curOptionsValid:Array<Int>;
 	static var defaultKey:String = 'Reset to Default Keys';
@@ -58,6 +31,7 @@ class ControlsSubState extends MusicBeatSubstate
 	var grpOptions:FlxTypedGroup<Alphabet>;
 	var grpBinds:FlxTypedGroup<Alphabet>;
 	var selectSpr:AttachedSprite;
+	var tipTxt:FlxText; // Extra Keys：底部操作提示条
 
 	var gamepadColor:FlxColor = 0xfffd7194;
 	var keyboardColor:FlxColor = 0xff7192fd;
@@ -74,10 +48,6 @@ class ControlsSubState extends MusicBeatSubstate
 		#if DISCORD_ALLOWED
 		DiscordClient.changePresence("Controls Menu", null);
 		#end
-
-		options.push([true]);
-		options.push([true]);
-		options.push([true, defaultKey]);
 
 		bg = new FlxSprite().loadGraphic(Paths.image('menuDesat'));
 		bg.color = keyboardColor;
@@ -111,6 +81,19 @@ class ControlsSubState extends MusicBeatSubstate
 		controllerSpr.animation.add('gamepad', [1], 1, false);
 		add(controllerSpr);
 
+		// Extra Keys：底部提示条（Q/E 翻页 / SHIFT 加速）
+		var tipX:Float = 20;
+		var tipY:Float = FlxG.height - 28;
+		var tipBG:FlxSprite = new FlxSprite(0, tipY);
+		tipBG.makeGraphic(FlxG.width, 28, 0xFF000000);
+		tipBG.alpha = 0.5;
+		add(tipBG);
+
+		tipTxt = new FlxText(tipX, tipY + 6, 0, LanguageBasic.getPhrase('controls_ek_tip', 'Press Q/E to change the Extra Keys Page. Hold SHIFT to scroll 3x faster.'), 16);
+		tipTxt.setFormat(Paths.font("vcr.ttf"), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.NONE, FlxColor.BLACK);
+		tipTxt.borderSize = 2;
+		add(tipTxt);
+
 		var text:Alphabet = new Alphabet(60, 90, 'CTRL', false);
 		text.alignment = CENTERED;
 		text.setScale(0.4);
@@ -134,6 +117,54 @@ class ControlsSubState extends MusicBeatSubstate
 		grpBlacks.clear();
 		grpOptions.clear();
 		grpBinds.clear();
+
+		// Extra Keys：按当前键数页（curEKPage）动态生成多键动作列表。
+		// action 命名 "{mania}_key_{lane}"（如 "5_key_3" = 6 键第 4 列），按 lane 排序。
+		options = [[false, 'NOTES']];
+		var ekBinds:Array<Array<Dynamic>> = [];
+		ExtraKeysHandler.ensure();
+		for (k in ClientPrefs.keyBinds.keys())
+		{
+			var split:Array<String> = k.split('_');
+			if (split.length < 3) continue;
+			var idxPage:Int = Std.parseInt(split[0]);
+			// 静态平台下 parseInt 失败返回 0（split 已保证长度），用字符串判空兜底
+			if (split[2] == null) continue;
+			var nteIdx:Int = Std.parseInt(split[2]);
+			if (idxPage == curEKPage)
+				ekBinds.push([idxPage, nteIdx, k]);
+		}
+		ekBinds.sort(function(a, b) return Std.parseInt(a[1]) - Std.parseInt(b[1]));
+		for (what in ekBinds)
+			options.push([false, '${Std.string(what[0] + 1)}K ${Std.string(what[1] + 1)}', what[2], '${Std.string(what[0] + 1)} Keys Note ${Std.string(what[1] + 1)}']);
+
+		// 其余固定动作（UI / Reset / Volume / Debug / 重置默认）
+		var optionsTemplate:Array<Dynamic> = [
+			[false],
+			[true, 'UI'],
+			[true, 'Left', 'ui_left', 'UI Left'],
+			[true, 'Down', 'ui_down', 'UI Down'],
+			[true, 'Up', 'ui_up', 'UI Up'],
+			[true, 'Right', 'ui_right', 'UI Right'],
+			[true],
+			[true, 'Reset', 'reset', 'Reset'],
+			[true, 'Accept', 'accept', 'Accept'],
+			[true, 'Back', 'back', 'Back'],
+			[true, 'Pause', 'pause', 'Pause'],
+			[false],
+			[false, 'VOLUME'],
+			[false, 'Mute', 'volume_mute', 'Volume Mute'],
+			[false, 'Up', 'volume_up', 'Volume Up'],
+			[false, 'Down', 'volume_down', 'Volume Down'],
+			[false],
+			[false, 'DEBUG'],
+			[false, 'Key 1', 'debug_1', 'Debug Key #1'],
+			[false, 'Key 2', 'debug_2', 'Debug Key #2'],
+			[true],
+			[true],
+			[true, defaultKey]
+		];
+		for (thing in optionsTemplate) options.push(thing);
 
 		var myID:Int = 0;
 		for (i => option in options)
@@ -302,6 +333,17 @@ class ControlsSubState extends MusicBeatSubstate
 
 			if(controls.UI_UP_P || FlxG.gamepads.anyJustPressed(DPAD_UP) || FlxG.gamepads.anyJustPressed(LEFT_STICK_DIGITAL_UP)) updateText(-1);
 			else if(controls.UI_DOWN_P || FlxG.gamepads.anyJustPressed(DPAD_DOWN) || FlxG.gamepads.anyJustPressed(LEFT_STICK_DIGITAL_DOWN)) updateText(1);
+
+			// Extra Keys：Q/E 切换键数档位页（仅键盘模式）
+			if(onKeyboardMode && (FlxG.keys.justPressed.Q || FlxG.keys.justPressed.E))
+			{
+				curEKPage += FlxG.keys.justPressed.E ? 1 : -1;
+				if (curEKPage < 0) curEKPage = 0;
+				ExtraKeysHandler.ensure();
+				if (curEKPage > ExtraKeysHandler.instance.data.maxKeys) curEKPage = ExtraKeysHandler.instance.data.maxKeys;
+				createTexts();
+				FlxG.sound.play(Paths.sound('scrollMenu'));
+			}
 
 			if(FlxG.keys.justPressed.ENTER || FlxG.gamepads.anyJustPressed(START) || FlxG.gamepads.anyJustPressed(A))
 			{
@@ -485,6 +527,8 @@ class ControlsSubState extends MusicBeatSubstate
 
 	function updateText(?change:Int = 0)
 	{
+		// Extra Keys：按住 SHIFT 滚动加速 3 倍
+		if (onKeyboardMode && FlxG.keys.pressed.SHIFT) change *= 3;
 		curSelected = FlxMath.wrap(curSelected + change, 0, curOptions.length - 1);
 
 		var num:Int = curOptionsValid[curSelected];
@@ -522,6 +566,10 @@ class ControlsSubState extends MusicBeatSubstate
 		curAlt = false;
 		controllerSpr.animation.play(onKeyboardMode ? 'keyboard' : 'gamepad');
 		createTexts();
+
+		// Extra Keys：手柄模式不支持多键翻页，更新提示文案
+		if (tipTxt != null)
+			tipTxt.text = onKeyboardMode ? LanguageBasic.getPhrase('controls_ek_tip', 'Press Q/E to change the Extra Keys Page. Hold SHIFT to scroll 3x faster.') : LanguageBasic.getPhrase('controls_ek_tip_gamepad', 'No controller input is supported during gameplay.');
 	}
 
 	function updateAlt(?doSwap:Bool = false)

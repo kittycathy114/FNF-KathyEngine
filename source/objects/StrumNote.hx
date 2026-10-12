@@ -2,6 +2,18 @@ package objects;
 
 import backend.Conductor;
 import backend.animation.PsychAnimationController;
+import backend.ExtraKeysHandler;
+import backend.InputFormatter;
+import backend.Paths;
+
+import flixel.FlxSprite;
+import flixel.FlxBasic;
+import flixel.FlxCamera;
+import flixel.group.FlxGroup.FlxTypedGroup;
+import flixel.text.FlxText;
+import flixel.util.FlxTimer;
+import flixel.util.FlxColor;
+import flixel.tweens.FlxTween;
 
 import shaders.RGBPalette;
 import shaders.RGBPalette.RGBShaderReference;
@@ -162,9 +174,9 @@ class StrumNote extends FlxSprite
 			antialiasing = ClientPrefs.data.antialiasing;
 			setGraphicSize(Std.int(width * 0.7));
 
-			// 标准4键：按颜色方向决定 strum 前缀（LEFT/DOWN/UP/RIGHT）。
-			var style:Int = Note.styleIndex(noteData);
-			var strumName:String = ['LEFT', 'DOWN', 'UP', 'RIGHT'][style];
+			// 多键：按当前 mania 档位查 extrakeys.json 取 strum 前缀（LEFT/DOWN/UP/RIGHT/ROMBUS/CIRCLE）。
+			var mania:Int = (PlayState.SONG != null && PlayState.SONG.mania != null) ? PlayState.SONG.mania : 3;
+			var strumName:String = ExtraKeysHandler.instance.strumName(mania, noteData);
 			if (!hasFrame('arrow' + strumName)) strumName = 'UP';
 
 			var pressName:String = strumName.toLowerCase() + ' press';
@@ -244,5 +256,67 @@ class StrumNote extends FlxSprite
 		} else if(useRGBShader) {
 			rgbShader.enabled = (animation.curAnim != null && animation.curAnim.name != 'static');
 		}
+	}
+}
+
+/**
+ * 开局键位预览（复刻 Psych EK 的 KeybindShowcase）：
+ * 在每个玩家 strum 下方短暂显示该轨道绑定的键名，依次展示主/副绑定后自动销毁。
+ */
+class KeybindShowcase extends FlxTypedGroup<FlxBasic>
+{
+	public var background:FlxSprite;
+	public var keyText:FlxText;
+	public var keyCodes:Array<Int>;
+	public dynamic function onComplete():Void {}
+
+	public function new(x:Float, y:Float, keyCodes:Array<Int>, camera:FlxCamera, strumHalved:Float, mania:Int)
+	{
+		super();
+
+		this.keyCodes = keyCodes;
+
+		var xOffset:Float = x + strumHalved;
+		var size:Int = 20 - (mania - 3);
+		if (size < 10) size = 10;
+
+		keyText = new FlxText(xOffset + 4, y + 4, 0, InputFormatter.getKeyName(keyCodes[0]));
+		keyText.setFormat(Paths.font("vcr.ttf"), size, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		keyText.x -= keyText.width / 2;
+		xOffset = keyText.x;
+
+		background = new FlxSprite(xOffset - 4, y);
+		background.makeGraphic(Std.int(keyText.width + 8), Std.int(keyText.height + 8), 0xFF000000);
+		background.alpha = 0.5;
+
+		add(background);
+		add(keyText);
+
+		background.cameras = [camera];
+		keyText.cameras = [camera];
+
+		new FlxTimer().start(2, function(tmr:FlxTimer)
+		{
+			FlxTween.tween(keyText, {alpha: 0}, 0.5, {ease: FlxEase.linear, onComplete: function(t)
+			{
+				if (keyCodes.length > 1) keyText.text = InputFormatter.getKeyName(keyCodes[1]);
+				else keyText.text = '---';
+
+				FlxTween.tween(keyText, {alpha: 1}, 0.5);
+
+				keyText.x = x + strumHalved + 4;
+				keyText.x -= keyText.width / 2;
+				xOffset = keyText.x;
+				background.x = xOffset - 4;
+				background.makeGraphic(Std.int(keyText.width + 8), Std.int(keyText.height + 8), 0xFF000000);
+				new FlxTimer().start(2.5, function(tmr2:FlxTimer)
+				{
+					FlxTween.tween(keyText, {alpha: 0}, 0.5, {ease: FlxEase.linear, onComplete: function(t)
+					{
+						onComplete();
+					}});
+				});
+			}});
+		});
 	}
 }

@@ -9,6 +9,7 @@ import backend.Song;
 import backend.HitSoundPool;
 import backend.Language.ScoreLanguage;
 import backend.Rating;
+import backend.ExtraKeysHandler;
 
 #if MODS_ALLOWED
 import sys.FileSystem;
@@ -57,6 +58,7 @@ import shaders.ErrorHandledShader;
 import objects.VideoSprite;
 import objects.Note.EventNote;
 import objects.Note.PreloadedChartNote;
+import objects.StrumNote.KeybindShowcase;
 import objects.*;
 import states.stages.*;
 import states.stages.objects.*;
@@ -1954,11 +1956,28 @@ isReplaying = false;
 			if (skipCountdown || startOnTime > 0) skipArrowStartTween = true;
 
 			canPause = true;
-			applyMania(3);
+			applyMania((SONG != null && SONG.mania != null) ? SONG.mania : 3);
 			generateStaticArrows(0);
 			generateStaticArrows(1);
 		createLaneCovers();
 		createHoldCovers();
+
+		// Extra Keys：开局键位预览（EK KeybindShowcase）——玩家侧每个 strum 下方短暂显示绑定键名
+		if (ClientPrefs.data.showKeyPreview && !playOpponent)
+		{
+			for (i in 0...playerStrums.members.length)
+			{
+				var st:StrumNote = playerStrums.members[i];
+				var keyCodes:Array<FlxKey> = (i < keysArray.length) ? ClientPrefs.keyBinds.get(keysArray[i]) : null;
+				if (keyCodes == null || keyCodes.length < 1) continue;
+				var kc:KeybindShowcase = new KeybindShowcase(st.x,
+					ClientPrefs.data.downScroll ? st.y - 30 : st.y + st.height + 5,
+					keyCodes, camHUD, st.width / 2, (SONG != null && SONG.mania != null) ? SONG.mania : 3);
+				kc.onComplete = function() remove(kc);
+				add(kc);
+			}
+		}
+
 		for (i in 0...playerStrums.length) {
 				setOnScripts('defaultPlayerStrumX' + i, playerStrums.members[i].x);
 				setOnScripts('defaultPlayerStrumY' + i, playerStrums.members[i].y);
@@ -2578,6 +2597,11 @@ tempScore += '${lblScore}: ${songScore}';
 	{
 		// FlxG.log.add(ChartParser.parse());
 		songSpeed = PlayState.SONG.speed;
+
+		// Extra Keys：在解析谱面前先按歌曲 mania 档位配置好列数/颜色/键位，
+		// 否则下面 generateSongLegacy/Optimized 里的 sectCols 会按 4 键硬解析多键谱面。
+		applyMania((SONG != null && SONG.mania != null) ? SONG.mania : 3);
+
 		songSpeedType = ClientPrefs.getGameplaySetting('scrolltype');
 		switch(songSpeedType)
 		{
@@ -2859,7 +2883,7 @@ tempScore += '${lblScore}: ${songScore}';
 				daBpm = section.bpm;
 
 			// 小节列数（回退原生4键：固定4列，按4取模）
-			var sectCols:Int = 4;
+			var sectCols:Int = totalColumns;
 
 			// 防御：个别 section 可能缺 sectionNotes 字段，避免 Null Object Reference 崩溃
 			if (section.sectionNotes == null)
@@ -3016,7 +3040,7 @@ tempScore += '${lblScore}: ${songScore}';
 				daBpm = section.bpm;
 
 			// 小节列数（回退原生4键：固定4列，按4取模）
-			var sectCols:Int = 4;
+			var sectCols:Int = totalColumns;
 
 			// 防御：个别 section 可能缺 sectionNotes 字段，避免 Null Object Reference 崩溃
 			if (section.sectionNotes == null)
@@ -3446,7 +3470,10 @@ tempScore += '${lblScore}: ${songScore}';
 		return cover;
 	}
 
-	/** 应用键位配置：键数、缩放、配色前缀、sing 动画、键位 action（原生固定 4 键）。 */
+	/** 应用键位配置：键数、缩放、配色前缀、sing 动画、键位 action。
+	 *  从 extrakeys.json 读取当前 mania 档位的列配置，动态填充 Note.colArray / singAnimations / keysArray。
+	 *  mania=3（4键）时与旧硬编码行为完全一致，保证老谱面 100% 向后兼容。
+	 */
 	public function applyMania(mania:Int):Void
 	{
 		if (startArrowSkin == null)
@@ -3455,18 +3482,49 @@ tempScore += '${lblScore}: ${songScore}';
 			startSplashSkin = PlayState.SONG.splashSkin;
 		}
 
+		// 确保 EK 配置已加载
+		ExtraKeysHandler.ensure();
+		var ek = ExtraKeysHandler.instance.data;
+
 		curMania = mania;
 		totalColumns = mania + 1;
 		strumScale = 1;
 
-		// colArray：noteData -> 颜色前缀（标准4键）
-		Note.colArray = ['purple', 'blue', 'green', 'red'];
+		// 兜底：extrakeys.json 缺失时退回 4 键
+		if (ek == null || ek.keys == null || ek.keys.length <= mania) {
+			Note.colArray = ['purple', 'blue', 'green', 'red'];
+			singAnimations = ['singLEFT', 'singDOWN', 'singUP', 'singRIGHT'];
+			keysArray = ['note_left', 'note_down', 'note_up', 'note_right'];
+			return;
+		}
 
-		// sing 动画映射（标准4键）
-		singAnimations = ['singLEFT', 'singDOWN', 'singUP', 'singRIGHT'];
+		// 按当前 mania 档位逐列填充：
+		//   colArray[i]    = 该列贴图前缀（purple/blue/green/red/rombus/circle...）
+		//   singAnimations[i] = 该列 sing 动画名（singLEFT/singDOWN/...）
+		//   keysArray[i]   = 该列输入 action 名（"{mania}_key_{i}"，对应 ClientPrefs.keyBinds）
+		var newColArray:Array<String> = [];
+		var newSingAnims:Array<String> = [];
+		var newKeysArray:Array<String> = [];
+		var mode:EKManiaMode = ek.keys[mania];
+		var laneCount:Int = (mode != null && mode.notes != null) ? mode.notes.length : 4;
 
-		// 键位 action 名（固定4键）
-		keysArray = ['note_left', 'note_down', 'note_up', 'note_right'];
+		for (i in 0...laneCount)
+		{
+			var globalIdx:Int = (mode.notes != null && i < mode.notes.length) ? mode.notes[i] : i;
+			var anim:EKAnimation = (ek.animations != null && globalIdx >= 0 && globalIdx < ek.animations.length)
+				? ek.animations[globalIdx] : null;
+
+			newColArray.push(anim != null ? anim.note : 'purple');
+			newSingAnims.push(anim != null ? ('sing' + anim.sing) : 'singLEFT');
+			newKeysArray.push(Std.string(mania) + '_key_' + i);
+		}
+
+		Note.colArray = newColArray;
+		singAnimations = newSingAnims;
+		keysArray = newKeysArray;
+
+		trace('[EK] applyMania(' + mania + ') -> columns=' + laneCount
+			+ ' colArray=[' + newColArray.join(',') + ']');
 	}
 
 	override function openSubState(SubState:FlxSubState)
@@ -6458,10 +6516,7 @@ tempScore += '${lblScore}: ${songScore}';
 			return; // P 暂停按钮不触发音符
 
 		var buttonCode:Int = (button.IDs[0].toString().startsWith('NOTE')) ? button.IDs[0] : button.IDs[1];
-		// 多键额外音符 NOTE_4..NOTE_8 -> 音符索引 4..8
-		var note4:Int = mobile.input.MobileInputID.NOTE_4;
-		if (buttonCode >= note4)
-			buttonCode = 4 + (buttonCode - note4);
+		buttonCode = noteCodeToIndex(buttonCode); // 多键 NOTE_4..NOTE_17 -> 音符索引 4..17
 		callOnScripts('onButtonPressPre', [buttonCode]);
 		if (button.justPressed) keyPressed(buttonCode);
 		callOnScripts('onButtonPress', [buttonCode]);
@@ -6475,13 +6530,19 @@ tempScore += '${lblScore}: ${songScore}';
 			return; // P 暂停按钮不触发音符
 
 		var buttonCode:Int = (button.IDs[0].toString().startsWith('NOTE')) ? button.IDs[0] : button.IDs[1];
-		// 多键额外音符 NOTE_4..NOTE_8 -> 音符索引 4..8
-		var note4:Int = mobile.input.MobileInputID.NOTE_4;
-		if (buttonCode >= note4)
-			buttonCode = 4 + (buttonCode - note4);
+		buttonCode = noteCodeToIndex(buttonCode); // 多键 NOTE_4..NOTE_17 -> 音符索引 4..17
 		callOnScripts('onButtonReleasePre', [buttonCode]);
 		if(buttonCode > -1) keyReleased(buttonCode);
 		callOnScripts('onButtonRelease', [buttonCode]);
+	}
+
+	/** 触屏按钮的 NOTE_* 枚举值 -> 音符列索引（NOTE_LEFT=0..NOTE_RIGHT=3，NOTE_4..NOTE_17=4..17） */
+	private static function noteCodeToIndex(code:Int):Int
+	{
+		if (code >= 0 && code <= 3) return code; // NOTE_LEFT..NOTE_RIGHT
+		if (code >= Std.int(MobileInputID.NOTE_9)) return 9 + (code - Std.int(MobileInputID.NOTE_9)); // 51..59 -> 9..17
+		if (code >= Std.int(MobileInputID.NOTE_4)) return 4 + (code - Std.int(MobileInputID.NOTE_4)); // 44..48 -> 4..8
+		return code;
 	}
 
 	// Hold notes

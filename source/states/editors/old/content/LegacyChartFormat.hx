@@ -57,6 +57,9 @@ class LegacyChartFormat
 		if (song.notes == null)
 			return;
 
+		// Extra Keys：列数从 mania 推（legacy 无 mania 字段时兜底 4 键）。
+		var sectCols:Int = (song.mania != null) ? song.mania + 1 : 4;
+
 		for (section in song.notes)
 		{
 			if (section == null || section.sectionNotes == null)
@@ -69,8 +72,8 @@ class LegacyChartFormat
 					continue; // legacy inline event, has no lane
 
 				// Inverse of Song.convert(): keep the column, re-encode the side relative to the section.
-				var mustPress:Bool = (data < 4);
-				note[1] = (data % 4) + ((mustPress == section.mustHitSection) ? 0 : 4);
+				var mustPress:Bool = (data < sectCols);
+				note[1] = (data % sectCols) + ((mustPress == section.mustHitSection) ? 0 : sectCols);
 			}
 		}
 	}
