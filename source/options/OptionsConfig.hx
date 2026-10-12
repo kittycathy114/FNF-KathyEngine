@@ -35,10 +35,20 @@ class OptionsConfig
 	// X position of the option label. Value/keybind columns are offset to the right.
 	public static final SUBMENU_ITEM_X:Int = 220;
 	// Font size for the option label and its value/keybind text.
+	// 移动端适当加大字号与行距，提升小屏可读性与触控命中面积。
+	#if mobile
+	public static final SUBMENU_ITEM_SIZE:Int = 38;
+	public static final SUBMENU_VALUE_SIZE:Int = 38;
+	#else
 	public static final SUBMENU_ITEM_SIZE:Int = 32;
 	public static final SUBMENU_VALUE_SIZE:Int = 32;
+	#end
 	// Vertical distance between two consecutive list items.
+	#if mobile
+	public static final SUBMENU_ITEM_SPACING:Float = 64;
+	#else
 	public static final SUBMENU_ITEM_SPACING:Float = 56;
+	#end
 	// Selected item is placed at this fraction of the screen height (keeps room for the description box).
 	public static final SUBMENU_SELECTED_Y_RATIO:Float = 0.40;
 	// Smoothing factor for the list scroll/scale/alpha animation (higher = snappier).
@@ -48,6 +58,25 @@ class OptionsConfig
 	public static final SUBMENU_NORMAL_SCALE:Float = 1.0;
 	// How far (px) the selected item shifts to the right for emphasis.
 	public static final SUBMENU_SELECTED_OFFSET_X:Float = 30;
+	// 选中行在扇形锚点上再额外右移的量，进一步把焦点从列表里"顶"出来。
+	public static final SUBMENU_SELECTED_EXTRA_OFFSET_X:Float = 18;
+	// Freeplay 式连续水平投影：离选中行每远一行，标签向左缩进多少 px。
+	// 选中行固定在最右(listBaseX + 选中偏移合计)，越靠上/下的项越往左缩，
+	// 形成扇形纵深；替代旧版"选中 +30、其余全部齐平"的生硬跳变。
+	// 桌面端漂移强度翻倍(32)，移动端维持 16 现状。
+	#if mobile
+	public static final SUBMENU_X_DRIFT_PER_ITEM:Float = 16;
+	#else
+	public static final SUBMENU_X_DRIFT_PER_ITEM:Float = 32;
+	#end
+	// 扇形边缘的"弧度"系数：对 |距离| 做幂次变换。
+	// =1 时为直线(三角)；<1 时近处弯得急、远处收平，轨迹呈弧形(更圆)。
+	// 桌面端更弯(0.7)，移动端维持 0.8 现状。
+	#if mobile
+	public static final SUBMENU_X_DRIFT_CURVE:Float = 0.8;
+	#else
+	public static final SUBMENU_X_DRIFT_CURVE:Float = 0.7;
+	#end
 
 	// Opacity of the selected vs non-selected list items.
 	// Non-selected uses a flat value (no distance falloff) so far items stay readable.

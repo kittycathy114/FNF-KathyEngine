@@ -61,6 +61,11 @@ class OptionsState extends MusicBeatState
 	var selectorRight:FlxText;
 	var descriptionText:FlxText;
 	var sideGif:GifSprite = null;
+	var titleText:FlxText;
+
+	private var _sideGifOutTween:FlxTween = null;
+	private var _sideGifHomeY:Float = 0; // sideGif 静止时的 y
+	private var _titleHomeX:Float = 0;   // titleText 静止时的 x
 
 	// HaxeUI 右上角按钮（取代原来的 adminButton / clearFilesButton）
 	private var haxeUITopRightButton:Button = null;
@@ -190,12 +195,22 @@ class OptionsState extends MusicBeatState
 	function openSelectedSubstate(label:String) {
 		_inSubState = true; // 标记进入子状态，阻止主界面UI操作
 
-		if (label != Language.get("adjust_delay_combo") && label != Language.get("adjust_rating_offset") && label != Language.get("extra_options")) {
-			removeTouchPad();
-			persistentUpdate = false;
-		} else if (label == Language.get("extra_options")) {
-			persistentUpdate = true;
+		// 始终保持父界面 update 运行（persistentUpdate = true），
+		// 这样背景网格、sideGif 等装饰元素持续刷新，进出子界面更连贯
+		persistentUpdate = true;
+		removeTouchPad();
+
+		// 子界面打开时禁用主界面输入
+		allowInput = false;
+
+		// 隐藏当前选中的选项文本（不隐藏 grpOptions 整体，这样退出时直接恢复即可）
+		if (grpOptions != null && curSelected >= 0 && curSelected < grpOptions.length)
+		{
+			grpOptions.members[curSelected].visible = false;
 		}
+
+		// 打开 Graphics 子界面时 sideGif 向上飞出 + 标题滑正中（进子界面后才触发，高亮不触发）
+		triggerSideGifOut(label == Language.get("graphics"));
 
 		var substateMap:Map<String, () -> Void> = [
 			Language.get("note_colors") => () -> openSubState(ClientPrefs.data.arrowColorMode == 'HSV' ? new options.NotesColorSubStateLegacy() : new options.NotesColorSubState()),
@@ -203,10 +218,7 @@ class OptionsState extends MusicBeatState
 			Language.get("graphics") => () -> openSubState(new options.GraphicsSettingsSubState()),
 			Language.get("visuals") => () -> openSubState(new options.VisualsSettingsSubState()),
 			Language.get("gameplay") => () -> openSubState(new options.GameplaySettingsSubState()),
-			Language.get("extra_options") => () -> {
-				persistentUpdate = true;
-				openSubState(new options.ExtraGameplaySettingSubState());
-			},
+			Language.get("extra_options") => () -> openSubState(new options.ExtraGameplaySettingSubState()),
 			Language.get("spam_chart") => () -> openSubState(new options.SpamChartSettingsSubState()),
 			Language.get("compatibility") => () -> openSubState(new options.CompatibilitySettingsSubState()),
 			Language.get("adjust_delay_combo") => () -> MusicBeatState.switchState(new options.NoteOffsetState()),
@@ -215,11 +227,10 @@ class OptionsState extends MusicBeatState
 		];
 		
 		#if (cpp && windows && !mobile)
-		substateMap[Language.get("window_manager")] = () -> {
-			persistentUpdate = true;
-			MusicBeatState.switchState(new states.WindowManagerState());
-		};
-		#end
+			substateMap[Language.get("window_manager")] = () -> {
+				MusicBeatState.switchState(new states.WindowManagerState());
+			};
+	#end
 
 		if (substateMap.exists(label)) {
 			substateMap.get(label)();
@@ -246,7 +257,7 @@ class OptionsState extends MusicBeatState
 		diagTick('bg(menuDesat)');
 
 		// 顶部居中大标题（跟随语言），使用自动尺寸以便精确测量文本宽度来定位 GIF
-		var titleText:FlxText = new FlxText(0, 40, 0, Language.get('options_title'), 48);
+		titleText = new FlxText(0, 40, 0, Language.get('options_title'), 48);
 		titleText.setFormat(Paths.font(Language.get('game_font')), 48, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		titleText.borderSize = 2;
 		titleText.scrollFactor.set();
@@ -272,9 +283,14 @@ class OptionsState extends MusicBeatState
 			sideGif.setGraphicSize(96);
 			sideGif.updateHitbox();
 			sideGifBaseScale = sideGif.scale.x; // 记录静止缩放（setGraphicSize(96) 后通常 < 1）
-			// 用默认左上角原点定位（origin 保持 0,0），与“添加动效前”完全一致：位于“设置”文本左侧，留 12px 间隙，垂直居中
+			// 用默认左上角原点定位（origin 保持 0,0），与"添加动效前"完全一致：位于"设置"文本左侧，留 12px 间隙，垂直居中
 			sideGif.x = titleText.x - sideGif.width - 12;
 			sideGif.y = titleText.y + (titleText.height - sideGif.height) / 2;
+			// 记录静止基准位置，供飞出/飞回动画使用
+			_sideGifHomeY = sideGif.y;
+			// titleText 基准 x：sideGif 在左侧时，让 titleText 故意偏右 30px，飞出后滑回真正正中
+			_titleHomeX = (FlxG.width - titleText.width) / 2 + 30;
+			titleText.x = _titleHomeX;
 			// 加载完成后渐显，避免瞬间弹出
 			sideGif.alpha = 0;
 			sideGif.visible = true;
@@ -470,6 +486,15 @@ class OptionsState extends MusicBeatState
 		persistentUpdate = true;
 		allowInput = true;
 		_inSubState = false; // 退出子状态
+
+		// 恢复被隐藏的选中项可见性
+		if (grpOptions != null && curSelected >= 0 && curSelected < grpOptions.length)
+		{
+			grpOptions.members[curSelected].visible = true;
+		}
+
+		// 退出子界面后 sideGif 飞回原位 + 标题回位
+		triggerSideGifOut(false);
 	}
 
 	var exiting = false;
@@ -758,6 +783,31 @@ class OptionsState extends MusicBeatState
 
 		updateDescriptionText();
 		FlxG.sound.play(Paths.sound('scrollMenu'));
+	}
+
+	// sideGif 飞出/回位动画
+	private function triggerSideGifOut(doOut:Bool):Void
+	{
+		if (sideGif == null || !sideGif.exists || titleText == null) return;
+
+		// 如果 gif 还没初始化完成（_sideGifHomeY 为 0 且 sideGif.visible 还为 false），跳过
+		if (sideGif.visible == false && _sideGifHomeY == 0) return;
+
+		if (_sideGifOutTween != null)
+		{
+			_sideGifOutTween.cancel();
+			_sideGifOutTween.destroy();
+			_sideGifOutTween = null;
+		}
+
+		var targetY:Float = doOut ? -sideGif.height - 20 : _sideGifHomeY;
+		var targetX:Float = doOut ? (FlxG.width - titleText.width) / 2 : _titleHomeX;
+		var dur:Float = 0.35;
+
+		_sideGifOutTween = FlxTween.tween(sideGif, { y: targetY, alpha: doOut ? 0 : 1 }, dur,
+			{ ease: FlxEase.quadInOut,
+			  onComplete: function(_) { _sideGifOutTween = null; } });
+		FlxTween.tween(titleText, { x: targetX }, dur, { ease: FlxEase.quadInOut });
 	}
 
 	// 更新描述文本

@@ -2,6 +2,7 @@ package backend;
 
 import com.yagp.Gif;
 import com.yagp.GifDecoder;
+import flixel.util.FlxTimer;
 import openfl.utils.Assets;
 import openfl.utils.ByteArray;
 #if sys
@@ -42,9 +43,11 @@ class GifAssets
 		if (cached != null)
 		{
 			#if sys
-			trace('[GifAssets] cache hit: $key');
+			trace('[GifAssets] cache hit (async): $key');
 			#end
-			onComplete(cached);
+			// 强制异步回调：避免缓存对象被旧 GifPlayer 改坏内部帧状态时，
+			// 同步 new GifPlayer(gif) 在构造函数中间崩溃（二次进入子设置界面）
+			new FlxTimer().start(0, function(_:FlxTimer) { onComplete(cached); });
 			return;
 		}
 

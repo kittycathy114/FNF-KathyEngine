@@ -44,7 +44,7 @@ class ExtraGameplaySettingSubState extends BaseOptionsMenu
 
 	public function new()
 	{
-		title = 'Extra Options\n\nNot Done';
+		title = Language.get('extra_menu_title');
 		rpcTitle = 'Extra Gameplay Settings Menu'; //for Discord Rich Presence
 
 		// BOOL 类型设置

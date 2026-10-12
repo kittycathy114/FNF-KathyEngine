@@ -21,6 +21,12 @@ class GifSprite extends FlxSprite
 	 */
 	public var disposeGifOnDestroy:Bool = true;
 
+	/**
+	 * 跳过 GIF 帧更新（冻结在当前帧，当作静态贴图使用）。
+	 * 用于只需 GIF 第一帧做装饰、不想有帧播放开销的场景。
+	 */
+	public var skipPlayerUpdate:Bool = false;
+
 	public function new(?x:Float = 0, ?y:Float = 0)
 	{
 		super(x, y);
@@ -45,7 +51,7 @@ class GifSprite extends FlxSprite
 
 	public override function update(elapsed:Float):Void
 	{
-		if (player != null)
+		if (player != null && !skipPlayerUpdate)
 			player.update(elapsed);
 
 		super.update(elapsed);

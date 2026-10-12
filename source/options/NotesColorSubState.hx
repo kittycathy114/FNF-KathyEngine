@@ -35,10 +35,10 @@ class NotesColorSubState extends MusicBeatSubstate
 	var colorWheel:FlxSprite;
 	var colorWheelSelector:FlxSprite;
 
-	var alphabetR:Alphabet;
-	var alphabetG:Alphabet;
-	var alphabetB:Alphabet;
-	var alphabetHex:Alphabet;
+	var alphabetR:FlxText;
+	var alphabetG:FlxText;
+	var alphabetB:FlxText;
+	var alphabetHex:FlxText;
 
 	var modeBG:FlxSprite;
 	var notesBG:FlxSprite;
@@ -91,10 +91,14 @@ class NotesColorSubState extends MusicBeatSubstate
 		bg.alpha = 0.25;
 		add(bg);
 		
-		var text:Alphabet = new Alphabet((controls.mobileC) ? 44 : 50, 86, (controls.mobileC) ? 'PRESS' : 'CTRL', false);
-		text.alignment = CENTERED;
-		text.setScale(0.4);
-		add(text);
+		var tipLabel:String = (controls.mobileC) ? 'PRESS' : 'CTRL';
+		var tipLabelSize:Int = controls.mobileC ? 44 : 50;
+		var titleLabel:FlxText = new FlxText((controls.mobileC) ? 44 : 50, 86, 0, tipLabel, tipLabelSize);
+		titleLabel.setFormat(Paths.font(Language.get('game_font')), tipLabelSize, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		titleLabel.borderSize = 2;
+		titleLabel.scale.set(0.4);
+		titleLabel.antialiasing = ClientPrefs.data.antialiasing;
+		add(titleLabel);
 
 		copyButton = new FlxSprite(760, 50).loadGraphic(Paths.image('noteColorMenu/copy'));
 		copyButton.alpha = 0.6;
@@ -130,13 +134,13 @@ class NotesColorSubState extends MusicBeatSubstate
 
 		var txtX = 980;
 		var txtY = 90;
-		alphabetR = makeColorAlphabet(txtX - 100, txtY);
+		alphabetR = makeColorText(txtX - 100, txtY);
 		add(alphabetR);
-		alphabetG = makeColorAlphabet(txtX, txtY);
+		alphabetG = makeColorText(txtX, txtY);
 		add(alphabetG);
-		alphabetB = makeColorAlphabet(txtX + 100, txtY);
+		alphabetB = makeColorText(txtX + 100, txtY);
 		add(alphabetB);
-		alphabetHex = makeColorAlphabet(txtX, txtY - 55);
+		alphabetHex = makeColorText(txtX, txtY - 55);
 		add(alphabetHex);
 		hexTypeLine = new FlxSprite(0, 20).makeGraphic(5, 62, FlxColor.WHITE);
 		hexTypeLine.visible = false;
@@ -156,13 +160,13 @@ class NotesColorSubState extends MusicBeatSubstate
 		} else
 			reset = "RESET";
 
-		var tip:FlxText = new FlxText(tipX, tipY, 0, LanguageBasic.getPhrase('note_colors_tip', 'Press {1} to Reset the selected Note Part.', [reset]), 16);
-		tip.setFormat(Paths.font("vcr.ttf"), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		var tip:FlxText = new FlxText(tipX, tipY, 0, Language.get('note_colors_tip', [reset]), 16);
+		tip.setFormat(Paths.font(Language.get('game_font')), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		tip.borderSize = 2;
 		add(tip);
 
 		tipTxt = new FlxText(tipX, tipY + 24, 0, '', 16);
-		tipTxt.setFormat(Paths.font("vcr.ttf"), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		tipTxt.setFormat(Paths.font(Language.get('game_font')), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		tipTxt.borderSize = 2;
 		add(tipTxt);
 		updateTip();
@@ -186,9 +190,9 @@ class NotesColorSubState extends MusicBeatSubstate
 
 	function updateTip()
 	{
-		var key:String = !controls.controllerMode ? LanguageBasic.getPhrase('note_colors_shift', 'Shift') : LanguageBasic.getPhrase('note_colors_lb', 'Left Shoulder Button');
+		var key:String = !controls.controllerMode ? Language.get('note_colors_shift') : Language.get('note_colors_lb');
 		if (!controls.mobileC)
-			tipTxt.text = LanguageBasic.getPhrase('note_colors_hold_tip', 'Hold {1} + Press RESET key to fully reset the selected Note.', [key]);
+			tipTxt.text = Language.get('note_colors_hold_tip', [key]);
 	}
 
 	var _storedColor:FlxColor;
@@ -435,16 +439,14 @@ class NotesColorSubState extends MusicBeatSubstate
 				FlxG.sound.play(Paths.sound('scrollMenu'), 0.6);
 			}
 			else if(pointerY() >= hexTypeLine.y && pointerY() < hexTypeLine.y + hexTypeLine.height &&
-					Math.abs(pointerX() - 1000) <= 84)
-			{
-				hexTypeNum = 0;
-				for (letter in alphabetHex.letters)
+						Math.abs(pointerX() - 1000) <= 84)
 				{
-					if(letter.x - letter.offset.x + letter.width <= pointerX()) hexTypeNum++;
-					else break;
-				}
-				if(hexTypeNum > 5) hexTypeNum = 5;
-				hexTypeLine.visible = true;
+					// FlxText 没有 .letters 数组，用平均字符宽度估算光标落点
+					var charW:Float = alphabetHex.width / Math.max(1, alphabetHex.text.length);
+					hexTypeNum = Math.floor((pointerX() - alphabetHex.x) / charW);
+					if(hexTypeNum < 0) hexTypeNum = 0;
+					if(hexTypeNum > 5) hexTypeNum = 5;
+					hexTypeLine.visible = true;
 				centerHexTypeLine();
 			}
 			else holdingOnObj = null;
@@ -535,18 +537,8 @@ class NotesColorSubState extends MusicBeatSubstate
 
 	function centerHexTypeLine()
 	{
-		//trace(hexTypeNum);
-		if(hexTypeNum > 0)
-		{
-			var letter = alphabetHex.letters[hexTypeNum-1];
-			hexTypeLine.x = letter.x - letter.offset.x + letter.width;
-		}
-		else
-		{
-			var letter = alphabetHex.letters[0];
-			hexTypeLine.x = letter.x - letter.offset.x;
-		}
-		hexTypeLine.x += hexTypeLine.width;
+		var charW:Float = alphabetHex.width / Math.max(1, alphabetHex.text.length);
+		hexTypeLine.x = alphabetHex.x + hexTypeNum * charW + hexTypeLine.width;
 		hexTypeVisibleTimer = 0;
 	}
 
@@ -577,13 +569,14 @@ class NotesColorSubState extends MusicBeatSubstate
 		FlxG.sound.play(Paths.sound('scrollMenu'));
 	}
 
-	// alphabets
-	function makeColorAlphabet(x:Float = 0, y:Float = 0):Alphabet
+	// 颜色值/hex 数字文本（替代 Alphabet 精灵图，大幅提速且支持所有 glyph）
+	function makeColorText(x:Float = 0, y:Float = 0):FlxText
 	{
-		var text:Alphabet = new Alphabet(x, y, '', true);
-		text.alignment = CENTERED;
-		text.setScale(0.6);
-		add(text);
+		var text:FlxText = new FlxText(x - 90, y, 180, '', 45);
+		text.setFormat(Paths.font(Language.get('game_font')), 45, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		text.borderSize = 2.4;
+		text.scale.set(0.6);
+		text.antialiasing = ClientPrefs.data.antialiasing;
 		return text;
 	}
 
@@ -697,7 +690,7 @@ class NotesColorSubState extends MusicBeatSubstate
 		alphabetG.text = Std.string(color.green);
 		alphabetB.text = Std.string(color.blue);
 		alphabetHex.text = color.toHexString(false, false);
-		for (letter in alphabetHex.letters) letter.color = color;
+		alphabetHex.color = color; // FlxText 整体着色，替代原来遍历 .letters 逐个设色
 
 		colorWheel.color = FlxColor.fromHSB(0, 0, color.brightness);
 		colorWheelSelector.setPosition(colorWheel.x + colorWheel.width/2, colorWheel.y + colorWheel.height/2);

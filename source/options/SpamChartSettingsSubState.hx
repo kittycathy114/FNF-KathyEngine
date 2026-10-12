@@ -4,7 +4,7 @@ class SpamChartSettingsSubState extends BaseOptionsMenu
 {
 	public function new()
 	{
-		title = LanguageBasic.getPhrase('spam_chart_menu', 'Spam Chart Settings');
+		title = Language.get('spam_chart_menu');
 		rpcTitle = 'Spam Chart Settings Menu'; //for Discord Rich Presence
 
 		// ===== 高密度谱面（SPAM）性能优化 =====

@@ -52,9 +52,10 @@ class BaseOptionsMenu extends MusicBeatSubstate
 
 	private var _optionsBuildIndex:Int = 0;
 	private var _optionsBuilt:Bool = false;
-	private var _buildPerFrame:Int = 1;
-	private var _loadingText:FlxText = null;
 	private var _grid:FlxBackdrop;
+	private var _titleText:FlxText;
+	private var _titleBaseY:Float;
+	private var _titlePhase:Float = 0;
 
 	public var title:String;
 	public var rpcTitle:String;
@@ -88,6 +89,16 @@ class BaseOptionsMenu extends MusicBeatSubstate
 		_grid.visible = false;
 		add(_grid);
 
+		// 标题先 add，确保在选项图层下方（被滚动的选项覆盖）
+		_titleText = new FlxText(75, 45, 0, title, 45);
+		_titleText.setFormat(Paths.font(Language.get('game_font')), 45, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		_titleText.borderSize = 2.4;
+		_titleText.antialiasing = ClientPrefs.data.antialiasing;
+		_titleText.alpha = 0.4;
+		_titleText.scrollFactor.set(); // 标题固定在屏幕，不随相机滚动
+		_titleBaseY = 45;
+		add(_titleText);
+
 		// avoids lagspikes while scrolling through menus!
 		grpOptions = new FlxTypedGroup<FlxText>();
 		add(grpOptions);
@@ -115,43 +126,25 @@ class BaseOptionsMenu extends MusicBeatSubstate
 		add(candidateBG);
 		add(candidateLines);
 
-		var titleText:Alphabet = new Alphabet(75, 45, title, true);
-		titleText.setScale(0.6);
-		titleText.alpha = 0.4;
-		add(titleText);
-
 		descText = new FlxText(50, 600, 1180, "", 32);
 		descText.setFormat(Paths.font(Language.get('game_font')), 32, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		descText.scrollFactor.set();
 		descText.borderSize = 2.4;
 		add(descText);
 
-		// 加载提示文字
-		_loadingText = new FlxText(20, 0, 0, 'Loading...\nPlease wait...', 24);
-		_loadingText.setFormat(Paths.font("vcr.ttf"), 36, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
-		_loadingText.scrollFactor.set();
-		_loadingText.borderSize = 2;
-		_loadingText.antialiasing = ClientPrefs.data.antialiasing;
-		_loadingText.y = 100;
-		_loadingText.x = FlxG.width - _loadingText.width - 100;
-		add(_loadingText);
+		// keybindManager 和 touchPad 延后到 onOptionsBuilt 才创建，避免拖慢构造函数
 
-		// Initialize keybind manager
-		keybindManager = new KeybindManager();
-
-		addTouchPad('LEFT_FULL', 'A_B_C');
-		addTouchPadCamera();
-
-		// 分帧构建选项，避免单帧创建大量 Alphabet sprite 导致卡顿
+		// 立即一次性构建所有选项，彻底消除分帧延迟
 		_optionsBuildIndex = 0;
 		_optionsBuilt = false;
 		if (optionsArray == null) optionsArray = [];
+		while (!_optionsBuilt)
+			buildNextOptions();
 	}
 
 	private function buildNextOptions():Void
 	{
-		var count:Int = 0;
-		while (_optionsBuildIndex < optionsArray.length && count < _buildPerFrame)
+		while (_optionsBuildIndex < optionsArray.length)
 		{
 			var i:Int = _optionsBuildIndex;
 			var optionText:FlxText = new FlxText(0, 0, 0, optionsArray[i].name, OptionsConfig.SUBMENU_ITEM_SIZE);
@@ -200,7 +193,6 @@ class BaseOptionsMenu extends MusicBeatSubstate
 			}
 
 			_optionsBuildIndex++;
-			count++;
 		}
 
 		if (_optionsBuildIndex >= optionsArray.length)
@@ -215,24 +207,16 @@ class BaseOptionsMenu extends MusicBeatSubstate
 
 	public function onOptionsBuilt():Void
 	{
+		// 选项构建完成后再初始化 keybindManager 和 touchPad，避免拖慢构造函数
+		keybindManager = new KeybindManager();
+		addTouchPad('LEFT_FULL', 'A_B_C');
+		addTouchPadCamera();
+
 		if (_grid != null)
 		{
 			_grid.visible = true;
 			_grid.alpha = 0;
 			FlxTween.tween(_grid, {alpha: 1}, 0.5, {ease: FlxEase.quadOut});
-		}
-
-		if (_loadingText != null)
-		{
-			_loadingText.text = LanguageBasic.getPhrase('done', 'Done');
-			FlxTween.tween(_loadingText, {alpha: 0, y: _loadingText.y + 20}, 0.5, {ease: FlxEase.quadIn, onComplete: function(tween:FlxTween) {
-				if (_loadingText != null)
-				{
-					remove(_loadingText);
-					_loadingText.destroy();
-					_loadingText = null;
-				}
-			}});
 		}
 	}
 
@@ -267,15 +251,15 @@ class BaseOptionsMenu extends MusicBeatSubstate
 #end
 	override function update(elapsed:Float)
 	{
-		if (!_optionsBuilt)
-		{
-			buildNextOptions();
-			super.update(elapsed);
-			return;
-		}
-
 		updateItemLayout(elapsed);
 		super.update(elapsed);
+
+		// 标题浮动：sin 波上下轻微漂移（振幅 4px，周期 3 秒）
+		if (_titleText != null)
+		{
+			_titlePhase += elapsed;
+			_titleText.y = _titleBaseY + Math.sin(_titlePhase * 2 * Math.PI / 3) * 4;
+		}
 
 		// 按住 Shift 时快速滚动（每次跳 4 项，与 LanguageSubState 一致）
 		var mult:Int = (FlxG.keys.pressed.SHIFT) ? 4 : 1;
@@ -825,8 +809,14 @@ class BaseOptionsMenu extends MusicBeatSubstate
 			// Y 位置由平滑滚动位置驱动，全列一致缓动/跟手，无需逐行吸附
 			item.y = listCenterY + (num - scrollVisual) * itemSpacing;
 
-			var targetX:Float = listBaseX + (offset == 0 ? OptionsConfig.SUBMENU_SELECTED_OFFSET_X : 0);
-			item.x = FlxMath.lerp(targetX, item.x, lerp);
+			// Freeplay 式连续水平投影：选中行固定在最右，离选中行越远的项向左缩进越多，形成扇形纵深。
+			// 用 |dist| 做幂次曲线(SUBMENU_X_DRIFT_CURVE)让边缘呈弧形而非直线三角，滚动轨迹更"圆"。
+			var dist:Float = num - scrollVisual;
+			var shaped:Float = Math.pow(Math.abs(dist), OptionsConfig.SUBMENU_X_DRIFT_CURVE);
+			var targetX:Float = listBaseX + OptionsConfig.SUBMENU_SELECTED_OFFSET_X
+				+ OptionsConfig.SUBMENU_SELECTED_EXTRA_OFFSET_X
+				- shaped * OptionsConfig.SUBMENU_X_DRIFT_PER_ITEM;
+			item.x = targetX;
 
 			var targetAlpha:Float = (offset == 0) ? OptionsConfig.SUBMENU_SELECTED_ALPHA : OptionsConfig.SUBMENU_UNSELECTED_ALPHA;
 			if (optionsArray[num].disabled) targetAlpha *= OptionsConfig.SUBMENU_DISABLED_ALPHA_MULT;
@@ -904,8 +894,6 @@ class BaseOptionsMenu extends MusicBeatSubstate
 			keybindManager.destroy();
 			keybindManager = null;
 		}
-		if (_loadingText != null)
-			FlxTween.cancelTweensOf(_loadingText);
 		super.destroy();
 	}
 

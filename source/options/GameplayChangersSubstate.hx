@@ -365,7 +365,11 @@ class GameplayChangersSubstate extends MusicBeatSubstate
 			var targetY:Float = listCenterY + offset * itemSpacing;
 			item.y = FlxMath.lerp(targetY, item.y, lerp);
 
-			var targetX:Float = listBaseX + (offset == 0 ? OptionsConfig.SUBMENU_SELECTED_OFFSET_X : 0);
+			// Freeplay 式连续水平投影：选中行最右，距离做幂次曲线呈弧形（与 BaseOptionsMenu 一致）
+			var shaped:Float = Math.pow(Math.abs(offset), OptionsConfig.SUBMENU_X_DRIFT_CURVE);
+			var targetX:Float = listBaseX + OptionsConfig.SUBMENU_SELECTED_OFFSET_X
+				+ OptionsConfig.SUBMENU_SELECTED_EXTRA_OFFSET_X
+				- shaped * OptionsConfig.SUBMENU_X_DRIFT_PER_ITEM;
 			item.x = FlxMath.lerp(targetX, item.x, lerp);
 
 			var targetAlpha:Float = (offset == 0) ? OptionsConfig.SUBMENU_SELECTED_ALPHA : OptionsConfig.SUBMENU_UNSELECTED_ALPHA;
