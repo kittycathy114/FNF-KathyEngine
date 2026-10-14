@@ -1118,7 +1118,7 @@ class Note extends FlxSprite
 		if (ClientPrefs.data.kadeHoldVisual)
 			return;
 
-		var center:Float = myStrum.y + offsetY + Note.swagWidth / 2;
+		var center:Float = myStrum.y + offsetY + Note.swagWidth / 2 * PlayState.strumScale;
 		if((mustPress || !ignoreNote) && (wasGoodHit || (prevNote.wasGoodHit && !canBeHit)))
 		{
 			var swagRect:FlxRect = clipRect;
