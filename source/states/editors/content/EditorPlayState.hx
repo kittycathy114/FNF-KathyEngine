@@ -545,7 +545,14 @@ class EditorPlayState extends MusicBeatSubstate
 			babyArrow.downScroll = ClientPrefs.data.downScroll;
 			babyArrow.alpha = targetAlpha;
 
-			if (!PlayState.isPixelStage && strumScale != 1) babyArrow.scale.scale(strumScale);
+			if (!PlayState.isPixelStage && strumScale != 1)
+			{
+				babyArrow.scale.scale(strumScale);
+				// 与 PlayState 一致：缩放后同步 width/offset/origin，避免 strum 渲染中心偏右
+				babyArrow.updateHitbox();
+				babyArrow.centerOffsets();
+				babyArrow.centerOrigin();
+			}
 
 			if (player == 1)
 				playerStrums.add(babyArrow);

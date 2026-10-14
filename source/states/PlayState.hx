@@ -2595,6 +2595,7 @@ tempScore += '${lblScore}: ${songScore}';
 
 	private var noteTypes:Array<String> = [];
 	private var totalColumns: Int = 4;
+	private var diagFrame:Int = 0; // 错位诊断计数
 
 	private function generateSong():Void
 	{
@@ -3250,8 +3251,9 @@ tempScore += '${lblScore}: ${songScore}';
 	{
 		// 非 middleScroll 下玩家侧中心 0.75W、对手侧 0.25W，两侧到边缘的较小值相同（0.25W），
 		// middleScroll 两侧均为 0.5W，故用玩家侧中心计算即可保证两侧都不越屏。
+		// 边缘再留 24px 观感留白，避免多键整组贴死屏幕边（右缘离边过近显得"偏右"）。
 		var centerX:Float = ClientPrefs.data.middleScroll ? (FlxG.width * 0.5) : (FlxG.width * 0.75);
-		var edge:Float = Math.min(centerX, FlxG.width - centerX);
+		var edge:Float = Math.min(centerX, FlxG.width - centerX) - 24;
 		var maxSpacing:Float = 2 * edge / (totalColumns + 2);
 		if (Note.swagWidth * strumScale > maxSpacing)
 			strumScale = maxSpacing / Note.swagWidth;
@@ -3338,7 +3340,15 @@ tempScore += '${lblScore}: ${songScore}';
 			}
 			else babyArrow.alpha = targetAlpha;
 
-			if (!PlayState.isPixelStage && strumScale != 1) babyArrow.scale.scale(strumScale);
+			if (!PlayState.isPixelStage && strumScale != 1)
+			{
+				babyArrow.scale.scale(strumScale);
+				// 关键：缩放后必须同步 width/offset/origin，否则 strum 渲染中心
+				// 仍按缩放前的 width 计算（offset=(frameWidth-width)/2），比滚动箭头偏右约半列宽。
+				babyArrow.updateHitbox();
+				babyArrow.centerOffsets();
+				babyArrow.centerOrigin();
+			}
 
 			if (player == 1)
 				playerStrums.add(babyArrow);
@@ -4406,6 +4416,17 @@ tempScore += '${lblScore}: ${songScore}';
 									daNote.visible = false;
 									i++;
 									continue;
+								}
+								// 诊断：每 120 帧打印列0/列5 的 note 与 strum 渲染参数（x/offset/宽），定位视觉错位源
+								diagFrame++;
+								if (diagFrame % 120 == 0 && !daNote.isSustainNote)
+								{
+									var diagCol:Int = daNote.noteData;
+									if (diagCol == 0 || diagCol == 5)
+										trace('[EK] diag col=' + diagCol + ' mustPress=' + daNote.mustPress
+											+ ' noteX=' + daNote.x + ' noteOff=' + daNote.offset.x + ' noteW=' + daNote.width
+											+ ' strumX=' + strum.x + ' strumOff=' + strum.offset.x + ' strumW=' + strum.width
+											+ ' noteCenter=' + (daNote.x + daNote.offset.x) + ' strumCenter=' + (strum.x + strum.offset.x));
 								}
 								daNote.followStrumNote(strum, fakeCrochet, songSpeed / playbackRate);
 
