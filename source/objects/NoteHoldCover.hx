@@ -1,6 +1,7 @@
 package objects;
 
 import haxe.Json;
+import backend.ExtraKeysHandler;
 import openfl.utils.AssetType;
 import shaders.RGBPalette.RGBShaderReference;
 
@@ -168,7 +169,15 @@ class NoteHoldCover extends FlxSprite
 	{
 		var idx:Int = Note.styleIndex(data);
 		rgbShader = new RGBShaderReference(this, Note.initializeGlobalRGBShader(idx));
-		var arr:Array<FlxColor> = (!PlayState.isPixelStage) ? ClientPrefs.data.arrowRGB[idx] : ClientPrefs.data.arrowRGBPixel[idx];
+		var arr:Array<FlxColor> = (idx > -1 && idx < ClientPrefs.data.arrowRGB.length) ? ClientPrefs.data.arrowRGB[idx] : null;
+		if (PlayState.isPixelStage && idx > -1 && idx < ClientPrefs.data.arrowRGBPixel.length) arr = ClientPrefs.data.arrowRGBPixel[idx];
+		// Extra Keys：arrowRGB 未补齐（越界/缺失）时从 extrakeys.json 全局色表兜底，避免染色失效
+		if (arr == null && ExtraKeysHandler.instance != null && ExtraKeysHandler.instance.data != null
+			&& ExtraKeysHandler.instance.data.colors != null && idx > -1 && idx < ExtraKeysHandler.instance.data.colors.length)
+		{
+			var ekC = ExtraKeysHandler.instance.data.colors[idx];
+			if (ekC != null) arr = [FlxColor.fromString('#' + ekC.inner), FlxColor.fromString('#' + ekC.border), FlxColor.fromString('#' + ekC.outline)];
+		}
 		if (arr != null && arr.length >= 3)
 		{
 			@:bypassAccessor
@@ -186,6 +195,21 @@ class NoteHoldCover extends FlxSprite
 
 	public static function getColorForData(data:Int):String
 	{
+		// Extra Keys：多键按 EK 样式方向映射素材色（与箭头/飞溅配色一致），
+		// 使 HSV 素材（仅 4 色）尽量贴近列色（如 6k 列4 青→Blue、列5 蓝→Blue）；映射不到回退 4 色周期
+		try {
+			var style:Int = Note.styleIndex(data);
+			if (ExtraKeysHandler.instance != null && ExtraKeysHandler.instance.data != null
+				&& ExtraKeysHandler.instance.data.animations != null
+				&& style > -1 && style < ExtraKeysHandler.instance.data.animations.length)
+			{
+				var ekNote:String = ExtraKeysHandler.instance.data.animations[style].note;
+				if (ekNote == 'purple') return 'Purple';
+				else if (ekNote == 'blue') return 'Blue';
+				else if (ekNote == 'green') return 'Green';
+				else if (ekNote == 'red') return 'Red';
+			}
+		} catch (e:Dynamic) {}
 		var i:Int = data % COVER_COLORS.length;
 		if (i < 0) i += COVER_COLORS.length;
 		return COVER_COLORS[i];
