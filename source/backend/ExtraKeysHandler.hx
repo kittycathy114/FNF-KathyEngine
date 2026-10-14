@@ -194,6 +194,25 @@ class ExtraKeysData
         if (arrPixelScales != null) {
             for (s in arrPixelScales) d.pixelScales.push(Std.parseFloat(Std.string(s)));
         }
+        // Extra Keys：EK 原版 scales/pixelScales 默认为 null（需 ScaleSimulationState 生成）。
+        // 这里兜底生成合理默认值（4 键=1.0，随键数线性缩到 18 键=0.45），避免脚本/取色读取时 NPE。
+        var needScales:Int = d.maxKeys + 1;
+        if (d.scales.length < needScales) {
+            for (i in d.scales.length...needScales) {
+                var s:Float = 1.0 - (0.55 * (i - 3) / 14.0);
+                if (s > 1.0) s = 1.0;
+                if (s < 0.4) s = 0.4;
+                d.scales.push(s);
+            }
+        }
+        if (d.pixelScales.length < needScales) {
+            for (i in d.pixelScales.length...needScales) {
+                var s:Float = 1.0 - (0.55 * (i - 3) / 14.0);
+                if (s > 1.0) s = 1.0;
+                if (s < 0.4) s = 0.4;
+                d.pixelScales.push(s);
+            }
+        }
         return d;
     }
 

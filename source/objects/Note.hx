@@ -261,10 +261,20 @@ class Note extends FlxSprite
 	public function defaultRGB()
 	{
 		var style:Int = styleIndex(noteData);
-		var arr:Array<FlxColor> = ClientPrefs.data.arrowRGB[style];
-		if(PlayState.isPixelStage) arr = ClientPrefs.data.arrowRGBPixel[style];
+		var arr:Array<FlxColor> = (style > -1 && style < ClientPrefs.data.arrowRGB.length) ? ClientPrefs.data.arrowRGB[style] : null;
+		if(PlayState.isPixelStage && style > -1 && style < ClientPrefs.data.arrowRGBPixel.length) arr = ClientPrefs.data.arrowRGBPixel[style];
 
-		if (arr != null && noteData > -1 && noteData <= arr.length)
+		// Extra Keys：arrowRGB 未补齐（越界）时从 extrakeys.json 全局色表直接取色兜底，避免染色失效
+		if (arr == null && ExtraKeysHandler.instance != null && ExtraKeysHandler.instance.data != null
+			&& ExtraKeysHandler.instance.data.colors != null && style > -1 && style < ExtraKeysHandler.instance.data.colors.length)
+		{
+			var c = ExtraKeysHandler.instance.data.colors[style];
+			if (c != null) arr = [FlxColor.fromString('#' + c.inner), FlxColor.fromString('#' + c.border), FlxColor.fromString('#' + c.outline)];
+		}
+
+		// 判断用 style 而非 noteData：4 键下二者相等；多键下 style 才是 arrowRGB 索引（Psych 原版
+		// noteData <= arr.length 在多键列（noteData 4/5，arr 3 项）恒为 false，导致染色失效）。
+		if (arr != null && noteData > -1)
 		{
 			rgbShader.r = arr[0];
 			rgbShader.g = arr[1];

@@ -59,6 +59,7 @@ import objects.VideoSprite;
 import objects.Note.EventNote;
 import objects.Note.PreloadedChartNote;
 import objects.StrumNote.KeybindShowcase;
+import objects.StrumNote.StrumBoundaries;
 import objects.*;
 import states.stages.*;
 import states.stages.objects.*;
@@ -3280,6 +3281,15 @@ tempScore += '${lblScore}: ${songScore}';
 		// 多键：居中分布 + 按 strumScale 缩放，防止溢出屏幕。
 		var spacing:Float = Note.swagWidth * strumScale;
 		var groupWidth:Float = (totalColumns - 1) * spacing;
+		// Extra Keys：EK StrumBoundaries 超屏自适应——整组宽度超过判定线边界（600px）时，
+		// 按比例收缩 strumScale（与 EK adaptStrumline 等价：缩小直至装下边界）。
+		var maxStrumW:Float = StrumBoundaries.getBoundaryWidth().x;
+		if (groupWidth > maxStrumW && strumScale > 0.2)
+		{
+			strumScale = strumScale * (maxStrumW / groupWidth);
+			spacing = Note.swagWidth * strumScale;
+			groupWidth = (totalColumns - 1) * spacing;
+		}
 		var centerX:Float = ClientPrefs.data.middleScroll ? (FlxG.width * 0.5) : (player == 1 ? (FlxG.width * 0.75) : (FlxG.width * 0.25));
 
 		for (i in 0...totalColumns)
@@ -3523,8 +3533,13 @@ tempScore += '${lblScore}: ${songScore}';
 		singAnimations = newSingAnims;
 		keysArray = newKeysArray;
 
+		// Extra Keys：进游戏时兜底把 arrowRGB/arrowRGBPixel/arrowHSV 补齐到 18 色
+		// （loadPrefs 启动早期 ExtraKeysHandler 可能加载失败导致多键列取色越界→染色失效）
+		ClientPrefs.ensureEKArrowColors();
 		trace('[EK] applyMania(' + mania + ') -> columns=' + laneCount
-			+ ' colArray=[' + newColArray.join(',') + ']');
+			+ ' colArray=[' + newColArray.join(',') + ']'
+			+ ' arrowRGB.len=' + (ClientPrefs.data.arrowRGB != null ? ClientPrefs.data.arrowRGB.length : -1)
+			+ ' arrowRGBPixel.len=' + (ClientPrefs.data.arrowRGBPixel != null ? ClientPrefs.data.arrowRGBPixel.length : -1));
 	}
 
 	override function openSubState(SubState:FlxSubState)

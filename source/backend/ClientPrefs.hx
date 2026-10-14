@@ -591,6 +591,44 @@ class ClientPrefs {
 		}
 	}
 
+	/**
+	 * Extra Keys：把 arrowRGB / arrowRGBPixel / arrowHSV 扩展为 18 色（来自 extrakeys.json 的全局色表），
+	 * 保证多键谱任意列（styleIndex 0..17）取色不越界。
+	 * - 用户已自定义的前 4 项保留不动；缺项（如旧存档只有 4 项）用 EK 色表补齐 4..17。
+	 * - HSV 模式没有每档色表，用 [0,0,0]（不变色）补齐，视觉与 4 键一致。
+	 */
+	/** Extra Keys：运行时入口（PlayState 进游戏时再次调用，兜底 loadPrefs 早期加载失败）。 */
+	public static function ensureEKArrowColors():Void
+	{
+		try {
+			ExtraKeysHandler.ensure();
+			var ek = ExtraKeysHandler.instance.data;
+			if (ek == null || ek.colors == null || ek.colors.length < 18) return;
+			var targetLen:Int = 18;
+			if (data.arrowRGB != null && data.arrowRGB.length < targetLen) {
+				while (data.arrowRGB.length < targetLen) {
+					var idx:Int = data.arrowRGB.length;
+					var c = ek.colors[idx];
+					if (c != null) data.arrowRGB.push([FlxColor.fromString('#' + c.inner), FlxColor.fromString('#' + c.border), FlxColor.fromString('#' + c.outline)]);
+					else data.arrowRGB.push([147, 0, 220]);
+				}
+			}
+			if (ek.pixelNoteColors != null && ek.pixelNoteColors.length >= 18 && data.arrowRGBPixel != null && data.arrowRGBPixel.length < targetLen) {
+				while (data.arrowRGBPixel.length < targetLen) {
+					var idx:Int = data.arrowRGBPixel.length;
+					var c = ek.pixelNoteColors[idx];
+					if (c != null) data.arrowRGBPixel.push([FlxColor.fromString('#' + c.inner), FlxColor.fromString('#' + c.border), FlxColor.fromString('#' + c.outline)]);
+					else data.arrowRGBPixel.push([195, 75, 75]);
+				}
+			}
+			if (data.arrowHSV != null && data.arrowHSV.length < targetLen) {
+				while (data.arrowHSV.length < targetLen) data.arrowHSV.push([0, 0, 0]);
+			}
+		} catch (e:Dynamic) {
+			trace('[EK] ensureEKArrowColors failed: $e');
+		}
+	}
+
 	public static function saveSettings() {
 		for (key in Reflect.fields(data))
 			Reflect.setField(FlxG.save.data, key, Reflect.field(data, key));
@@ -767,19 +805,10 @@ class ClientPrefs {
 		if (data.rmPerfect == 'off')
 			data.rmPerfect = 'enable';
 
-		// 多键功能已移除，arrowRGB / arrowRGBPixel 固定为 4 个方向。
-		// 旧的多键存档可能残留多余条目，这里截断为 4 并补齐空缺，
-		// 避免音符颜色界面显示一排多余箭头，也防止 HSV 模式下下标越界。
-		if (data.arrowRGB != null)
-		{
-			if (data.arrowRGB.length > 4) data.arrowRGB.resize(4);
-			while (data.arrowRGB.length < 4) data.arrowRGB.push([147, 0, 220]);
-		}
-		if (data.arrowRGBPixel != null)
-		{
-			if (data.arrowRGBPixel.length > 4) data.arrowRGBPixel.resize(4);
-			while (data.arrowRGBPixel.length < 4) data.arrowRGBPixel.push([195, 75, 75]);
-		}
+		// Extra Keys：arrowRGB / arrowRGBPixel / arrowHSV 由 4 色扩展到 18 色（取自 extrakeys.json），
+		// 保证多键谱第 5 列及以后的颜色索引（styleIndex 0..17）不会越界。
+		// 用户已自定义的前 4 项保留，4..17 用 EK 全局色表补齐；HSV 模式用 [0,0,0]（不变色）补齐。
+		ensureEKArrowColors();
 
 		// 确保窗口标题从预设中正确初始化
 		if (data.windowTitlePreset != null) {

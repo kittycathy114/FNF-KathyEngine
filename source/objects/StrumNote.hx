@@ -9,6 +9,7 @@ import backend.Paths;
 import flixel.FlxSprite;
 import flixel.FlxBasic;
 import flixel.FlxCamera;
+import flixel.math.FlxPoint;
 import flixel.group.FlxGroup.FlxTypedGroup;
 import flixel.text.FlxText;
 import flixel.util.FlxTimer;
@@ -318,5 +319,25 @@ class KeybindShowcase extends FlxTypedGroup<FlxBasic>
 				});
 			}});
 		});
+	}
+}
+
+/**
+ * Extra Keys：判定线边界（复刻 Psych EK 的 StrumBoundaries）。
+ * 多键谱的 strumline 若超出边界宽度，会被 adaptStrumline / generateStaticArrows 收缩。
+ */
+class StrumBoundaries
+{
+	public static var minBoundaryOpponent:FlxPoint = new FlxPoint(30, 50);
+	public static var maxBoundaryOpponent:FlxPoint = new FlxPoint(630, 160);
+
+	public static function getMiddlePoint():FlxPoint
+	{
+		return new FlxPoint(Std.int(getBoundaryWidth().x / 2), Std.int(getBoundaryWidth().y / 2));
+	}
+
+	public static function getBoundaryWidth():FlxPoint
+	{
+		return new FlxPoint(Std.int((maxBoundaryOpponent.x - minBoundaryOpponent.x)), Std.int((maxBoundaryOpponent.y - minBoundaryOpponent.y)));
 	}
 }

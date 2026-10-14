@@ -41,6 +41,7 @@ class EditorPlayState extends MusicBeatSubstate
 	var lastRating:FlxSprite;
 	var lastCombo:FlxSprite;
 	var lastScore:Array<FlxSprite> = [];
+	// Extra Keys：create() 中按谱面 mania 动态填充（4 键 = note_left..right，多键 = "{mania}_key_{i}"）
 	var keysArray:Array<String> = [
 		'note_left',
 		'note_down',
@@ -121,7 +122,13 @@ class EditorPlayState extends MusicBeatSubstate
 
 		opponentStrums = new FlxTypedGroup<StrumNote>();
 		playerStrums = new FlxTypedGroup<StrumNote>();
-		
+
+		// Extra Keys：按谱面 mania 填充试玩键位 action（与 PlayState.applyMania 对齐）
+		var _mania:Int = (PlayState.SONG != null && PlayState.SONG.mania != null) ? PlayState.SONG.mania : 3;
+		keysArray = [];
+		if (_mania == 3) keysArray = ['note_left', 'note_down', 'note_up', 'note_right'];
+		else for (i in 0..._mania + 1) keysArray.push(Std.string(_mania) + '_key_' + i);
+
 		generateStaticArrows(0);
 		generateStaticArrows(1);
 		/***************/
@@ -469,9 +476,61 @@ class EditorPlayState extends MusicBeatSubstate
 	{
 		var strumLineX:Float = ClientPrefs.data.middleScroll ? PlayState.STRUM_X_MIDDLESCROLL : PlayState.STRUM_X;
 		var strumLineY:Float = ClientPrefs.data.downScroll ? (FlxG.height - 150) : 50;
-		for (i in 0...4)
+
+		// Extra Keys：谱面键数（mania + 1；4 键走原逻辑，多键走居中分布 + 边界自适应）
+		var mania:Int = (PlayState.SONG != null && PlayState.SONG.mania != null) ? PlayState.SONG.mania : 3;
+		if (mania + 1 == 4)
 		{
-			// FlxG.log.add(i);
+			for (i in 0...4)
+			{
+				// FlxG.log.add(i);
+				var targetAlpha:Float = 1;
+				if (player < 1)
+				{
+					if(!ClientPrefs.data.opponentStrums) targetAlpha = 0;
+					else if(ClientPrefs.data.middleScroll) targetAlpha = 0.35;
+				}
+
+				var babyArrow:StrumNote = new StrumNote(strumLineX, strumLineY, i, player);
+				babyArrow.downScroll = ClientPrefs.data.downScroll;
+				babyArrow.alpha = targetAlpha;
+
+				if (player == 1)
+					playerStrums.add(babyArrow);
+				else
+				{
+					if(ClientPrefs.data.middleScroll)
+					{
+						babyArrow.x += 310;
+						if(i > 1) { //Up and Right
+							babyArrow.x += FlxG.width / 2 + 25;
+						}
+					}
+					opponentStrums.add(babyArrow);
+				}
+
+				strumLineNotes.add(babyArrow);
+				babyArrow.playerPosition();
+			}
+			return;
+		}
+
+		// 多键：居中分布 + 按 strumScale 缩放 + EK StrumBoundaries 超屏自适应
+		var totalColumns:Int = mania + 1;
+		var strumScale:Float = 1;
+		var spacing:Float = Note.swagWidth * strumScale;
+		var groupWidth:Float = (totalColumns - 1) * spacing;
+		var maxStrumW:Float = objects.StrumNote.StrumBoundaries.getBoundaryWidth().x;
+		if (groupWidth > maxStrumW && strumScale > 0.2)
+		{
+			strumScale = strumScale * (maxStrumW / groupWidth);
+			spacing = Note.swagWidth * strumScale;
+			groupWidth = (totalColumns - 1) * spacing;
+		}
+		var centerX:Float = ClientPrefs.data.middleScroll ? (FlxG.width * 0.5) : (player == 1 ? (FlxG.width * 0.75) : (FlxG.width * 0.25));
+
+		for (i in 0...totalColumns)
+		{
 			var targetAlpha:Float = 1;
 			if (player < 1)
 			{
@@ -483,22 +542,15 @@ class EditorPlayState extends MusicBeatSubstate
 			babyArrow.downScroll = ClientPrefs.data.downScroll;
 			babyArrow.alpha = targetAlpha;
 
+			if (!PlayState.isPixelStage && strumScale != 1) babyArrow.scale.scale(strumScale);
+
 			if (player == 1)
 				playerStrums.add(babyArrow);
 			else
-			{
-				if(ClientPrefs.data.middleScroll)
-				{
-					babyArrow.x += 310;
-					if(i > 1) { //Up and Right
-						babyArrow.x += FlxG.width / 2 + 25;
-					}
-				}
 				opponentStrums.add(babyArrow);
-			}
 
 			strumLineNotes.add(babyArrow);
-			babyArrow.playerPosition();
+			babyArrow.x = (centerX - groupWidth / 2) + spacing * i;
 		}
 	}
 
@@ -779,6 +831,7 @@ class EditorPlayState extends MusicBeatSubstate
 			return;
 
 		var buttonCode:Int = (button.IDs[0].toString().startsWith('NOTE')) ? button.IDs[0] : button.IDs[1];
+		buttonCode = noteCodeToIndex(buttonCode); // 多键 NOTE_4..NOTE_17 -> 音符索引 4..17
 		if (button.justPressed) keyPressed(buttonCode);
 	}
 
@@ -788,7 +841,17 @@ class EditorPlayState extends MusicBeatSubstate
 			return;
 
 		var buttonCode:Int = (button.IDs[0].toString().startsWith('NOTE')) ? button.IDs[0] : button.IDs[1];
+		buttonCode = noteCodeToIndex(buttonCode); // 多键 NOTE_4..NOTE_17 -> 音符索引 4..17
 		if(buttonCode > -1) keyReleased(buttonCode);
+	}
+
+	/** 触屏按钮的 NOTE_* 枚举值 -> 音符列索引（与 PlayState.noteCodeToIndex 一致） */
+	private static function noteCodeToIndex(code:Int):Int
+	{
+		if (code >= 0 && code <= 3) return code;
+		if (code >= Std.int(mobile.input.MobileInputID.NOTE_9)) return 9 + (code - Std.int(mobile.input.MobileInputID.NOTE_9));
+		if (code >= Std.int(mobile.input.MobileInputID.NOTE_4)) return 4 + (code - Std.int(mobile.input.MobileInputID.NOTE_4));
+		return code;
 	}
 	
 	// Hold notes
