@@ -516,20 +516,19 @@ class EditorPlayState extends MusicBeatSubstate
 			return;
 		}
 
-		// 多键：居中分布 + 按 strumScale 缩放 + EK StrumBoundaries 超屏自适应（全列宽判据）
+		// 多键：居中分布 + 按 strumScale 缩放（约束整组含列宽不越屏，代数求解）
 		var totalColumns:Int = mania + 1;
 		var strumScale:Float = 1;
 		var spacing:Float = Note.swagWidth * strumScale;
-		var maxStrumW:Float = objects.StrumNote.StrumBoundaries.getBoundaryWidth().x;
-		var strumLineW:Float = totalColumns * spacing;
-		if (strumLineW > maxStrumW && strumScale > 0.2)
+		var centerX:Float = ClientPrefs.data.middleScroll ? (FlxG.width * 0.5) : (player == 1 ? (FlxG.width * 0.75) : (FlxG.width * 0.25));
+		var edge:Float = Math.min(centerX, FlxG.width - centerX);
+		var maxSpacing:Float = 2 * edge / (totalColumns + 2);
+		if (spacing > maxSpacing)
 		{
-			strumScale = strumScale * (maxStrumW / strumLineW);
+			strumScale = maxSpacing / Note.swagWidth;
 			spacing = Note.swagWidth * strumScale;
-			strumLineW = totalColumns * spacing;
 		}
 		var groupWidth:Float = (totalColumns - 1) * spacing;
-		var centerX:Float = ClientPrefs.data.middleScroll ? (FlxG.width * 0.5) : (player == 1 ? (FlxG.width * 0.75) : (FlxG.width * 0.25));
 		// 写回全局，使试玩模式生成的滚动音符（构造时读 PlayState.strumScale）与 strum 同步缩放
 		PlayState.strumScale = strumScale;
 

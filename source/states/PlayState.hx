@@ -1160,11 +1160,8 @@ isReplaying = false;
 			timeTxt.y += 3;
 		}
 
-		// Extra Keys：多键时提前计算 strumScale 并写回全局（generateSong 的 Note 构造需要读取；
-		// Psych 1.0.4 create 顺序是 generateSong 先于 generateStaticArrows，若不提前算，
-		// Note 构造时 strumScale 仍为 1，滚动箭头不会随多键缩小）
-		if (totalColumns > 4) computeMultiKeyStrumScale();
-
+		// Extra Keys：多键收缩系数改由 applyMania 内统一计算（此处调用时 applyMania 尚未执行、
+		// totalColumns 仍为默认 4，条件恒假；且 applyMania 每次都会重置 strumScale=1，必须在其重置后重算）
 		generateSong();
 		trace('[PlayState.create] generateSong: ${Math.round((Sys.time() - __t0) * 1000)}ms');
 
@@ -2983,7 +2980,12 @@ tempScore += '${lblScore}: ${songScore}';
 							oldNote.resizeByRatio(curStepCrochet / Conductor.stepCrochet);
 						}
 
-						if (gottaHitNote) sustainNote.x += FlxG.width / 2; // general offset（按演出侧摆放）
+						// Extra Keys：多键下 sustain 与 strum 同布局（Psych 原版 +W/2 公式在列>=4 时会越出屏幕右缘）
+						if (totalColumns > 4) {
+							var susSide:Int = sustainNote.mustPress ? 1 : 0;
+							var susCX:Float = ClientPrefs.data.middleScroll ? (FlxG.width * 0.5) : (susSide == 1 ? (FlxG.width * 0.75) : (FlxG.width * 0.25));
+							sustainNote.x = susCX - (totalColumns - 1) * (Note.swagWidth * strumScale) / 2 + (Note.swagWidth * strumScale) * sustainNote.noteData;
+						} else if (gottaHitNote) sustainNote.x += FlxG.width / 2; // general offset（按演出侧摆放）
 						else if(ClientPrefs.data.middleScroll)
 						{
 							sustainNote.x += 310;
@@ -3008,7 +3010,12 @@ tempScore += '${lblScore}: ${songScore}';
 					}
 				}
 
-				if (gottaHitNote)
+				// Extra Keys：多键下普通音符与 strum 同布局（Psych 原版 +W/2 公式在列>=4 时会越出屏幕右缘）
+				if (totalColumns > 4) {
+					var side:Int = gottaHitNote ? 1 : 0;
+					var cX:Float = ClientPrefs.data.middleScroll ? (FlxG.width * 0.5) : (side == 1 ? (FlxG.width * 0.75) : (FlxG.width * 0.25));
+					swagNote.x = cX - (totalColumns - 1) * (Note.swagWidth * strumScale) / 2 + (Note.swagWidth * strumScale) * noteColumn;
+				} else if (gottaHitNote)
 				{
 					swagNote.x += FlxG.width / 2; // general offset（按演出侧摆放）
 				}
@@ -3231,21 +3238,25 @@ tempScore += '${lblScore}: ${songScore}';
 		return (note.mustPress != playOpponent);
 
 	/**
-	 * Extra Keys：多键时计算 strum 收缩系数（EK adaptStrumline 等价）并写回 static strumScale。
+	 * Extra Keys：多键时计算 strum 收缩系数并写回 static strumScale。
 	 * 必须在 generateSong() 之前调用（Note 构造时读取），generateStaticArrows() 直接复用结果。
-	 * 判据用【全部列宽之和】超过边界（600px）：6 键 6*112=672>600 → 缩到 ~0.89；
-	 * 5 键 5*112=560<600 → 不缩（与 EK 一致）。4 键不调用（strumScale 保持 1）。
+	 *
+	 * 约束（保证整组含列宽绝不越屏）：组中心到屏幕边缘的较小空间为 edge，
+	 * 整组宽（cols*spacing）的一半 + 单列宽 spacing ≤ edge
+	 *   → spacing*(cols/2) + spacing ≤ edge → spacing ≤ 2*edge/(cols+2)
+	 * 代数一次求解（无需迭代）。4 键不调用（strumScale 保持 1）。
 	 */
 	public function computeMultiKeyStrumScale():Void
 	{
-		var maxStrumW:Float = StrumBoundaries.getBoundaryWidth().x;
-		var strumLineW:Float = totalColumns * (Note.swagWidth * strumScale);
-		if (strumLineW > maxStrumW && strumScale > 0.2)
-		{
-			strumScale = strumScale * (maxStrumW / strumLineW);
-			strumLineW = totalColumns * (Note.swagWidth * strumScale);
-		}
-		trace('[EK] computeMultiKeyStrumScale cols=' + totalColumns + ' strumScale=' + strumScale + ' lineW=' + strumLineW);
+		// 非 middleScroll 下玩家侧中心 0.75W、对手侧 0.25W，两侧到边缘的较小值相同（0.25W），
+		// middleScroll 两侧均为 0.5W，故用玩家侧中心计算即可保证两侧都不越屏。
+		var centerX:Float = ClientPrefs.data.middleScroll ? (FlxG.width * 0.5) : (FlxG.width * 0.75);
+		var edge:Float = Math.min(centerX, FlxG.width - centerX);
+		var maxSpacing:Float = 2 * edge / (totalColumns + 2);
+		if (Note.swagWidth * strumScale > maxSpacing)
+			strumScale = maxSpacing / Note.swagWidth;
+		trace('[EK] computeMultiKeyStrumScale cols=' + totalColumns + ' strumScale=' + strumScale
+			+ ' spacing=' + (Note.swagWidth * strumScale) + ' edge=' + edge);
 	}
 
 	private function generateStaticArrows(player:Int, ?instant:Bool = false):Void
@@ -3337,6 +3348,11 @@ tempScore += '${lblScore}: ${songScore}';
 			strumLineNotes.add(babyArrow);
 			babyArrow.x = (centerX - groupWidth / 2) - legacyOffset + spacing * i;
 		}
+		trace('[EK] strums side=' + player + ' cols=' + totalColumns + ' centerX=' + centerX + ' spacing=' + spacing
+			+ ' groupW=' + groupWidth + ' firstX=' + ((centerX - groupWidth / 2) - legacyOffset)
+			+ ' lastX=' + ((centerX - groupWidth / 2) - legacyOffset + spacing * (totalColumns - 1))
+			+ ' lastEdge=' + ((centerX - groupWidth / 2) - legacyOffset + spacing * (totalColumns - 1) + Note.swagWidth * strumScale)
+			+ ' screenW=' + FlxG.width);
 	}
 
 	/** 根据当前 strum 的实际位置，为每个 strum 组（对手/玩家）生成 Track 上的黑色半透明覆盖层（阴影）。 */
@@ -3514,6 +3530,9 @@ tempScore += '${lblScore}: ${songScore}';
 		curMania = mania;
 		totalColumns = mania + 1;
 		strumScale = 1;
+		// Extra Keys：键数已知后立即计算收缩系数（generateSong 的 Note 构造与 generateStaticArrows 共用；
+		// applyMania 会被 generateSong/ generateStaticArrows 各调一次，computeMultiKeyStrumScale 幂等）
+		if (totalColumns > 4) computeMultiKeyStrumScale();
 
 		// 兜底：extrakeys.json 缺失时退回 4 键
 		if (ek == null || ek.keys == null || ek.keys.length <= mania) {
