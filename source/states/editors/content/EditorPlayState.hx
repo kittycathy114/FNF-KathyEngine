@@ -481,6 +481,7 @@ class EditorPlayState extends MusicBeatSubstate
 		var mania:Int = (PlayState.SONG != null && PlayState.SONG.mania != null) ? PlayState.SONG.mania : 3;
 		if (mania + 1 == 4)
 		{
+			PlayState.strumScale = 1; // 重置多键收缩残留
 			for (i in 0...4)
 			{
 				// FlxG.log.add(i);
@@ -515,19 +516,22 @@ class EditorPlayState extends MusicBeatSubstate
 			return;
 		}
 
-		// 多键：居中分布 + 按 strumScale 缩放 + EK StrumBoundaries 超屏自适应
+		// 多键：居中分布 + 按 strumScale 缩放 + EK StrumBoundaries 超屏自适应（全列宽判据）
 		var totalColumns:Int = mania + 1;
 		var strumScale:Float = 1;
 		var spacing:Float = Note.swagWidth * strumScale;
-		var groupWidth:Float = (totalColumns - 1) * spacing;
 		var maxStrumW:Float = objects.StrumNote.StrumBoundaries.getBoundaryWidth().x;
-		if (groupWidth > maxStrumW && strumScale > 0.2)
+		var strumLineW:Float = totalColumns * spacing;
+		if (strumLineW > maxStrumW && strumScale > 0.2)
 		{
-			strumScale = strumScale * (maxStrumW / groupWidth);
+			strumScale = strumScale * (maxStrumW / strumLineW);
 			spacing = Note.swagWidth * strumScale;
-			groupWidth = (totalColumns - 1) * spacing;
+			strumLineW = totalColumns * spacing;
 		}
+		var groupWidth:Float = (totalColumns - 1) * spacing;
 		var centerX:Float = ClientPrefs.data.middleScroll ? (FlxG.width * 0.5) : (player == 1 ? (FlxG.width * 0.75) : (FlxG.width * 0.25));
+		// 写回全局，使试玩模式生成的滚动音符（构造时读 PlayState.strumScale）与 strum 同步缩放
+		PlayState.strumScale = strumScale;
 
 		for (i in 0...totalColumns)
 		{

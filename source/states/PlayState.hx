@@ -1160,6 +1160,11 @@ isReplaying = false;
 			timeTxt.y += 3;
 		}
 
+		// Extra Keys：多键时提前计算 strumScale 并写回全局（generateSong 的 Note 构造需要读取；
+		// Psych 1.0.4 create 顺序是 generateSong 先于 generateStaticArrows，若不提前算，
+		// Note 构造时 strumScale 仍为 1，滚动箭头不会随多键缩小）
+		if (totalColumns > 4) computeMultiKeyStrumScale();
+
 		generateSong();
 		trace('[PlayState.create] generateSong: ${Math.round((Sys.time() - __t0) * 1000)}ms');
 
@@ -3225,6 +3230,24 @@ tempScore += '${lblScore}: ${songScore}';
 	inline public function isPlayerNote(note:Note):Bool
 		return (note.mustPress != playOpponent);
 
+	/**
+	 * Extra Keys：多键时计算 strum 收缩系数（EK adaptStrumline 等价）并写回 static strumScale。
+	 * 必须在 generateSong() 之前调用（Note 构造时读取），generateStaticArrows() 直接复用结果。
+	 * 判据用【全部列宽之和】超过边界（600px）：6 键 6*112=672>600 → 缩到 ~0.89；
+	 * 5 键 5*112=560<600 → 不缩（与 EK 一致）。4 键不调用（strumScale 保持 1）。
+	 */
+	public function computeMultiKeyStrumScale():Void
+	{
+		var maxStrumW:Float = StrumBoundaries.getBoundaryWidth().x;
+		var strumLineW:Float = totalColumns * (Note.swagWidth * strumScale);
+		if (strumLineW > maxStrumW && strumScale > 0.2)
+		{
+			strumScale = strumScale * (maxStrumW / strumLineW);
+			strumLineW = totalColumns * (Note.swagWidth * strumScale);
+		}
+		trace('[EK] computeMultiKeyStrumScale cols=' + totalColumns + ' strumScale=' + strumScale + ' lineW=' + strumLineW);
+	}
+
 	private function generateStaticArrows(player:Int, ?instant:Bool = false):Void
 	{
 		var strumLineX:Float = ClientPrefs.data.middleScroll ? STRUM_X_MIDDLESCROLL : STRUM_X;
@@ -3236,6 +3259,7 @@ tempScore += '${lblScore}: ${songScore}';
 		// 标准 4 键：保留旧引擎原始布局，确保 100% 向后兼容。
 		if (totalColumns == 4)
 		{
+			strumScale = 1; // 重置多键收缩残留，避免上一首多键歌影响 4 键大小
 			for (i in 0...4)
 			{
 				var targetAlpha:Float = 1;
@@ -3278,18 +3302,9 @@ tempScore += '${lblScore}: ${songScore}';
 			return;
 		}
 
-		// 多键：居中分布 + 按 strumScale 缩放，防止溢出屏幕。
+		// 多键：居中分布 + 按 strumScale 缩放（已在 generateSong 前由 computeMultiKeyStrumScale 算好）
 		var spacing:Float = Note.swagWidth * strumScale;
 		var groupWidth:Float = (totalColumns - 1) * spacing;
-		// Extra Keys：EK StrumBoundaries 超屏自适应——整组宽度超过判定线边界（600px）时，
-		// 按比例收缩 strumScale（与 EK adaptStrumline 等价：缩小直至装下边界）。
-		var maxStrumW:Float = StrumBoundaries.getBoundaryWidth().x;
-		if (groupWidth > maxStrumW && strumScale > 0.2)
-		{
-			strumScale = strumScale * (maxStrumW / groupWidth);
-			spacing = Note.swagWidth * strumScale;
-			groupWidth = (totalColumns - 1) * spacing;
-		}
 		var centerX:Float = ClientPrefs.data.middleScroll ? (FlxG.width * 0.5) : (player == 1 ? (FlxG.width * 0.75) : (FlxG.width * 0.25));
 
 		for (i in 0...totalColumns)
