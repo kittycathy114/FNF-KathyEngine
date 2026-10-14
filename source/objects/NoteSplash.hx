@@ -1,5 +1,6 @@
 package objects;
 
+import backend.ExtraKeysHandler;
 import backend.animation.PsychAnimationController;
 import shaders.RGBPalette;
 import shaders.ColorSwap;
@@ -43,6 +44,9 @@ class NoteSplash extends FlxSprite
 
 	var spawned:Bool = false;
 	var noteDataMap:Map<Int, String> = new Map();
+	// Extra Keys：随机动画组（0..maxAnims-1）。noteData 保持列号不被改写，
+	// 供取色（styleIndex）与方向映射使用，避免多键下产生配置外动画索引导致飞溅卡死。
+	var animNum:Int = 0;
 
 	public static var defaultNoteSplash(default, never):String = "noteSplashes/noteSplashes";
 	public static var configs:Map<String, NoteSplashConfig> = new Map();
@@ -263,14 +267,14 @@ class NoteSplash extends FlxSprite
 			noteData = note.noteData;
 
 		if (randomize && maxAnims > 1)
-			noteData = noteData % Note.colArray.length + (FlxG.random.int(0, maxAnims - 1) * Note.colArray.length);
+			animNum = FlxG.random.int(0, maxAnims - 1);
 
 		this.noteData = noteData;
 		var anim:String = playDefaultAnim();
 
 		// Legacy HSV path: apply the note's HSV splash shift via ColorSwap and skip the RGB setup.
 		if(ClientPrefs.data.arrowColorMode == 'HSV') {
-			var nd:Int = noteData % Note.colArray.length;
+			var nd:Int = Note.styleIndex(noteData); // 多键：按全局样式索引取 arrowHSV
 			var hue:Float = 0;
 			var sat:Float = 0;
 			var brt:Float = 0;
@@ -292,9 +296,10 @@ class NoteSplash extends FlxSprite
 			this.shader = colorSwap.shader;
 		} else {
 			var tempShader:RGBPalette = null;
+			var splashStyle:Int = Note.styleIndex(noteData); // 多键：列号→全局样式索引（取色用）
 			if (config.allowRGB)
 			{
-				Note.initializeGlobalRGBShader(noteData % Note.colArray.length);
+				Note.initializeGlobalRGBShader(splashStyle);
 				if (inEditor || (note == null || note.noteSplashData.useRGBShader) && (PlayState.SONG == null || !PlayState.SONG.disableNoteRGB))
 				{
 					tempShader = new RGBPalette();
@@ -308,8 +313,15 @@ class NoteSplash extends FlxSprite
 							{
 								if (i > 2) break;
 
-							var arr:Array<FlxColor> = ClientPrefs.data.arrowRGB[Note.styleIndex(noteData)];
-							if (PlayState.isPixelStage) arr = ClientPrefs.data.arrowRGBPixel[Note.styleIndex(noteData)];
+							var arr:Array<FlxColor> = (splashStyle > -1 && splashStyle < ClientPrefs.data.arrowRGB.length) ? ClientPrefs.data.arrowRGB[splashStyle] : null;
+							if (PlayState.isPixelStage && splashStyle > -1 && splashStyle < ClientPrefs.data.arrowRGBPixel.length) arr = ClientPrefs.data.arrowRGBPixel[splashStyle];
+							// Extra Keys：arrowRGB 缺失时从 extrakeys.json 全局色表兜底（与 Note.defaultRGB 一致）
+							if (arr == null && ExtraKeysHandler.instance != null && ExtraKeysHandler.instance.data != null
+								&& ExtraKeysHandler.instance.data.colors != null && splashStyle > -1 && splashStyle < ExtraKeysHandler.instance.data.colors.length)
+							{
+								var ekC = ExtraKeysHandler.instance.data.colors[splashStyle];
+								if (ekC != null) arr = [FlxColor.fromString('#' + ekC.inner), FlxColor.fromString('#' + ekC.border), FlxColor.fromString('#' + ekC.outline)];
+							}
 
 								var rgb = colors[i];
 								if (rgb == null)
@@ -334,7 +346,7 @@ class NoteSplash extends FlxSprite
 								else if (i == 2) tempShader.b = color;
 							}
 						}
-						else tempShader.copyValues(Note.globalRgbShaders[noteData % Note.colArray.length]);
+						else tempShader.copyValues(Note.globalRgbShaders[splashStyle]);
 
 						if (note != null)
 						{
@@ -343,7 +355,7 @@ class NoteSplash extends FlxSprite
 							if (note.noteSplashData.b != -1) tempShader.b = note.noteSplashData.b;
 						}
 					}
-					else tempShader.copyValues(Note.globalRgbShaders[noteData % Note.colArray.length]);
+					else tempShader.copyValues(Note.globalRgbShaders[splashStyle]);
 				}
 			}
 			rgbShader.copyValues(tempShader);
@@ -392,7 +404,28 @@ class NoteSplash extends FlxSprite
 	
 	public function playDefaultAnim()
 	{
-		var anim:String = noteDataMap.get(noteData);
+		// 方向周期：配置飞溅动画按 4 方向组织（noteData 0-3 = 组1，4-7 = 组2……）。
+		// 多键下按列对应的 EK 样式名映射到 4 方向（purple/blue/green/red），
+		// 保证飞溅配色与列色一致；映射不到时回退 noteData%4。
+		var dir:Int = noteData % 4;
+		try {
+			var style:Int = Note.styleIndex(noteData);
+			if (ExtraKeysHandler.instance != null && ExtraKeysHandler.instance.data != null
+				&& ExtraKeysHandler.instance.data.animations != null
+				&& style > -1 && style < ExtraKeysHandler.instance.data.animations.length)
+			{
+				var ekNote:String = ExtraKeysHandler.instance.data.animations[style].note;
+				if (ekNote == 'purple') dir = 0;
+				else if (ekNote == 'blue') dir = 1;
+				else if (ekNote == 'green') dir = 2;
+				else if (ekNote == 'red') dir = 3;
+			}
+		} catch (e:Dynamic) {}
+
+		// 先取随机组动画（animNum），缺失时回退组1；仍缺失则本帧不播放（由 buggedKillTime 兜底清理）
+		var anim:String = noteDataMap.get(dir + animNum * 4);
+		if (anim == null || !animation.exists(anim))
+			anim = noteDataMap.get(dir);
 		if (anim != null && animation.exists(anim))
 			animation.play(anim, true);
 
@@ -497,9 +530,9 @@ class NoteSplash extends FlxSprite
 
 	function set_maxAnims(value:Int)
 		{
-			var maxData = (value * Note.colArray.length) - 1;
-			if (maxData < 0) maxData = 0; // 防止负值
-			noteData = Std.int(FlxMath.wrap(noteData, 0, maxData));
+			// Extra Keys：不再改写 noteData（Psych 原版依赖 noteData 索引动画，
+			// 多键下 wrap 到 colArray*maxAnims-1 会产生配置外索引导致飞溅卡死/取色错位；
+			// 动画选择已改为 playDefaultAnim 的 dir+animNum 方案）。
 			return maxAnims = value;
 		}
 }
