@@ -176,7 +176,8 @@ class StrumNote extends FlxSprite
 			setGraphicSize(Std.int(width * 0.7));
 
 			// 多键：按当前 mania 档位查 extrakeys.json 取 strum 前缀（LEFT/DOWN/UP/RIGHT/ROMBUS/CIRCLE）。
-			var mania:Int = (PlayState.SONG != null && PlayState.SONG.mania != null) ? PlayState.SONG.mania : 3;
+			// UI 态（颜色菜单等）由 Note.uiManiaOverride 接管，游戏内仍用 PlayState.SONG.mania。
+			var mania:Int = Note.uiManiaOverride >= 0 ? Note.uiManiaOverride : ((PlayState.SONG != null && PlayState.SONG.mania != null) ? PlayState.SONG.mania : 3);
 			var strumName:String = ExtraKeysHandler.instance.strumName(mania, noteData);
 			if (!hasFrame('arrow' + strumName)) strumName = 'UP';
 

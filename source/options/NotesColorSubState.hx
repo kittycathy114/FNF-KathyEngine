@@ -28,6 +28,7 @@ class NotesColorSubState extends MusicBeatSubstate
 	// 按 Q/E 切换，每次只显示该键数对应的箭头列（复用 ControlsSubState 的分页思路）
 	var curEKPage:Int = 3;
 	var ekTipTxt:FlxText;
+	var savedColArray:Array<String> = []; // 退出时恢复 Note.colArray，避免影响后续游戏
 
 	var hexTypeLine:FlxSprite;
 	var hexTypeNum:Int = -1;
@@ -57,6 +58,11 @@ class NotesColorSubState extends MusicBeatSubstate
 
 	public function new() {
 		super();
+		
+		// 颜色菜单是独立于游戏的 UI：让 strum/着色按当前键数页取样式映射，
+		// 而不是依赖 PlayState.SONG.mania（主菜单进入时为 null）
+		Note.uiManiaOverride = curEKPage;
+		savedColArray = Note.colArray.copy();
 		
 		#if DISCORD_ALLOWED
 		DiscordClient.changePresence("Note Colors Menu", null);
@@ -150,7 +156,7 @@ class NotesColorSubState extends MusicBeatSubstate
 		add(hexTypeLine);
 
 		spawnNotes();
-		updateNotes(true);
+		updateNotes(true, true);
 		FlxG.sound.play(Paths.sound('scrollMenu'), 0.6);
 
 		var tipX = 20;
@@ -183,6 +189,16 @@ class NotesColorSubState extends MusicBeatSubstate
 			ekTipTxt.borderSize = 2;
 			add(ekTipTxt);
 			updateEKTip();
+
+			// 桌面端：左下角三行基于文本实际高度从屏幕底部向上堆叠，
+			// 避免中文字体行高较大时固定 y=660 导致最后一行超出屏幕。
+			var cursorY:Float = FlxG.height - 6;
+			cursorY -= ekTipTxt.height;
+			ekTipTxt.y = cursorY;
+			cursorY -= tipTxt.height;
+			tipTxt.y = cursorY;
+			cursorY -= tip.height;
+			tip.y = cursorY;
 		}
 
 		controllerPointer = new FlxShapeCircle(0, 0, 20, {thickness: 0}, FlxColor.WHITE);
@@ -227,9 +243,10 @@ class NotesColorSubState extends MusicBeatSubstate
 		if (newPage == curEKPage) return;
 
 		curEKPage = newPage;
+		Note.uiManiaOverride = curEKPage;
 		if (curSelectedNote >= get_pageKeyCount()) curSelectedNote = 0;
 		spawnNotes();
-		updateNotes(true);
+		updateNotes(true, true);
 		updateEKTip();
 		FlxG.sound.play(Paths.sound('scrollMenu'), 0.6);
 	}
@@ -552,7 +569,7 @@ class NotesColorSubState extends MusicBeatSubstate
 								getShader().b = strumRGB.b = color;
 						}
 					}
-					dataArray[curSelectedNote][i] = color;
+					dataArray[Note.styleIndex(curSelectedNote)][i] = color;
 				}
 			}
 			setShaderColor(getDefaultColor(defArr, curSelectedNote, curSelectedMode));
@@ -622,8 +639,8 @@ class NotesColorSubState extends MusicBeatSubstate
 		
 		modeBG.visible = false;
 		notesBG.visible = true;
-		bigNote.rgbShader.parent = Note.globalRgbShaders[curSelectedNote];
-		bigNote.shader = Note.globalRgbShaders[curSelectedNote].shader;
+		bigNote.rgbShader.parent = Note.globalRgbShaders[Note.styleIndex(curSelectedNote)];
+		bigNote.shader = Note.globalRgbShaders[Note.styleIndex(curSelectedNote)].shader;
 		updateNotes();
 		FlxG.sound.play(Paths.sound('scrollMenu'));
 	}
@@ -698,11 +715,17 @@ class NotesColorSubState extends MusicBeatSubstate
 
 		Note.globalRgbShaders = [];
 		var keyCount:Int = get_pageKeyCount();
+		// bigNote 动画按当前键数页重建 colArray（与 strum/着色同一 mania 映射）
+		ExtraKeysHandler.ensure();
+		Note.colArray = [];
+		for (i in 0...keyCount) Note.colArray.push(ExtraKeysHandler.instance.notePrefix(curEKPage, i));
 		// 箭头大小：4 键及以下保持原版 102，5 键起按键数等比缩小，避免挤在一起无法点选
 		var noteSize:Float = 102 * Math.min(1, 4 / keyCount);
 		for (i in 0...keyCount)
 		{
-			Note.initializeGlobalRGBShader(i);
+			// 多键：shader 按“样式索引”初始化（列索引≠样式索引，如 5K 映射 [0,1,4,2,3]），
+			// 与游戏内 Note/StrumNote 的取色一致，避免 5K 起颜色错位
+			Note.initializeGlobalRGBShader(Note.styleIndex(i));
 			var newNote:StrumNote = new StrumNote(150 + (480 / keyCount * i), 200, i, 0);
 			newNote.useRGBShader = true;
 			newNote.setGraphicSize(noteSize);
@@ -715,8 +738,8 @@ class NotesColorSubState extends MusicBeatSubstate
 		bigNote.setPosition(250, 325);
 		bigNote.setGraphicSize(250);
 		bigNote.updateHitbox();
-		bigNote.rgbShader.parent = Note.globalRgbShaders[curSelectedNote];
-		bigNote.shader = Note.globalRgbShaders[curSelectedNote].shader;
+		bigNote.rgbShader.parent = Note.globalRgbShaders[Note.styleIndex(curSelectedNote)];
+		bigNote.shader = Note.globalRgbShaders[Note.styleIndex(curSelectedNote)].shader;
 		for (i in 0...Note.colArray.length)
 		{
 			if(!onPixel) bigNote.animation.addByPrefix('note$i', Note.colArray[i] + '0', 24, true);
@@ -727,7 +750,7 @@ class NotesColorSubState extends MusicBeatSubstate
 		PlayState.stageUI = "normal";
 	}
 
-	function updateNotes(?instant:Bool = false)
+	function updateNotes(?instant:Bool = false, ?forceAnims:Bool = false)
 	{
 		for (note in modeNotes)
 			note.alpha = (curSelectedMode == note.ID) ? 1 : 0.6;
@@ -736,7 +759,10 @@ class NotesColorSubState extends MusicBeatSubstate
 		{
 			var newAnim:String = curSelectedNote == note.ID ? 'confirm' : 'pressed';
 			note.alpha = (curSelectedNote == note.ID) ? 1 : 0.6;
-			if(note.animation.curAnim == null || note.animation.curAnim.name != newAnim) note.playAnim(newAnim, true);
+			// 仅“重建 strum 的场景”（Q/E 切页/pixel 切换/首次进入）强制全部重放动画；
+			// ←/→ 移动选中只切换动画名变化的箭头（Psych 原版行为），避免所有箭头反复重播。
+			if (forceAnims || note.animation.curAnim == null || note.animation.curAnim.name != newAnim)
+				note.playAnim(newAnim, true);
 			if(instant) note.animation.curAnim.finish();
 		}
 		bigNote.animation.play('note$curSelectedNote', true);
@@ -775,20 +801,22 @@ class NotesColorSubState extends MusicBeatSubstate
 		}
 	}
 
-	function setShaderColor(value:FlxColor) dataArray[curSelectedNote][curSelectedMode] = value;
-	function getShaderColor() return dataArray[curSelectedNote][curSelectedMode];
-	function getShader() return Note.globalRgbShaders[curSelectedNote];
+	// 多键：dataArray(arrowRGB)/shader 统一按“样式索引”读写（列索引≠样式索引），
+	// 与游戏内取色一致；4K 时两者相等，行为与 Psych 原版完全相同
+	function setShaderColor(value:FlxColor) dataArray[Note.styleIndex(curSelectedNote)][curSelectedMode] = value;
+	function getShaderColor() return dataArray[Note.styleIndex(curSelectedNote)][curSelectedMode];
+	function getShader() return Note.globalRgbShaders[Note.styleIndex(curSelectedNote)];
 
-	/** 多键安全取默认色：defaultData 仅 4 组时越界回退 extrakeys 全局色表，再兜底白色 */
+	/** 多键安全取默认色：defaultData 已按 extrakeys 补齐 18 色，索引必须用“样式索引”（列索引≠样式索引，如 5K 第 3 列=样式 4） */
 	function getDefaultColor(arr:Array<Array<FlxColor>>, note:Int, mode:Int):FlxColor
 	{
-		if (note < arr.length && arr[note] != null && mode < arr[note].length)
-			return arr[note][mode];
+		var style:Int = Note.styleIndex(note);
+		if (style > -1 && style < arr.length && arr[style] != null && mode < arr[style].length)
+			return arr[style][mode];
 
 		if (ExtraKeysHandler.instance != null && ExtraKeysHandler.instance.data != null
 			&& ExtraKeysHandler.instance.data.colors != null)
 		{
-			var style:Int = Note.styleIndex(note);
 			if (style > -1 && style < ExtraKeysHandler.instance.data.colors.length)
 			{
 				var ekC = ExtraKeysHandler.instance.data.colors[style];
@@ -804,6 +832,8 @@ class NotesColorSubState extends MusicBeatSubstate
 
 	override function destroy()
 	{
+		Note.uiManiaOverride = -1; // 恢复：颜色菜单退出后游戏内按 PlayState.SONG.mania 走
+		Note.colArray = savedColArray; // 恢复原 colArray，避免影响后续游戏
 		Note.globalRgbShaders = [];
 		super.destroy();
 	}

@@ -129,6 +129,8 @@ class Note extends FlxSprite
 
 	public var rgbShader:RGBShaderReference;
 	public static var globalRgbShaders:Array<RGBPalette> = [];
+	/** UI 态 mania 覆盖（仅 NotesColorSubState 等菜单界面使用）：>=0 时 styleIndex/StrumNote 按它取样式映射，游戏内恒为 -1 不受影响 */
+	public static var uiManiaOverride:Int = -1;
 	public var colorSwap:ColorSwap;
 	public static var globalColorSwapShaders:Array<ColorSwap> = [];
 
@@ -174,7 +176,8 @@ class Note extends FlxSprite
 	public static function styleIndex(noteData:Int):Int
 	{
 		var mania = 3;
-		if (PlayState.SONG != null && PlayState.SONG.mania != null) mania = PlayState.SONG.mania;
+		if (Note.uiManiaOverride >= 0) mania = Note.uiManiaOverride;
+		else if (PlayState.SONG != null && PlayState.SONG.mania != null) mania = PlayState.SONG.mania;
 		if (ExtraKeysHandler.instance == null) return noteData % 4;
 		return ExtraKeysHandler.instance.globalIndex(mania, noteData);
 	}

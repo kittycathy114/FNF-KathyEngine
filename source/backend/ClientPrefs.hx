@@ -605,6 +605,25 @@ class ClientPrefs {
 			var ek = ExtraKeysHandler.instance.data;
 			if (ek == null || ek.colors == null || ek.colors.length < 18) return;
 			var targetLen:Int = 18;
+			// 先把 defaultData（出厂色表）补齐到 18 色，与 EK 原版 loadArrowRGBData 一致：
+			// 0..3 保持 Psych 出厂色（与 extrakeys colors[0..3] 同值），4..17 用 EK 全局色表补齐，
+			// 保证 R 键重置在多键页能取到正确样式默认色（列索引≠样式索引）。
+			if (defaultData.arrowRGB != null && defaultData.arrowRGB.length < targetLen) {
+				while (defaultData.arrowRGB.length < targetLen) {
+					var dIdx:Int = defaultData.arrowRGB.length;
+					var dc = ek.colors[dIdx];
+					if (dc != null) defaultData.arrowRGB.push([FlxColor.fromString('#' + dc.inner), FlxColor.fromString('#' + dc.border), FlxColor.fromString('#' + dc.outline)]);
+					else defaultData.arrowRGB.push([147, 0, 220]);
+				}
+			}
+			if (ek.pixelNoteColors != null && ek.pixelNoteColors.length >= 18 && defaultData.arrowRGBPixel != null && defaultData.arrowRGBPixel.length < targetLen) {
+				while (defaultData.arrowRGBPixel.length < targetLen) {
+					var dPxIdx:Int = defaultData.arrowRGBPixel.length;
+					var dpc = ek.pixelNoteColors[dPxIdx];
+					if (dpc != null) defaultData.arrowRGBPixel.push([FlxColor.fromString('#' + dpc.inner), FlxColor.fromString('#' + dpc.border), FlxColor.fromString('#' + dpc.outline)]);
+					else defaultData.arrowRGBPixel.push([195, 75, 75]);
+				}
+			}
 			if (data.arrowRGB != null && data.arrowRGB.length < targetLen) {
 				while (data.arrowRGB.length < targetLen) {
 					var idx:Int = data.arrowRGB.length;
