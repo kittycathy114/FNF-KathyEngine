@@ -28,6 +28,8 @@ class MainMenuState extends MusicBeatState
 {
 	public static var psychEngineVersion:String = '1.0.4';
 	public static var osEngineVersion:String = '1.5.1';
+	/** Psych Extra Keys (EK) 移植版本号，取自 EK v0.4.9 源码 MainMenuState.extraKeysVersion */
+	public static var extraKeysVersion:String = '0.4.9';
 
 	/**
 	 * 游戏内展示版本号（带 rc/beta/alpha 后缀）。
@@ -158,10 +160,14 @@ class MainMenuState extends MusicBeatState
 		var isMrExtended:Bool = ClientPrefs.data.windowTitlePreset == 'Psych Engine: MintRhythm Extended';
 		var kathyLabel:String = isMrExtended ? (ClientPrefs.data.language == 'zh_cn' || ClientPrefs.data.language == 'zh_tw' ? '薄荷韵律 (M.R. Extended)' : 'MintRhythm Extended') : 'Kathy Engine';
 		var mrVerFont:String = isMrExtended ? 'unifont-18.0.01.otf' : 'vcr.ttf';
-		var mrVer:FlxText = new FlxText(12, FlxG.height - 66, 0, '${kathyLabel} v' + kathyEngineVersion, 12);
+		var mrVer:FlxText = new FlxText(12, FlxG.height - 86, 0, '${kathyLabel} v' + kathyEngineVersion, 12);
 		mrVer.scrollFactor.set();
 		mrVer.setFormat(Paths.font(mrVerFont), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		add(mrVer);
+		var ekVer:FlxText = new FlxText(12, FlxG.height - 66, 0, 'Psych Extra Keys v' + extraKeysVersion, 12);
+		ekVer.scrollFactor.set();
+		ekVer.setFormat(Paths.font(mrVerFont), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		add(ekVer);
 		var psychVer:FlxText = new FlxText(12, FlxG.height - 46, 0, "Psych Engine v" + psychEngineVersion, 12);
 		psychVer.scrollFactor.set();
 		psychVer.setFormat(Paths.font(mrVerFont), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
@@ -177,6 +183,7 @@ class MainMenuState extends MusicBeatState
 			mrVer.text = '${label} v' + kathyEngineVersion;
 			var font:String = isMrExtended ? 'unifont-18.0.01.otf' : 'vcr.ttf';
 			mrVer.setFormat(Paths.font(font), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+			ekVer.setFormat(Paths.font(font), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 			psychVer.setFormat(Paths.font(font), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 			fnfVer.setFormat(Paths.font(font), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		};
