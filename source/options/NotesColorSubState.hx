@@ -3,6 +3,8 @@ package options;
 import flixel.addons.display.FlxBackdrop;
 import flixel.addons.display.FlxGridOverlay;
 import backend.CoolUtil;
+import backend.Language;
+import backend.ExtraKeysHandler;
 import flixel.addons.display.shapes.FlxShapeCircle;
 import flixel.input.keyboard.FlxKey;
 import flixel.input.gamepad.FlxGamepadInputID;
@@ -22,6 +24,11 @@ class NotesColorSubState extends MusicBeatSubstate
 	var onPixel:Bool = false;
 	var dataArray:Array<Array<FlxColor>>;
 
+	// Extra Keys：当前键数档位页（4键=3，0=1键 ... 17=18键），
+	// 按 Q/E 切换，每次只显示该键数对应的箭头列（复用 ControlsSubState 的分页思路）
+	var curEKPage:Int = 3;
+	var ekTipTxt:FlxText;
+
 	var hexTypeLine:FlxSprite;
 	var hexTypeNum:Int = -1;
 	var hexTypeVisibleTimer:Float = 0;
@@ -35,10 +42,10 @@ class NotesColorSubState extends MusicBeatSubstate
 	var colorWheel:FlxSprite;
 	var colorWheelSelector:FlxSprite;
 
-	var alphabetR:FlxText;
-	var alphabetG:FlxText;
-	var alphabetB:FlxText;
-	var alphabetHex:FlxText;
+	var alphabetR:Alphabet;
+	var alphabetG:Alphabet;
+	var alphabetB:Alphabet;
+	var alphabetHex:Alphabet;
 
 	var modeBG:FlxSprite;
 	var notesBG:FlxSprite;
@@ -91,14 +98,10 @@ class NotesColorSubState extends MusicBeatSubstate
 		bg.alpha = 0.25;
 		add(bg);
 		
-		var tipLabel:String = (controls.mobileC) ? 'PRESS' : 'CTRL';
-		var tipLabelSize:Int = controls.mobileC ? 44 : 50;
-		var titleLabel:FlxText = new FlxText((controls.mobileC) ? 44 : 50, 86, 0, tipLabel, tipLabelSize);
-		titleLabel.setFormat(Paths.font(Language.get('game_font')), tipLabelSize, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
-		titleLabel.borderSize = 2;
-		titleLabel.scale.set(0.4);
-		titleLabel.antialiasing = ClientPrefs.data.antialiasing;
-		add(titleLabel);
+		var text:Alphabet = new Alphabet((controls.mobileC) ? 44 : 50, 86, (controls.mobileC) ? 'PRESS' : 'CTRL', false);
+		text.alignment = CENTERED;
+		text.setScale(0.4);
+		add(text);
 
 		copyButton = new FlxSprite(760, 50).loadGraphic(Paths.image('noteColorMenu/copy'));
 		copyButton.alpha = 0.6;
@@ -134,13 +137,13 @@ class NotesColorSubState extends MusicBeatSubstate
 
 		var txtX = 980;
 		var txtY = 90;
-		alphabetR = makeColorText(txtX - 100, txtY);
+		alphabetR = makeColorAlphabet(txtX - 100, txtY);
 		add(alphabetR);
-		alphabetG = makeColorText(txtX, txtY);
+		alphabetG = makeColorAlphabet(txtX, txtY);
 		add(alphabetG);
-		alphabetB = makeColorText(txtX + 100, txtY);
+		alphabetB = makeColorAlphabet(txtX + 100, txtY);
 		add(alphabetB);
-		alphabetHex = makeColorText(txtX, txtY - 55);
+		alphabetHex = makeColorAlphabet(txtX, txtY - 55);
 		add(alphabetHex);
 		hexTypeLine = new FlxSprite(0, 20).makeGraphic(5, 62, FlxColor.WHITE);
 		hexTypeLine.visible = false;
@@ -160,16 +163,27 @@ class NotesColorSubState extends MusicBeatSubstate
 		} else
 			reset = "RESET";
 
+		var tipFont:String = Language.get('game_font'); // Kathy 中文字体（vcr.ttf 无中文字形，中文提示会乱码）
 		var tip:FlxText = new FlxText(tipX, tipY, 0, Language.get('note_colors_tip', [reset]), 16);
-		tip.setFormat(Paths.font(Language.get('game_font')), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		tip.setFormat(Paths.font(tipFont), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		tip.borderSize = 2;
 		add(tip);
 
 		tipTxt = new FlxText(tipX, tipY + 24, 0, '', 16);
-		tipTxt.setFormat(Paths.font(Language.get('game_font')), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		tipTxt.setFormat(Paths.font(tipFont), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		tipTxt.borderSize = 2;
 		add(tipTxt);
 		updateTip();
+
+		// Extra Keys：键数档位翻页提示（仅键盘/手柄，移动端无 Q/E）
+		if (!controls.mobileC)
+		{
+			ekTipTxt = new FlxText(tipX, tipY + 48, 0, '', 16);
+			ekTipTxt.setFormat(Paths.font(tipFont), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+			ekTipTxt.borderSize = 2;
+			add(ekTipTxt);
+			updateEKTip();
+		}
 
 		controllerPointer = new FlxShapeCircle(0, 0, 20, {thickness: 0}, FlxColor.WHITE);
 		controllerPointer.offset.set(20, 20);
@@ -193,6 +207,31 @@ class NotesColorSubState extends MusicBeatSubstate
 		var key:String = !controls.controllerMode ? Language.get('note_colors_shift') : Language.get('note_colors_lb');
 		if (!controls.mobileC)
 			tipTxt.text = Language.get('note_colors_hold_tip', [key]);
+	}
+
+	function updateEKTip()
+	{
+		if (ekTipTxt != null)
+			ekTipTxt.text = '按 Q/E 切换键数档位（当前 ' + (curEKPage + 1) + ' 键）';
+	}
+
+	/** 当前页键数（= mania+1） */
+	function get_pageKeyCount():Int return curEKPage + 1;
+
+	function changeEKPage(change:Int = 0)
+	{
+		var newPage:Int = curEKPage + change;
+		if (newPage < 0) newPage = 0;
+		ExtraKeysHandler.ensure();
+		if (ExtraKeysHandler.instance != null && newPage > ExtraKeysHandler.instance.data.maxKeys) newPage = ExtraKeysHandler.instance.data.maxKeys;
+		if (newPage == curEKPage) return;
+
+		curEKPage = newPage;
+		if (curSelectedNote >= get_pageKeyCount()) curSelectedNote = 0;
+		spawnNotes();
+		updateNotes(true);
+		updateEKTip();
+		FlxG.sound.play(Paths.sound('scrollMenu'), 0.6);
 	}
 
 	var _storedColor:FlxColor;
@@ -321,6 +360,10 @@ class NotesColorSubState extends MusicBeatSubstate
 		}
 		else
 		{
+			// Extra Keys：Q/E 切换键数档位页（hex 输入模式不响应，避免与 A-F 输入冲突）
+			if (FlxG.keys.justPressed.Q) changeEKPage(-1);
+			else if (FlxG.keys.justPressed.E) changeEKPage(1);
+
 			var add:Int = 0;
 			if(analogX == 0 && !changedToController)
 			{
@@ -439,14 +482,16 @@ class NotesColorSubState extends MusicBeatSubstate
 				FlxG.sound.play(Paths.sound('scrollMenu'), 0.6);
 			}
 			else if(pointerY() >= hexTypeLine.y && pointerY() < hexTypeLine.y + hexTypeLine.height &&
-						Math.abs(pointerX() - 1000) <= 84)
+					Math.abs(pointerX() - 1000) <= 84)
+			{
+				hexTypeNum = 0;
+				for (letter in alphabetHex.letters)
 				{
-					// FlxText 没有 .letters 数组，用平均字符宽度估算光标落点
-					var charW:Float = alphabetHex.width / Math.max(1, alphabetHex.text.length);
-					hexTypeNum = Math.floor((pointerX() - alphabetHex.x) / charW);
-					if(hexTypeNum < 0) hexTypeNum = 0;
-					if(hexTypeNum > 5) hexTypeNum = 5;
-					hexTypeLine.visible = true;
+					if(letter.x - letter.offset.x + letter.width <= pointerX()) hexTypeNum++;
+					else break;
+				}
+				if(hexTypeNum > 5) hexTypeNum = 5;
+				hexTypeLine.visible = true;
 				centerHexTypeLine();
 			}
 			else holdingOnObj = null;
@@ -488,26 +533,29 @@ class NotesColorSubState extends MusicBeatSubstate
 		}
 		else if(touchPad.buttonC.justPressed || controls.RESET && hexTypeNum < 0)
 		{
+			var defArr:Array<Array<FlxColor>> = !onPixel ? ClientPrefs.defaultData.arrowRGB : ClientPrefs.defaultData.arrowRGBPixel;
 			if(FlxG.keys.pressed.SHIFT || FlxG.gamepads.anyPressed(LEFT_SHOULDER))
 			{
 				for (i in 0...3)
 				{
 					var strumRGB:RGBShaderReference = myNotes.members[curSelectedNote].rgbShader;
-					var color:FlxColor = !onPixel ? ClientPrefs.defaultData.arrowRGB[curSelectedNote][i] :
-													ClientPrefs.defaultData.arrowRGBPixel[curSelectedNote][i];
-					switch(i)
+					var color:FlxColor = getDefaultColor(defArr, curSelectedNote, i);
+					if (strumRGB != null)
 					{
-						case 0:
-							getShader().r = strumRGB.r = color;
-						case 1:
-							getShader().g = strumRGB.g = color;
-						case 2:
-							getShader().b = strumRGB.b = color;
+						switch(i)
+						{
+							case 0:
+								getShader().r = strumRGB.r = color;
+							case 1:
+								getShader().g = strumRGB.g = color;
+							case 2:
+								getShader().b = strumRGB.b = color;
+						}
 					}
 					dataArray[curSelectedNote][i] = color;
 				}
 			}
-			setShaderColor(!onPixel ? ClientPrefs.defaultData.arrowRGB[curSelectedNote][curSelectedMode] : ClientPrefs.defaultData.arrowRGBPixel[curSelectedNote][curSelectedMode]);
+			setShaderColor(getDefaultColor(defArr, curSelectedNote, curSelectedMode));
 			FlxG.sound.play(Paths.sound('cancelMenu'), 0.6);
 			updateColors();
 		}
@@ -537,8 +585,18 @@ class NotesColorSubState extends MusicBeatSubstate
 
 	function centerHexTypeLine()
 	{
-		var charW:Float = alphabetHex.width / Math.max(1, alphabetHex.text.length);
-		hexTypeLine.x = alphabetHex.x + hexTypeNum * charW + hexTypeLine.width;
+		//trace(hexTypeNum);
+		if(hexTypeNum > 0)
+		{
+			var letter = alphabetHex.letters[hexTypeNum-1];
+			hexTypeLine.x = letter.x - letter.offset.x + letter.width;
+		}
+		else
+		{
+			var letter = alphabetHex.letters[0];
+			hexTypeLine.x = letter.x - letter.offset.x;
+		}
+		hexTypeLine.x += hexTypeLine.width;
 		hexTypeVisibleTimer = 0;
 	}
 
@@ -555,10 +613,11 @@ class NotesColorSubState extends MusicBeatSubstate
 		FlxG.sound.play(Paths.sound('scrollMenu'));
 	}
 	function changeSelectionNote(change:Int = 0) {
+		var keyCount:Int = get_pageKeyCount();
 		curSelectedNote += change;
 		if (curSelectedNote < 0)
-			curSelectedNote = dataArray.length-1;
-		if (curSelectedNote >= dataArray.length)
+			curSelectedNote = keyCount-1;
+		if (curSelectedNote >= keyCount)
 			curSelectedNote = 0;
 		
 		modeBG.visible = false;
@@ -569,14 +628,13 @@ class NotesColorSubState extends MusicBeatSubstate
 		FlxG.sound.play(Paths.sound('scrollMenu'));
 	}
 
-	// 颜色值/hex 数字文本（替代 Alphabet 精灵图，大幅提速且支持所有 glyph）
-	function makeColorText(x:Float = 0, y:Float = 0):FlxText
+	// alphabets
+	function makeColorAlphabet(x:Float = 0, y:Float = 0):Alphabet
 	{
-		var text:FlxText = new FlxText(x - 90, y, 180, '', 45);
-		text.setFormat(Paths.font(Language.get('game_font')), 45, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
-		text.borderSize = 2.4;
-		text.scale.set(0.6);
-		text.antialiasing = ClientPrefs.data.antialiasing;
+		var text:Alphabet = new Alphabet(x, y, '', true);
+		text.alignment = CENTERED;
+		text.setScale(0.6);
+		add(text);
 		return text;
 	}
 
@@ -639,12 +697,15 @@ class NotesColorSubState extends MusicBeatSubstate
 		}
 
 		Note.globalRgbShaders = [];
-		for (i in 0...dataArray.length)
+		var keyCount:Int = get_pageKeyCount();
+		// 箭头大小：4 键及以下保持原版 102，5 键起按键数等比缩小，避免挤在一起无法点选
+		var noteSize:Float = 102 * Math.min(1, 4 / keyCount);
+		for (i in 0...keyCount)
 		{
 			Note.initializeGlobalRGBShader(i);
-			var newNote:StrumNote = new StrumNote(150 + (480 / dataArray.length * i), 200, i, 0);
+			var newNote:StrumNote = new StrumNote(150 + (480 / keyCount * i), 200, i, 0);
 			newNote.useRGBShader = true;
-			newNote.setGraphicSize(102);
+			newNote.setGraphicSize(noteSize);
 			newNote.updateHitbox();
 			newNote.ID = i;
 			myNotes.add(newNote);
@@ -690,7 +751,7 @@ class NotesColorSubState extends MusicBeatSubstate
 		alphabetG.text = Std.string(color.green);
 		alphabetB.text = Std.string(color.blue);
 		alphabetHex.text = color.toHexString(false, false);
-		alphabetHex.color = color; // FlxText 整体着色，替代原来遍历 .letters 逐个设色
+		for (letter in alphabetHex.letters) letter.color = color;
 
 		colorWheel.color = FlxColor.fromHSB(0, 0, color.brightness);
 		colorWheelSelector.setPosition(colorWheel.x + colorWheel.width/2, colorWheel.y + colorWheel.height/2);
@@ -717,6 +778,29 @@ class NotesColorSubState extends MusicBeatSubstate
 	function setShaderColor(value:FlxColor) dataArray[curSelectedNote][curSelectedMode] = value;
 	function getShaderColor() return dataArray[curSelectedNote][curSelectedMode];
 	function getShader() return Note.globalRgbShaders[curSelectedNote];
+
+	/** 多键安全取默认色：defaultData 仅 4 组时越界回退 extrakeys 全局色表，再兜底白色 */
+	function getDefaultColor(arr:Array<Array<FlxColor>>, note:Int, mode:Int):FlxColor
+	{
+		if (note < arr.length && arr[note] != null && mode < arr[note].length)
+			return arr[note][mode];
+
+		if (ExtraKeysHandler.instance != null && ExtraKeysHandler.instance.data != null
+			&& ExtraKeysHandler.instance.data.colors != null)
+		{
+			var style:Int = Note.styleIndex(note);
+			if (style > -1 && style < ExtraKeysHandler.instance.data.colors.length)
+			{
+				var ekC = ExtraKeysHandler.instance.data.colors[style];
+				if (ekC != null)
+				{
+					var c:Array<FlxColor> = [FlxColor.fromString('#' + ekC.inner), FlxColor.fromString('#' + ekC.border), FlxColor.fromString('#' + ekC.outline)];
+					if (mode < c.length) return c[mode];
+				}
+			}
+		}
+		return FlxColor.WHITE;
+	}
 
 	override function destroy()
 	{

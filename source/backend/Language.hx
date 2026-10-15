@@ -79,7 +79,7 @@ class Language {
         var value = currentLang.exists(key) ? currentLang.get(key) : key; // 如果键不存在，返回键本身
         if (params != null) {
             for (i in 0...params.length) {
-                value = StringTools.replace(value, '{$i}', params[i]);
+                value = StringTools.replace(value, '{$' + i + '}', params[i]);
             }
         }
         return value;
