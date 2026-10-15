@@ -487,9 +487,10 @@ class NoteHoldCover extends FlxSprite
 			refreshScale();
 
 			// 位置由 JSON 偏移决定（以 strum 左上角为锚点）：全局 offsets + 各段自身偏移，不做自动居中
+			var k:Float = PlayState.strumScale;
 			var curOff:Array<Float> = getCurrentOffset();
-			x = targetStrum.x + curOff[0] + animOffset[0];
-			y = targetStrum.y + curOff[1] + animOffset[1];
+			x = targetStrum.x + (curOff[0] + animOffset[0]) * k;
+			y = targetStrum.y + (curOff[1] + animOffset[1]) * k;
 			alpha = targetStrum.alpha;
 		}
 
