@@ -79,7 +79,12 @@ class Language {
         var value = currentLang.exists(key) ? currentLang.get(key) : key; // 如果键不存在，返回键本身
         if (params != null) {
             for (i in 0...params.length) {
+                // 同时支持两种占位符风格：
+                //  - Kathy 新增键：{$0}（0-based，带 $）
+                //  - 早期/翻译遗留键：{0}（0-based，无 $，如 charting_msg_zoom）
+                // 先替换带 $ 的（更具体），再替换无 $ 的；{$0} 不包含 {0} 子串，互不冲突。
                 value = StringTools.replace(value, '{$' + i + '}', params[i]);
+                value = StringTools.replace(value, '{' + i + '}', params[i]);
             }
         }
         return value;

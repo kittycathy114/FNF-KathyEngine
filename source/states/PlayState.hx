@@ -3257,8 +3257,8 @@ tempScore += '${lblScore}: ${songScore}';
 		var maxSpacing:Float = 2 * edge / (totalColumns + 2);
 		if (Note.swagWidth * strumScale > maxSpacing)
 			strumScale = maxSpacing / Note.swagWidth;
-		trace('[EK] computeMultiKeyStrumScale cols=' + totalColumns + ' strumScale=' + strumScale
-			+ ' spacing=' + (Note.swagWidth * strumScale) + ' edge=' + edge);
+		/*trace('[EK] computeMultiKeyStrumScale cols=' + totalColumns + ' strumScale=' + strumScale
+			+ ' spacing=' + (Note.swagWidth * strumScale) + ' edge=' + edge);*/
 	}
 
 	private function generateStaticArrows(player:Int, ?instant:Bool = false):Void
@@ -3358,11 +3358,11 @@ tempScore += '${lblScore}: ${songScore}';
 			strumLineNotes.add(babyArrow);
 			babyArrow.x = (centerX - groupWidth / 2) - legacyOffset + spacing * i;
 		}
-		trace('[EK] strums side=' + player + ' cols=' + totalColumns + ' centerX=' + centerX + ' spacing=' + spacing
+		/*trace('[EK] strums side=' + player + ' cols=' + totalColumns + ' centerX=' + centerX + ' spacing=' + spacing
 			+ ' groupW=' + groupWidth + ' firstX=' + ((centerX - groupWidth / 2) - legacyOffset)
 			+ ' lastX=' + ((centerX - groupWidth / 2) - legacyOffset + spacing * (totalColumns - 1))
 			+ ' lastEdge=' + ((centerX - groupWidth / 2) - legacyOffset + spacing * (totalColumns - 1) + Note.swagWidth * strumScale)
-			+ ' screenW=' + FlxG.width);
+			+ ' screenW=' + FlxG.width);*/
 	}
 
 	/** 根据当前 strum 的实际位置，为每个 strum 组（对手/玩家）生成 Track 上的黑色半透明覆盖层（阴影）。 */
@@ -3580,10 +3580,10 @@ tempScore += '${lblScore}: ${songScore}';
 		// Extra Keys：进游戏时兜底把 arrowRGB/arrowRGBPixel/arrowHSV 补齐到 18 色
 		// （loadPrefs 启动早期 ExtraKeysHandler 可能加载失败导致多键列取色越界→染色失效）
 		ClientPrefs.ensureEKArrowColors();
-		trace('[EK] applyMania(' + mania + ') -> columns=' + laneCount
+		/*trace('[EK] applyMania(' + mania + ') -> columns=' + laneCount
 			+ ' colArray=[' + newColArray.join(',') + ']'
 			+ ' arrowRGB.len=' + (ClientPrefs.data.arrowRGB != null ? ClientPrefs.data.arrowRGB.length : -1)
-			+ ' arrowRGBPixel.len=' + (ClientPrefs.data.arrowRGBPixel != null ? ClientPrefs.data.arrowRGBPixel.length : -1));
+			+ ' arrowRGBPixel.len=' + (ClientPrefs.data.arrowRGBPixel != null ? ClientPrefs.data.arrowRGBPixel.length : -1));*/
 	}
 
 	override function openSubState(SubState:FlxSubState)
@@ -4423,10 +4423,12 @@ tempScore += '${lblScore}: ${songScore}';
 								{
 									var diagCol:Int = daNote.noteData;
 									if (diagCol == 0 || diagCol == 5)
-										trace('[EK] diag col=' + diagCol + ' mustPress=' + daNote.mustPress
+									{
+										/*trace('[EK] diag col=' + diagCol + ' mustPress=' + daNote.mustPress
 											+ ' noteX=' + daNote.x + ' noteOff=' + daNote.offset.x + ' noteW=' + daNote.width
 											+ ' strumX=' + strum.x + ' strumOff=' + strum.offset.x + ' strumW=' + strum.width
-											+ ' noteCenter=' + (daNote.x + daNote.offset.x) + ' strumCenter=' + (strum.x + strum.offset.x));
+											+ ' noteCenter=' + (daNote.x + daNote.offset.x) + ' strumCenter=' + (strum.x + strum.offset.x));*/
+									}
 								}
 								daNote.followStrumNote(strum, fakeCrochet, songSpeed / playbackRate);
 

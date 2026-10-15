@@ -1107,14 +1107,34 @@ if(_shouldReset) Conductor.songPosition = 0;
 
 	// Lil' Buddies 迷你角色唱歌动画
 	// isBf: true=BF唱歌(lilBf), false=对手唱歌(lilOpp)
-	// direction: 0=LEFT, 1=DOWN, 2=UP, 3=RIGHT
+	// direction: 列索引（多键时 0..keyCount-1）。Lil 素材仅 4 方向动画，
+	// 多键列按 extrakeys 的 sing 方向（singLEFT/DOWN/UP/RIGHT）映射回 0..3，
+	// 修复 5K+ 时多出轨道（动画名 '4'..'8' 不存在）不触发播放的问题。
 	private function playLilSing(isBf:Bool, direction:Int):Void
 	{
 		if(chartEditorSave == null || !chartEditorSave.data.showLilBuddies) return;
 		var target:FlxSprite = isBf ? lilBf : lilOpp;
 		if(target == null || !target.visible) return;
-		var animName:String = "" + Std.int(Math.abs(direction));
+		var dir:Int = Std.int(Math.abs(direction)) % 4;
+		ExtraKeysHandler.ensure();
+		if (ExtraKeysHandler.instance != null && ExtraKeysHandler.instance.data != null)
+		{
+			var mania:Int = getSectionMania(-1); // 制谱器当前歌曲 mania（与网格列数一致）
+			switch (ExtraKeysHandler.instance.singAnim(mania, direction))
+			{
+				case 'singLEFT': dir = 0;
+				case 'singDOWN': dir = 1;
+				case 'singUP': dir = 2;
+				case 'singRIGHT': dir = 3;
+			}
+		}
+		var animName:String = "" + dir;
 		target.animation.play(animName, true);
+		// 唱歌时按该列样式染上箭头主色（Lil 主体黑白，染色后显示对应键的颜色）
+		var style:Int = Note.styleIndex(direction);
+		var arr:Array<FlxColor> = ClientPrefs.data.arrowRGB[style];
+		if (arr != null && arr.length > 0) target.color = arr[0];
+		else target.color = 0xFFFFFFFF;
 		// 记录当前拍号，下一拍自动回 idle（与主角色逻辑对齐）
 		var curBeatNow:Int = Math.floor(Conductor.getStep(Conductor.songPosition) / 4);
 		if(isBf) lilBfSingFinishedBeat = curBeatNow;
@@ -2786,6 +2806,7 @@ if(_shouldReset) Conductor.songPosition = 0;
 			if(bfAnim != 'idle' && !lilBfInSustain && lilBfSingFinishedBeat != -1 && curBeatPure > lilBfSingFinishedBeat)
 			{
 				lilBf.animation.play('idle', false, false);  // forceRestart=false，不打断循环
+				lilBf.color = 0xFFFFFFFF; // 回 idle 恢复黑白
 				lilBfSingFinishedBeat = -1;
 			}
 		}
@@ -2795,6 +2816,7 @@ if(_shouldReset) Conductor.songPosition = 0;
 			if(oppAnim != 'idle' && !lilOppInSustain && lilOppSingFinishedBeat != -1 && curBeatPure > lilOppSingFinishedBeat)
 			{
 				lilOpp.animation.play('idle', false, false);
+				lilOpp.color = 0xFFFFFFFF; // 回 idle 恢复黑白
 				lilOppSingFinishedBeat = -1;
 			}
 		}
@@ -8466,8 +8488,8 @@ for (i in 0...GRID_PLAYERS)
 						if(lilOpp != null) lilOpp.visible = lilBuddiesCheckBox.checked;
 						if(lilBuddiesCheckBox.checked)
 					{
-						if(lilBf != null) { lilBf.animation.play('idle', false, false); lilBfSingFinishedBeat = -1; lilBfInSustain = false; }
-						if(lilOpp != null) { lilOpp.animation.play('idle', false, false); lilOppSingFinishedBeat = -1; lilOppInSustain = false; }
+						if(lilBf != null) { lilBf.animation.play('idle', false, false); lilBf.color = 0xFFFFFFFF; lilBfSingFinishedBeat = -1; lilBfInSustain = false; }
+						if(lilOpp != null) { lilOpp.animation.play('idle', false, false); lilOpp.color = 0xFFFFFFFF; lilOppSingFinishedBeat = -1; lilOppInSustain = false; }
 					}
 					};
 					lilBuddiesCheckBox.cameras = state.cameras;
