@@ -260,6 +260,10 @@ class NoteSplash extends FlxSprite
 
 		setPosition(x, y);
 
+		// 多键：飞溅 scale/offset 随 strumScale 缩放（4k=1 原样）。
+		// 定位基准保持 Psych 原版固定值（不乘 strumScale）：渲染中心 = x_pos - offset + origin，
+		// origin 是贴图原始半宽（固定不随缩放变），若定位也缩放会把贴图中心推向一侧造成错位。
+		var splashScale:Float = PlayState.strumScale;
 		if (babyArrow != null)
 			setPosition(babyArrow.x - Note.swagWidth * 0.95, babyArrow.y - Note.swagWidth); // To prevent it from being misplaced for one game tick
 
@@ -363,14 +367,15 @@ class NoteSplash extends FlxSprite
 			else if (PlayState.isPixelStage) rgbShader.pixelAmount = 6;
 		}
 
-		offset.set(10, 10);
+		scale.set(config.scale * splashScale, config.scale * splashScale);
+		offset.set(10 * splashScale, 10 * splashScale);
 		var conf:NoteSplashAnim = config.animations.get(anim);
 		var offsets:Array<Float> = [0, 0];
 		if (conf != null) offsets = conf.offsets;
 		if (offsets != null)
 		{
-			offset.x += offsets[0];
-			offset.y += offsets[1];
+			offset.x += offsets[0] * splashScale;
+			offset.y += offsets[1] * splashScale;
 		}
 
 		animation.finishCallback = function(name:String) {
