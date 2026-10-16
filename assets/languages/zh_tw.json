@@ -274,6 +274,7 @@
   "go2time_time": "時間（以秒為單位）：",
   "go2time_section": "小節：",
   "charting_songname": "曲名：",
+  "charting_mania": "鍵數：",
   "charting_scrollspeed": "譜面流速：",
   "charting_audiooffset": "音訊延遲（以毫秒為單位）：",
   "charting_value1": "值 1：",

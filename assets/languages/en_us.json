@@ -294,6 +294,7 @@
   "go2time_time": "Time (in seconds):",
   "go2time_section": "Section:",
   "charting_songname": "Song Name:",
+  "charting_mania": "Key Count:",
   "charting_scrollspeed": "Scroll Speed:",
   "charting_audiooffset": "Audio Offset (ms):",
   "charting_value1": "Value 1:",
