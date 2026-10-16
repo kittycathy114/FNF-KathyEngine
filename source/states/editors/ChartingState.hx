@@ -3729,8 +3729,15 @@ var vortexPlaying:Bool = (vortexEnabled && FlxG.sound.music != null && FlxG.soun
 		// 逻辑与 PlayState 一致：优先用当前模组目录，缺失再扫描所有模组；用 loadSongAudio（不回退 funkin）判定。
 		var prevModDir:String = Mods.currentModDirectory;
 		var songModDir:String = Mods.currentModDirectory;
+		// Leather 谱面：歌曲音频目录名用原始名（如 "the potato warrior"），跳过 formatToSongPath。
+		// Song.applyLeatherAudioSuffix 已把难度后缀写入 specialInst/specialVocal 并设置 Song.leatherSongFolder。
+		var isLeatherSong:Bool = PlayState.SONG.format != null
+			&& (PlayState.SONG.format == 'LEATHER' || PlayState.SONG.format == 'LEATHER LTS');
+		var leatherFolder:String = isLeatherSong ? Song.leatherSongFolder : null;
 		function modHasAudio(mod:String, song:String, fileBase:String):Bool
 		{
+			if (isLeatherSong && leatherFolder != null && leatherFolder.length > 0)
+				return Paths.songAudioExistsRaw(leatherFolder, fileBase, mod);
 			return Paths.loadSongAudio(song, fileBase, mod) != null;
 		}
 		// 探测某 mod 是否含有该曲音频：含 SpecialInst/SpecialVocal 的带后缀文件也算（与 FreeplayState 一致）。
@@ -3785,7 +3792,10 @@ var vortexPlaying:Bool = (vortexEnabled && FlxG.sound.music != null && FlxG.soun
 		try
 		{
 			var instFileBase:String = (PlayState.SONG.specialInst != null && PlayState.SONG.specialInst.length > 0) ? 'Inst-${PlayState.SONG.specialInst}' : 'Inst';
-			FlxG.sound.playMusic(Paths.loadSongAudio(PlayState.SONG.song, instFileBase, songModDir), 0);
+			if (isLeatherSong && leatherFolder != null && leatherFolder.length > 0)
+				FlxG.sound.playMusic(Paths.loadSongAudioRaw(leatherFolder, instFileBase, songModDir), 0);
+			else
+				FlxG.sound.playMusic(Paths.loadSongAudio(PlayState.SONG.song, instFileBase, songModDir), 0);
 			FlxG.sound.music.pause();
 			FlxG.sound.music.time = time;
 			FlxG.sound.music.onComplete = (function() songFinished = true);
@@ -3803,7 +3813,8 @@ var vortexPlaying:Bool = (vortexEnabled && FlxG.sound.music != null && FlxG.soun
 		{
 			try
 			{
-				// Inst 与人声统一从 songModDir 用 loadSongAudio 加载（不回退 funkin，缺失即 null）。
+				// Inst 与人声统一从 songModDir 用 loadSongAudio 加载（不回退 funkin，缺失即 null）；
+				// Leather 谱面走 loadSongAudioRaw（目录原始名，后缀已在 specialVocal 中）。
 				// 优先：角色指定(postfix) > Voices-Player / Voices-Opponent > 无后缀合并 Voices
 				function tryVoices(postfix:String):Sound
 				{
@@ -3813,6 +3824,8 @@ var vortexPlaying:Bool = (vortexEnabled && FlxG.sound.music != null && FlxG.soun
 					// 优先 Voices-{角色}-SpecialVocal > Voices-Player/Opponent-SpecialVocal > Voices-SpecialVocal，命中即止（任一存在即可）。
 					if (PlayState.SONG.specialVocal != null && PlayState.SONG.specialVocal.length > 0)
 						fileBase += '-' + PlayState.SONG.specialVocal;
+					if (isLeatherSong && leatherFolder != null && leatherFolder.length > 0)
+						return Paths.loadSongAudioRaw(leatherFolder, fileBase, songModDir);
 					return Paths.loadSongAudio(PlayState.SONG.song, fileBase, songModDir);
 				}
 
@@ -6294,7 +6307,8 @@ for (i in 0...GRID_PLAYERS)
 		};
 
 		// Extra Keys：键数档位（0=1键 ... 17=18键；4 键 = 3）。改键数会重建网格列数与轨道色块。
-		maniaStepper = new PsychUINumericStepper(objX + 330, objY, 1, 3, 0, 17, 0, 80);
+		// 位置：与“音频延迟”同列（objX+220）、位于其上方一行（objY-40），避免横向溢出菜单框。
+		maniaStepper = new PsychUINumericStepper(objX + 220, objY - 40, 1, 3, 0, 17, 0, 80);
 		maniaStepper.onValueChange = function()
 		{
 			PlayState.SONG.mania = Std.int(maniaStepper.value);
