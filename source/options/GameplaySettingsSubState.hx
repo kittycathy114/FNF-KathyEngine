@@ -235,14 +235,6 @@ class GameplaySettingsSubState extends BaseOptionsMenu
 		option.decimals = 0;
 		addOption(option);
 
-		// Extra Keys：触屏多键轨道模式
-		var option:Option = new Option(Language.get('touch_lane_mode'),
-			Language.get("touch_lane_mode_desc"),
-			'touchLaneMode',
-			STRING,
-			['auto', '4k']);
-		addOption(option);
-
 		// Extra Keys：开局键位预览（EK KeybindShowcase）
 		var option:Option = new Option(Language.get('show_key_preview'),
 			Language.get("show_key_preview_desc"),

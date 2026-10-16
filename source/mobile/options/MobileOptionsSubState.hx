@@ -111,6 +111,14 @@ class MobileOptionsSubState extends BaseOptionsMenu
 				addMobileControls();
 			};
 			addOption(option);
+
+			// Extra Keys：触屏多键轨道模式（auto = 跟随谱面键数 / 4k = 固定 4 键）
+			option = new Option(Language.get('touch_lane_mode'),
+				Language.get("touch_lane_mode_desc"),
+				'touchLaneMode',
+				STRING,
+				['auto', '4k']);
+			addOption(option);
 		}
 
 		option = new Option(Language.get('dynamic_controls_color'),

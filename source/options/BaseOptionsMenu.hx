@@ -822,8 +822,15 @@ class BaseOptionsMenu extends MusicBeatSubstate
 			// Y 位置由平滑滚动位置驱动，全列一致缓动/跟手，无需逐行吸附
 			item.y = listCenterY + (num - scrollVisual) * itemSpacing;
 
-			var targetX:Float = listBaseX + (offset == 0 ? OptionsConfig.SUBMENU_SELECTED_OFFSET_X : 0);
-			item.x = FlxMath.lerp(targetX, item.x, lerp);
+			// Freeplay 式连续水平投影：选中行固定在最右，离选中行越远的项向左缩进越多，形成扇形纵深。
+			// 用 |dist| 做幂次曲线(SUBMENU_X_DRIFT_CURVE)让边缘呈弧形而非直线三角，滚动轨迹更"圆"。
+			// 由 scrollVisual(平滑浮点距离) 驱动，滚动时水平偏移连续滑动。
+			var dist:Float = num - scrollVisual;
+			var shaped:Float = Math.pow(Math.abs(dist), OptionsConfig.SUBMENU_X_DRIFT_CURVE);
+			var targetX:Float = listBaseX + OptionsConfig.SUBMENU_SELECTED_OFFSET_X
+				+ OptionsConfig.SUBMENU_SELECTED_EXTRA_OFFSET_X
+				- shaped * OptionsConfig.SUBMENU_X_DRIFT_PER_ITEM;
+			item.x = targetX;
 
 			var targetAlpha:Float = (offset == 0) ? OptionsConfig.SUBMENU_SELECTED_ALPHA : OptionsConfig.SUBMENU_UNSELECTED_ALPHA;
 			if (optionsArray[num].disabled) targetAlpha *= OptionsConfig.SUBMENU_DISABLED_ALPHA_MULT;
