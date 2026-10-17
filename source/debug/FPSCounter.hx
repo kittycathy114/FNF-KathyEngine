@@ -36,7 +36,7 @@ class FPSCounter extends Sprite
 	public var memoryPeakMegas(default, null):Float = 0;
 
 	// ---- 环形 FPS 缓冲区（替代 Array.push/shift） ----
-	private static final RING_SIZE:Int = 256;
+	private static final RING_SIZE:Int = 10000;
 	@:noCompletion private var ringTimes:Array<Float>;
 	@:noCompletion private var ringWrite:Int = 0;
 	@:noCompletion private var ringCount:Int = 0;
