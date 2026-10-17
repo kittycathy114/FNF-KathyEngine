@@ -32,6 +32,7 @@ class ModCompatCheckerSubState extends MusicBeatSubstate
 	var titleText:FlxText;
 	var hintText:FlxText;
 	var summaryText:FlxText;
+	var leInfoText:FlxText; // Leather Engine 模组识别行（青色）
 	var emptyText:FlxText;
 
 	var mode:Int = MODE_LIST;
@@ -82,6 +83,14 @@ class ModCompatCheckerSubState extends MusicBeatSubstate
 		summaryText.scrollFactor.set();
 		add(summaryText);
 
+		// Leather Engine 模组识别行（青色）：报告模式显示 LE 类型 + 当前脚本 API 运行时
+		leInfoText = new FlxText(40, 0, FlxG.width - 80, '', 20);
+		leInfoText.setFormat(Paths.font(fontPath), 20, 0xFF67E8F9, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		leInfoText.borderSize = 1.6;
+		leInfoText.scrollFactor.set();
+		leInfoText.visible = false;
+		add(leInfoText);
+
 		emptyText = new FlxText(60, viewTop + 40, FlxG.width - 120, '', 28);
 		emptyText.setFormat(Paths.font(fontPath), 28, FlxColor.GRAY, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		emptyText.scrollFactor.set();
@@ -109,6 +118,7 @@ class ModCompatCheckerSubState extends MusicBeatSubstate
 		report = null;
 		selected = 0;
 		scroll = 0;
+		leInfoText.visible = false; // 回到列表时隐藏 LE 识别行
 		clearRows();
 
 		if (mods.length == 0)
@@ -120,7 +130,14 @@ class ModCompatCheckerSubState extends MusicBeatSubstate
 		{
 			emptyText.visible = false;
 			for (i in 0...mods.length)
-				addRow(mods[i], FlxColor.WHITE, 28, 10);
+			{
+				// 模组名后加 LE 引擎徽章（青色高亮）；非 LE 模组保持白字
+				var lt:Int = ModCompatScanner.detectLeather(mods[i]);
+				var badge:String = ModCompatScanner.leatherTypeName(lt);
+				var rowText:String = (badge != '') ? mods[i] + '   [' + badge + ']' : mods[i];
+				var rowColor:Int = (lt != ModCompatScanner.LE_NONE) ? 0xFF67E8F9 : FlxColor.WHITE;
+				addRow(rowText, rowColor, 28, 10);
+			}
 		}
 		updateTitle(OptionsLanguage.get('mod_compat_checker', 'Mod Compatibility Checker'));
 		summaryText.text = OptionsLanguage.get('mod_compat_pick_hint', 'Pick a mod to scan its .lua / .hx scripts.');
@@ -151,6 +168,21 @@ class ModCompatCheckerSubState extends MusicBeatSubstate
 			+ OptionsLanguage.get('mod_compat_incompatible', 'Incompatible') + ': ' + sevError + '   '
 			+ OptionsLanguage.get('mod_compat_warning', 'Warning') + ': ' + sevWarn
 			+ '   API: ' + report.knownNames;
+
+		// Leather Engine 识别行：是 LE 模组时显示类型 + 当前脚本 API 运行时
+		var lt:Int = ModCompatScanner.detectLeather(report.mod);
+		if (lt != ModCompatScanner.LE_NONE)
+		{
+			var compat:String = backend.ClientPrefs.data.leatherScriptCompat;
+			leInfoText.text = 'Leather Engine mod [' + ModCompatScanner.leatherTypeName(lt)
+				+ ']  ->  scripts run on LE API runtime (leatherScriptCompat = ' + compat + ')';
+			leInfoText.y = summaryText.y + summaryText.textField.textHeight + 4 + summaryText.borderSize * 2 + 2;
+			leInfoText.visible = true;
+		}
+		else
+		{
+			leInfoText.visible = false;
+		}
 
 		if (report.findings.length == 0)
 		{
@@ -231,7 +263,11 @@ class ModCompatCheckerSubState extends MusicBeatSubstate
 	{
 		// 汇总行/标题若折行会变高，视口顶部据此下移，避免压住第一行
 		viewBottom = FlxG.height - 110;
-		viewTop = summaryText.y + summaryText.textField.textHeight + 4 + summaryText.borderSize * 2 + 10;
+		var baseY:Float = summaryText.y + summaryText.textField.textHeight + 4 + summaryText.borderSize * 2;
+		// LE 识别行可见时把视口再往下推一行
+		if (leInfoText.visible)
+			baseY += leInfoText.textField.textHeight + 4 + leInfoText.borderSize * 2 + 4;
+		viewTop = baseY + 10;
 		emptyText.y = viewTop + 24;
 
 		var y:Float = viewTop - scroll;

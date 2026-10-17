@@ -83,6 +83,48 @@ class ModCompatScanner
 		#end
 	}
 
+	// ---- Leather Engine 模组检测 ----
+	public static final LE_NONE:Int = 0;      // 非 LE 模组（Psych 系）
+	public static final LE_OFFICIAL:Int = 1;  // LE Official 系（0.4.x / 0.5.0，data/song data 等带空格目录）
+	public static final LE_LTS:Int = 2;       // LE LTS 1.1.9（data/charts + {folder}-metadata）
+	public static final LE_UNKNOWN:Int = 3;   // 有 LE 特征（_polymod_meta.json 且无 pack.json）但目录结构无法定版
+
+	/** 检测模组是否为 Leather Engine 模组并分辨版本家族（复用 Song.isLeatherMod 的判定思路，独立实现避免依赖 backend） */
+	public static function detectLeather(modName:String):Int
+	{
+		#if sys
+		var root:String = Paths.mods(modName);
+		if (!sys.FileSystem.exists(root)) return LE_NONE;
+
+		var hasMeta:Bool = sys.FileSystem.exists(root + '/_polymod_meta.json');
+		var hasPack:Bool = sys.FileSystem.exists(root + '/pack.json');
+		var hasSongData:Bool = sys.FileSystem.exists(root + '/data/song data');
+		var hasCharts:Bool = sys.FileSystem.exists(root + '/data/charts');
+		var hasCharData:Bool = sys.FileSystem.exists(root + '/data/character data');
+		var hasStageData:Bool = sys.FileSystem.exists(root + '/data/stage data');
+
+		// LTS 1.1.9：data/charts + {folder}-metadata
+		if (hasCharts) return LE_LTS;
+		// Official 0.5.0 / 0.4.x：data/song data 等 LE 特有带空格目录
+		if (hasSongData || hasCharData || hasStageData) return LE_OFFICIAL;
+		// Polymod 元数据存在且无 Psych pack.json → LE 系（目录结构未知，无法进一步定版）
+		if (hasMeta && !hasPack) return LE_UNKNOWN;
+		#end
+		return LE_NONE;
+	}
+
+	/** LE 类型显示名（中文，供 UI 徽章/报告直接显示） */
+	public static function leatherTypeName(t:Int):String
+	{
+		return switch(t)
+		{
+			case LE_OFFICIAL: 'LE Official / 0.4.x';
+			case LE_LTS: 'LE LTS 1.1.9';
+			case LE_UNKNOWN: 'LE ?';
+			default: '';
+		}
+	}
+
 	/**
 	 * 扫描一个模组。
 	 * @param modName 模组文件夹名（相对 mods/）
