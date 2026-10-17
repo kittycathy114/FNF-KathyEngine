@@ -502,6 +502,9 @@ class PlayState extends MusicBeatState
 	// Lua shit
 	public static var instance:PlayState;
 	#if LUA_ALLOWED public var luaArray:Array<FunkinLua> = []; #end
+	// Leather Engine 脚本层（对照 LE 原版 modding/scripts/languages/LuaScript.hx）
+	// 仅当当前谱面 format=LEATHER/LEATHER LTS 且 ClientPrefs.leatherScriptCompat != off 时使用
+	#if LUA_ALLOWED public var leatherLuaArray:Array<psychlua.leather.LeatherLuaScript> = []; #end
 
 	#if (LUA_ALLOWED || HSCRIPT_ALLOWED)
 	private var luaDebugGroup:FlxTypedGroup<psychlua.DebugLuaText>;
@@ -933,6 +936,18 @@ isReplaying = false;
 		startCharacterPos(boyfriend);
 		boyfriendGroup.add(boyfriend);
 
+		// Leather 舞台角色摆位：LE 的 character_Positions 语义是 [x=中心, y=脚底]（对照 LE 原版
+		// StageGroup.setCharOffsets：setPosition(x - width/2, y - height)），Psych 是左上角。
+		// 若不换算，角色左上直接落在 (1446,1656) 大坐标，Psych 相机 follow 角色中点时会错过
+		// 舞台对象（视野 y 超过背景底边 → camGame 黑屏）。换算后角色中点约在 LE 坐标，
+		// 相机跟随即可让角色与舞台背景同时进入视野。
+		if (isLeatherChartFormat() && stageData != null && stageData.objects != null && stageData.objects.length > 0)
+		{
+			if (gf != null) gf.setPosition(gf.x - gf.width / 2, gf.y - gf.height);
+			dad.setPosition(dad.x - dad.width / 2, dad.y - dad.height);
+			boyfriend.setPosition(boyfriend.x - boyfriend.width / 2, boyfriend.y - boyfriend.height);
+		}
+
 		if (playOpponent)
 		{
 			// 交换"唱歌动画自动回位"行为：受控角色(dad)按玩家规则回位（配合 playerDance），
@@ -960,6 +975,12 @@ isReplaying = false;
 		
 		#if (LUA_ALLOWED || HSCRIPT_ALLOWED)
 		// "SCRIPTS FOLDER" SCRIPTS
+		// Leather Engine 兼容：当前谱面是 LE 系（format=LEATHER/LEATHER LTS）且脚本层启用时，
+		// scripts/*.lua 走 LeatherLuaScript（LE API），否则走 FunkinLua（Psych API）。
+		var leatherScriptActive:Bool = isLeatherChartFormat()
+			&& psychlua.leather.LeatherScriptRouter.isActive(SONG.format);
+		var leatherApiVer:String = leatherScriptActive
+			? psychlua.leather.LeatherScriptRouter.resolveVersion(SONG.format) : 'official';
 		for (folder in Mods.directoriesWithFile(Paths.getSharedPath(), 'scripts/'))
 			#if linux
 			for (file in CoolUtil.sortAlphabetically(Paths.readDirectory(folder)))
@@ -969,7 +990,12 @@ isReplaying = false;
 			{
 				#if LUA_ALLOWED
 				if(file.toLowerCase().endsWith('.lua'))
-					new FunkinLua(folder + file);
+				{
+					if (leatherScriptActive)
+						leatherLuaArray.push(new psychlua.leather.LeatherLuaScript(folder + file, leatherApiVer, Mods.currentModDirectory));
+					else
+						new FunkinLua(folder + file);
+				}
 				#end
 
 				#if HSCRIPT_ALLOWED
@@ -977,6 +1003,26 @@ isReplaying = false;
 					initHScript(folder + file);
 				#end
 			}
+
+		// Leather modchart 脚本：data/modcharts/{modchartPath}.lua（对照 LE 原版 PlayState ~951-958：
+		// executeModchart = modchartPath 非空，先找 modcharts/ 再回退 scripts/，用 ModchartUtilities 执行）。
+		// 走 LeatherLuaScript（LE API 语义），加载后立即广播 start(0) 让脚本创建初始对象。
+		#if LUA_ALLOWED
+		if (leatherScriptActive && SONG.modchartPath != null && SONG.modchartPath.length > 0)
+		{
+			var modchartPath:String = findLeatherModchartPath(SONG.modchartPath);
+			if (modchartPath != null)
+			{
+				var modchartScript:psychlua.leather.LeatherLuaScript =
+					new psychlua.leather.LeatherLuaScript(modchartPath, leatherApiVer, Mods.currentModDirectory);
+				leatherLuaArray.push(modchartScript);
+				modchartScript.call('start', [0]);
+				trace('[LE modchart] loaded: $modchartPath');
+			}
+			else
+				trace('[LE modchart] not found: data/modcharts/${SONG.modchartPath}.lua');
+		}
+		#end
 		#end
 			
 		eventDebugGroup = new FlxTypedGroup<FlxText>();
@@ -1818,6 +1864,29 @@ isReplaying = false;
 		char.y += char.positionArray[1];
 	}
 
+	/** 当前谱面是否为 Leather 系（LEATHER / LEATHER LTS / 及 VSlice 转谱）。 */
+	public function isLeatherChartFormat():Bool
+	{
+		return SONG.format != null && (SONG.format == 'LEATHER' || SONG.format == 'LEATHER LTS');
+	}
+
+	/** 在当前/所有模组的 data/modcharts/{path}.lua 下查找 LE modchart 脚本（先 modcharts/ 再 scripts/，对照 LE 原版）。 */
+	function findLeatherModchartPath(path:String):String
+	{
+		#if MODS_ALLOWED
+		var candidates:Array<String> = [
+			'data/modcharts/' + path + '.lua',
+			'scripts/' + path + '.lua'
+		];
+		for (c in candidates)
+		{
+			var p:String = Paths.modFolders(c);
+			if (FileSystem.exists(p)) return p;
+		}
+		#end
+		return null;
+	}
+
 	public var videoCutscene:VideoSprite = null;
 	public function startVideo(name:String, forMidSong:Bool = false, canSkip:Bool = true, loop:Bool = false, playOnLoad:Bool = true)
 	{
@@ -2628,7 +2697,7 @@ tempScore += '${lblScore}: ${songScore}';
 		var prevModDir:String = Mods.currentModDirectory;
 
 		// Leather 谱面：歌曲音频目录名用原始名（如 "Final Destination"），跳过 formatToSongPath
-		var leatherFolder:String = (SONG.format != null && (SONG.format == 'LEATHER' || SONG.format == 'LEATHER LTS')) ? Song.leatherSongFolder : null;
+		var leatherFolder:String = isLeatherChartFormat() ? Song.leatherSongFolder : null;
 		#if MODS_ALLOWED
 		try
 		{
@@ -2927,7 +2996,15 @@ tempScore += '${lblScore}: ${songScore}';
 				var rawColumn:Int = Std.int(songNotes[1]);
 				var noteColumn: Int = rawColumn % sectCols;
 				var holdLength: Float = songNotes[2];
-				var noteType: String = !Std.isOfType(songNotes[3], String) ? Note.defaultNoteTypes[songNotes[3]] : songNotes[3];
+				// Leather 谱面音符：[time, data, length, 0, "type"]——第 4 位是数字占位，type 在第 5 位。
+				// Psych 谱面：[time, data, length, "type"]——type 在第 4 位。按谱面 format 分流解析，
+				// 否则 LE 的 Fireworks/XPbottle 等箭头类型会全被读成 ''（defaultNoteTypes[0]）。
+				var isLeatherNoteType:Bool = isLeatherChartFormat();
+				var noteType: String;
+				if (isLeatherNoteType && songNotes.length > 4 && Std.isOfType(songNotes[4], String))
+					noteType = songNotes[4];
+				else
+					noteType = !Std.isOfType(songNotes[3], String) ? Note.defaultNoteTypes[songNotes[3]] : songNotes[3];
 				if (Math.isNaN(holdLength))
 					holdLength = 0.0;
 
@@ -3094,7 +3171,15 @@ tempScore += '${lblScore}: ${songScore}';
 				var rawColumn:Int = Std.int(songNotes[1]);
 				var noteColumn: Int = rawColumn % sectCols;
 				var holdLength: Float = songNotes[2];
-				var noteType: String = !Std.isOfType(songNotes[3], String) ? Note.defaultNoteTypes[songNotes[3]] : songNotes[3];
+				// Leather 谱面音符：[time, data, length, 0, "type"]——第 4 位是数字占位，type 在第 5 位。
+				// Psych 谱面：[time, data, length, "type"]——type 在第 4 位。按谱面 format 分流解析，
+				// 否则 LE 的 Fireworks/XPbottle 等箭头类型会全被读成 ''（defaultNoteTypes[0]）。
+				var isLeatherNoteType:Bool = isLeatherChartFormat();
+				var noteType: String;
+				if (isLeatherNoteType && songNotes.length > 4 && Std.isOfType(songNotes[4], String))
+					noteType = songNotes[4];
+				else
+					noteType = !Std.isOfType(songNotes[3], String) ? Note.defaultNoteTypes[songNotes[3]] : songNotes[3];
 				if (Math.isNaN(holdLength))
 					holdLength = 0.0;
 
@@ -3961,6 +4046,8 @@ tempScore += '${lblScore}: ${songScore}';
 		}
 		else FlxG.camera.followLerp = 0;
 		callOnScripts('onUpdate', [elapsed]);
+		// Leather modchart 事件：update(elapsed)（LE 原版每帧调用，与 Psych onUpdate 并存）
+		callOnLeatherScripts('update', [elapsed]);
 		ExtraFunctions.frameCount++;
 		super.update(elapsed);
 
@@ -5585,6 +5672,8 @@ tempScore += '${lblScore}: ${songScore}';
 
 		// 存储打击数据供 HitGraph 使用，同时一次性计算 daRating 给后续计分/动画/EX贴图 共用
 		var daRating:Rating = Conductor.judgeNote(ratingsData, noteDiff / playbackRate);
+		// Leather modchart 事件：popUpScore(rating, combo)（对照 LE 原版 PlayState ~2877）
+		callOnLeatherScripts('popUpScore', [daRating.name, combo]);
 		// Sick+ 模式：命中 perfect 窗口时，判定为 Sick 但给予 Perfect 分数(500)，且可选显示 Perfect 贴图
 		// 不创建新的 ratingData，纯粹在 popUpScore 中处理分数和贴图显示
 		var isSickPlus:Bool = false;
@@ -6741,6 +6830,10 @@ tempScore += '${lblScore}: ${songScore}';
 			var result:Dynamic = callOnLuas('noteMiss', [luaNoteIndex(daNote), daNote.noteData, daNote.noteType, daNote.isSustainNote]);
 			if(result != LuaUtils.Function_Stop && result != LuaUtils.Function_StopHScript && result != LuaUtils.Function_StopAll) callOnHScript('noteMiss', [daNote]);
 		}
+		// Leather modchart 事件：playerOneMiss（对照 LE 原版 PlayState ~3510：
+		// 参数 = [noteData, songPosition, arrowType, isHeld]）
+		callOnLeatherScripts('playerOneMiss',
+			[Math.abs(daNote.noteData), Conductor.songPosition, daNote.noteType, daNote.isSustainNote]);
 	}
 
 	function noteMissPress(direction:Int = 1):Void //You pressed a key when there was no notes to press for this key
@@ -7163,6 +7256,11 @@ tempScore += '${lblScore}: ${songScore}';
 		if(result == LuaUtils.Function_Stop) return;
 
 		note.wasGoodHit = true;
+
+		// Leather modchart 事件：playerOneSing / playerOneSingHeld（对照 LE 原版 PlayState ~2284-2297：
+		// 参数 = [noteData, songPosition, arrowType, strumTime]，长条段走 playerOneSingHeld）
+		callOnLeatherScripts(note.isSustainNote ? 'playerOneSingHeld' : 'playerOneSing',
+			[leData, Conductor.songPosition, leType, note.strumTime]);
 
 		// whenSinging 模式：处理/击中音符后重置该方向冷却（集成 Funkin 防连按）
 		if (ClientPrefs.data.ghostTappingMode == 'whenSinging' && note.noteData >= 0 && note.noteData < 4)
@@ -8162,7 +8260,47 @@ tempScore += '${lblScore}: ${songScore}';
 
 		var result:Dynamic = callOnLuas(funcToCall, args, ignoreStops, exclusions, excludeValues);
 		if(result == null || excludeValues.contains(result)) result = callOnHScript(funcToCall, args, ignoreStops, exclusions, excludeValues);
+
+		// Leather Engine 脚本事件广播（对照 LE 原版 PlayState.instance.scripts 的事件分发）
+		// LE 脚本独立于 Psych 脚本：只接收事件，不参与返回值链
+		#if LUA_ALLOWED
+		if (leatherLuaArray != null)
+		{
+			for (script in leatherLuaArray)
+			{
+				if (script == null || script.closed) continue;
+				try {
+					if (script.exists(funcToCall)) script.call(funcToCall, args);
+				} catch(e:Dynamic) {}
+			}
+		}
+		#end
+
 		return result;
+	}
+
+	/**
+	 * Leather 专属事件广播：只把事件分发给 leatherLuaArray（LE 事件名，如 update/playerOneSing/playerOneMiss/popUpScore）。
+	 * 与 callOnScripts 里的 Psych 事件名广播互补——LE modchart 脚本定义的是 LE 事件名，
+	 * 由 Psych 事件点（goodNoteHit/noteMiss/popUpScore/update）显式桥接过来。
+	 */
+	public function callOnLeatherScripts(funcToCall:String, args:Array<Dynamic> = null):Void
+	{
+		#if LUA_ALLOWED
+		if(args == null) args = [];
+		if (leatherLuaArray != null)
+		{
+			for (script in leatherLuaArray)
+			{
+				if (script == null || script.closed) continue;
+				try {
+					if (script.exists(funcToCall)) script.call(funcToCall, args);
+				} catch(e:Dynamic) {
+					trace('[LE event] $funcToCall threw: ' + Std.string(e));
+				}
+			}
+		}
+		#end
 	}
 
 	public function callOnLuas(funcToCall:String, args:Array<Dynamic> = null, ignoreStops = false, exclusions:Array<String> = null, excludeValues:Array<Dynamic> = null):Dynamic {

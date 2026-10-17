@@ -280,6 +280,14 @@ import haxe.io.BytesInput;
 	// Lua API 兼容版本：决定 setObjectCamera / doTween* / makeAnimatedLuaSprite 等 API 的默认参数与行为
 	// 'auto' = 自动识别（暂时回落到 1.0.4），'1.0.4' = KathyEngine 原生（默认），'0.7.3' / '0.6.3' = 旧版脚本兼容
 	public var luaCompatVersion:String = '1.0.4';
+	// Leather Engine 脚本 API 兼容模式：
+	// 'off'     = 不启用 LE 脚本层（LE mod 的 scripts/*.lua 不会被加载）
+	// 'auto'    = 自动检测：谱面 format=LEATHER 走 Official 系，LEATHER LTS 走 LTS 系（默认）
+	// 'official'= 强制使用 LE Official 0.5.x API
+	// 'lts'     = 强制使用 LE LTS 1.1.x API
+	// 参考 LE 源码：D:\VibeCode\LeatherEngine-Official\source\modding\ModchartUtilities.hx
+	//              D:\VibeCode\LeatherEngine-LTS\LeatherEngine-main\source\modding\scripts\languages\LuaScript.hx
+	public var leatherScriptCompat:String = 'auto';
 	public var ratingsPos:String = "camHUD";
 
 	public var fpsPosition:String = "TOP_LEFT"; // "TOP_LEFT", "TOP_RIGHT", "BOTTOM_LEFT", "BOTTOM_RIGHT"

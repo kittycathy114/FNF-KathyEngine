@@ -48,6 +48,10 @@ typedef SwagSong =
 	@:optional var specialInst:String;
     @:optional var specialVocal:String;
     @:optional var specialEvents:String;
+
+	// Leather Engine 字段：modchart 脚本路径（data/modcharts/{modchartPath}.lua）、UI 皮肤名
+	@:optional var modchartPath:String;
+	@:optional var ui_Skin:String;
 }
 
 typedef SwagSection =
