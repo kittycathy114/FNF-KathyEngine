@@ -623,6 +623,8 @@ class PlayState extends MusicBeatState
 		if(shouldStartReplay && pendingReplayData != null)
 		{
 			isReplaying = true;
+			// 清空上一局残留的虚拟按键状态（旧回放数据 5/6 键 releaseTime 缺失时按下状态会残留跨局）
+			Controls.instance.clearVirtualPressedStates();
 			replayData = pendingReplayData;
 			currentReplayIndex = 0;
 			shouldStartReplay = false;
@@ -742,6 +744,8 @@ class PlayState extends MusicBeatState
 	else
 	{
 isReplaying = false;
+		// 普通局：彻底清空虚拟按键状态，避免上一局回放的残留按下（尤其旧回放缺失 releaseTime 的多键）污染本局
+		Controls.instance.clearVirtualPressedStates();
 		replayData = [];
 		currentReplayIndex = 0;
 		replayHeldKeys = [false, false, false, false];
@@ -3637,6 +3641,21 @@ tempScore += '${lblScore}: ${songScore}';
 	 *  从 extrakeys.json 读取当前 mania 档位的列配置，动态填充 Note.colArray / singAnimations / keysArray。
 	 *  mania=3（4键）时与旧硬编码行为完全一致，保证老谱面 100% 向后兼容。
 	 */
+	/** 按当前键数重建回放按键状态数组（多键适配：replayHeldKeys/keyPressIndices/replayNoteDelays
+	 *  原为硬编码 4 元素，6k+ 谱面索引 4..17 越界 → 回放释放逻辑失效、箭头卡按下）。
+	 *  laneCount 为列数；重建后若正在回放则按 replayData 重新预填延迟数据（幂等，可重复调用）。 */
+	function rebuildReplayKeyArrays(laneCount:Int):Void
+	{
+		if (laneCount < 1) laneCount = 1;
+		replayHeldKeys = [for (i in 0...laneCount) false];
+		keyPressIndices = [for (i in 0...laneCount) -1];
+		replayNoteDelays = [for (i in 0...laneCount) []];
+		if (isReplaying && replayData != null)
+			for (action in replayData)
+				if (action.noteTime != null && action.late != null && action.key >= 0 && action.key < laneCount)
+					replayNoteDelays[action.key].push({strumTime: action.noteTime, late: action.late});
+	}
+
 	public function applyMania(mania:Int):Void
 	{
 		if (startArrowSkin == null)
@@ -3661,6 +3680,7 @@ tempScore += '${lblScore}: ${songScore}';
 			Note.colArray = ['purple', 'blue', 'green', 'red'];
 			singAnimations = ['singLEFT', 'singDOWN', 'singUP', 'singRIGHT'];
 			keysArray = ['note_left', 'note_down', 'note_up', 'note_right'];
+			rebuildReplayKeyArrays(4); // 回放状态数组按当前键数重建（多键适配）
 			return;
 		}
 
@@ -3688,6 +3708,7 @@ tempScore += '${lblScore}: ${songScore}';
 		Note.colArray = newColArray;
 		singAnimations = newSingAnims;
 		keysArray = newKeysArray;
+		rebuildReplayKeyArrays(laneCount); // 回放状态数组按当前键数重建（多键适配）
 
 		// Extra Keys：进游戏时兜底把 arrowRGB/arrowRGBPixel/arrowHSV 补齐到 18 色
 		// （loadPrefs 启动早期 ExtraKeysHandler 可能加载失败导致多键列取色越界→染色失效）
@@ -6425,7 +6446,8 @@ tempScore += '${lblScore}: ${songScore}';
 		}
 
 		// 记录按键按下的索引（用于后续记录抬起动作）- 在判断是否有音符之后设置，以确保索引正确
-		if(!isReplaying && key >= 0 && key < 4)
+		// key < keysArray.length 以兼容多键（原硬编码 < 4 导致 5/6 键 releaseTime 永不被记录 → 回放箭头卡按下）
+		if(!isReplaying && key >= 0 && key < keysArray.length)
 		{
 			// 先记录索引
 			keyPressIndices[key] = replayData.length;
@@ -6535,8 +6557,8 @@ tempScore += '${lblScore}: ${songScore}';
 		var ret:Dynamic = callOnScripts('onKeyReleasePre', [key]);
 		if(ret == LuaUtils.Function_Stop) return;
 
-		// 记录按键抬起动作
-		if(!isReplaying && key >= 0 && key < 4 && keyPressIndices[key] >= 0)
+		// 记录按键抬起动作（key < keysArray.length 以兼容多键；releaseTime 用于回放时释放箭头）
+		if(!isReplaying && key >= 0 && key < keysArray.length && keyPressIndices[key] >= 0)
 		{
 			// 更新对应按下记录的抬起时间
 			if(keyPressIndices[key] < replayData.length)

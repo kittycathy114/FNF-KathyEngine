@@ -166,6 +166,20 @@ class Controls
 		virtualJustPressedStates.clear();
 		virtualJustReleasedStates.clear();
 	}
+
+	/**
+	 * Clear ALL virtual input states including held (pressed) states.
+	 * Call when a replay ends / a fresh non-replay session starts, so stale
+	 * virtual key presses (e.g. multikey keys whose releaseTime was never
+	 * recorded by old replays) don't leak into later sessions and keep
+	 * KeyViewer / strums permanently pressed.
+	 */
+	public function clearVirtualPressedStates():Void
+	{
+		virtualPressedStates.clear();
+		virtualJustPressedStates.clear();
+		virtualJustReleasedStates.clear();
+	}
 	private function _myGamepadJustPressed(keys:Array<FlxGamepadInputID>):Bool
 	{
 		if(keys != null)
