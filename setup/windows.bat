@@ -18,6 +18,7 @@ haxelib install flixel-ui 2.6.5 --quiet --skip-dependencies
 haxelib git flixel-text-input https://github.com/kittycathy332/flixel-text-input.git --quiet --skip-dependencies
 haxelib install hscript-iris 1.1.3 --quiet
 haxelib install hscript 2.7.0 --quiet
+haxelib install polymod 1.8.0 --quiet
 haxelib install tjson 1.4.0 --quiet
 haxelib install away3d 5.0.9 --quiet
 haxelib install haxe-concurrent 5.1.5 --quiet
